@@ -300,16 +300,15 @@ void OOFPosAbsLikeMgr::calcHPosAndSizeChildOfChild (Child *child, int refWidth,
    if (style::isAbsLength (child->widget->getStyle()->width)) {
       DBG_OBJ_MSGF ("resize.oofm", 1, "absolute width: %dpx",
                     style::absLengthVal (child->widget->getStyle()->width));
-      width = style::absLengthVal (child->widget->getStyle()->width)
+      width = child->widget->getStyle()->cssWidthToContent(
+                 style::absLengthVal(child->widget->getStyle()->width))
          + child->widget->boxDiffWidth ();
       widthDefined = true;
    } else if (style::isPerLength (child->widget->getStyle()->width)) {
       DBG_OBJ_MSGF ("resize.oofm", 1, "percentage width: %g%%",
                     100 * style::perLengthVal_useThisOnlyForDebugging
                              (child->widget->getStyle()->width));
-      width = style::multiplyWithPerLength (refWidth,
-                                             child->widget->getStyle()->width)
-         + child->widget->boxDiffWidth ();
+      width = child->widget->applyPerWidth(refWidth, child->widget->getStyle()->width);
       widthDefined = true;
    } else {
       DBG_OBJ_MSG ("resize.oofm", 1, "width not specified");
@@ -364,7 +363,8 @@ void OOFPosAbsLikeMgr::calcVPosAndSizeChildOfChild (Child *child, int refHeight,
    if (style::isAbsLength (child->widget->getStyle()->height)) {
       DBG_OBJ_MSGF ("resize.oofm", 1, "absolute height: %dpx",
                     style::absLengthVal (child->widget->getStyle()->height));
-      int height = style::absLengthVal (child->widget->getStyle()->height)
+      int height = child->widget->getStyle()->cssHeightToContent(
+         style::absLengthVal(child->widget->getStyle()->height))
          + child->widget->boxDiffHeight ();
       splitHeightPreserveAscent (height, &ascent, &descent);
       heightDefined = true;
@@ -373,9 +373,7 @@ void OOFPosAbsLikeMgr::calcVPosAndSizeChildOfChild (Child *child, int refHeight,
                     100 * style::perLengthVal_useThisOnlyForDebugging
                              (child->widget->getStyle()->height));
       int height =
-         style::multiplyWithPerLength (refHeight,
-                                       child->widget->getStyle()->height)
-         + child->widget->boxDiffHeight ();
+         child->widget->applyPerHeight(refHeight, child->widget->getStyle()->height);
       splitHeightPreserveAscent (height, &ascent, &descent);
       heightDefined = true;
    } else {

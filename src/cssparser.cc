@@ -77,6 +77,10 @@ static const char *const Css_clear_enum_vals[] = {
    "left", "right", "both", "none", NULL
 };
 
+static const char *const Css_box_sizing_enum_vals[] = {
+   "content-box", "border-box", "inherit", "initial", "unset", NULL
+};
+
 static const char *const Css_cursor_enum_vals[] = {
    "crosshair", "default", "pointer", "move", "e-resize", "ne-resize",
    "nw-resize", "n-resize", "se-resize", "sw-resize", "s-resize",
@@ -200,6 +204,7 @@ const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
    {"border-top-width", {CSS_TYPE_ENUM, CSS_TYPE_LENGTH, CSS_TYPE_UNUSED},
     Css_border_width_enum_vals},
    {"bottom", {CSS_TYPE_SIGNED_LENGTH, CSS_TYPE_UNUSED}, NULL},
+   {"box-sizing", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_box_sizing_enum_vals},
    {"caption-side", {CSS_TYPE_UNUSED}, NULL},
    {"clear", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_clear_enum_vals},
    {"clip", {CSS_TYPE_UNUSED}, NULL},
@@ -599,9 +604,9 @@ void CssParser::nextToken()
    }
 
    if (i) {
-      ungetChar(); /* ungetChar '-' */
+      ungetChar(); /* first character following '-' belongs to the symbol */
       i--;
-      c = getChar();
+      c = '-';
    }
 
    if (dIsalpha(c) || c == '_' || c == '-') {
@@ -1407,73 +1412,179 @@ void CssParser::parseDeclaration(CssPropertyList *props,
       nextToken();
 }
 
-bool CssParser::parseSimpleSelector(CssSimpleSelector *selector)
+bool CssParser::parseAttributeSelector(CssSimpleSelector *selector)
 {
-   CssSimpleSelector::SelectType selectType;
+   nextToken();
+   if (ttype != CSS_TK_SYMBOL)
+      return false;
+   char *name = dStrdup(tval), *value = NULL;
+   char op = 0;
+   /* HTML enumerated attributes use ASCII case-insensitive values by default.
+    * Class, ID, data-* and arbitrary attribute values remain case-sensitive. */
+   const char *folded[] = {"type", "dir", "lang", "rel", "align", "valign",
+      "method", "enctype", "charset", "http-equiv", "media", NULL};
+   bool insensitive = false, valid = true;
+   for (int i = 0; folded[i]; i++)
+      if (!dStrAsciiCasecmp(name, folded[i])) insensitive = true;
+   nextToken();
+   if (ttype == CSS_TK_CHAR && tval[0] != ']') {
+      op = tval[0];
+      if (!strchr("=~|^$*", op))
+         valid = false;
+      nextToken();
+      if (op != '=') {
+         if (ttype != CSS_TK_CHAR || tval[0] != '=' || spaceSeparated)
+            valid = false;
+         nextToken();
+      }
+      if (ttype != CSS_TK_STRING && ttype != CSS_TK_SYMBOL)
+         valid = false;
+      value = dStrdup(tval);
+      nextToken();
+      if (ttype == CSS_TK_SYMBOL && spaceSeparated) {
+         if (!dStrAsciiCasecmp(tval, "i"))
+            insensitive = true;
+         else if (!dStrAsciiCasecmp(tval, "s"))
+            insensitive = false;
+         else valid = false;
+         nextToken();
+      }
+   }
+   valid = valid && ttype == CSS_TK_CHAR && tval[0] == ']';
+   if (valid) {
+      selector->addAttribute(name, op, value ? value : "", insensitive);
+      nextToken();
+   }
+   dFree(name);
+   dFree(value);
+   return valid;
+}
 
-   if (ttype == CSS_TK_SYMBOL) {
-      selector->setElement (a_Html_tag_index(tval));
+/* Parse the Selectors Level 3 an+b syntax, without integer overflow. */
+static bool Css_parse_nth(const char *text, int *a, int *b)
+{
+   if (!dStrAsciiCasecmp(text, "odd")) { *a = 2; *b = 1; return true; }
+   if (!dStrAsciiCasecmp(text, "even")) { *a = 2; *b = 0; return true; }
+   char *end;
+   const char *n = strchr(text, 'n');
+   if (!n) n = strchr(text, 'N');
+   long coefficient = 0, offset;
+   if (n) {
+      if (n == text || (n == text + 1 && *text == '+')) coefficient = 1;
+      else if (n == text + 1 && *text == '-') coefficient = -1;
+      else {
+         coefficient = strtol(text, &end, 10);
+         if (end != n) return false;
+      }
+      text = n + 1;
+      while (dIsspace(*text)) text++;
+      if (!*text) { offset = 0; }
+      else {
+         if (*text != '+' && *text != '-') return false;
+         int sign = *text++ == '-' ? -1 : 1;
+         while (dIsspace(*text)) text++;
+         if (!dIsdigit(*text)) return false;
+         offset = strtol(text, &end, 10);
+         if (*end || offset > INT_MAX) return false;
+         offset *= sign;
+      }
+   } else {
+      offset = strtol(text, &end, 10);
+      if (end == text || *end) return false;
+   }
+   if (coefficient < INT_MIN || coefficient > INT_MAX ||
+       offset < INT_MIN || offset > INT_MAX)
+      return false;
+   *a = coefficient; *b = offset;
+   return true;
+}
+
+bool CssParser::parsePseudoSelector(CssSimpleSelector *selector, bool negation)
+{
+   nextToken();
+   if (ttype != CSS_TK_SYMBOL || spaceSeparated)
+      return false;
+   char name[maxStrLen];
+   strcpy(name, tval);
+   nextToken();
+   if (!dStrAsciiCasecmp(name, "not")) {
+      if (negation || ttype != CSS_TK_CHAR || tval[0] != '(' || spaceSeparated)
+         return false;
       nextToken();
-      if (spaceSeparated)
-         return true;
-   } else if (ttype == CSS_TK_CHAR && tval[0] == '*') {
-      selector->setElement (CssSimpleSelector::ELEMENT_ANY);
+      CssSimpleSelector *argument = new CssSimpleSelector;
+      if (!parseSimpleSelector(argument, true) ||
+          ttype != CSS_TK_CHAR || tval[0] != ')') {
+         delete argument;
+         return false;
+      }
+      selector->addNegation(argument);
       nextToken();
-      if (spaceSeparated)
-         return true;
-   } else if (ttype == CSS_TK_CHAR &&
-              (tval[0] == '#' ||
-               tval[0] == '.' ||
-               tval[0] == ':')) {
-      // nothing to be done in this case
+   } else if (!dStrAsciiCasecmp(name, "nth-child") ||
+              !dStrAsciiCasecmp(name, "nth-of-type")) {
+      if (ttype != CSS_TK_CHAR || tval[0] != '(' || spaceSeparated)
+         return false;
+      Dstr *formula = dStr_new("");
+      nextToken();
+      while (ttype != CSS_TK_END && !(ttype == CSS_TK_CHAR && tval[0] == ')')) {
+         if (ttype == CSS_TK_CHAR && (tval[0] == '{' || tval[0] == '}'))
+            break;
+         if (spaceSeparated && formula->len) dStr_append_c(formula, ' ');
+         dStr_append(formula, tval);
+         nextToken();
+      }
+      int a, b;
+      bool valid = ttype == CSS_TK_CHAR && tval[0] == ')' &&
+                   Css_parse_nth(formula->str, &a, &b);
+      dStr_free(formula, true);
+      if (!valid) return false;
+      selector->addStructural(!dStrAsciiCasecmp(name, "nth-child") ? 'c' : 't', a, b);
+      nextToken();
+   } else if (!dStrAsciiCasecmp(name, "first-child")) {
+      selector->addStructural('c');
+   } else if (!dStrAsciiCasecmp(name, "first-of-type")) {
+      selector->addStructural('t');
+   } else if (!dStrAsciiCasecmp(name, "root")) {
+      selector->addStructural('r');
+   } else if (!dStrAsciiCasecmp(name, "link") ||
+              !dStrAsciiCasecmp(name, "visited")) {
+      if (selector->getPseudoClass()) return false;
+      selector->setSelect(CssSimpleSelector::SELECT_PSEUDO_CLASS, name);
    } else {
       return false;
    }
-
-   do {
-      selectType = CssSimpleSelector::SELECT_NONE;
-      if (ttype == CSS_TK_CHAR) {
-         switch (tval[0]) {
-         case '#':
-            selectType = CssSimpleSelector::SELECT_ID;
-            break;
-         case '.':
-            selectType = CssSimpleSelector::SELECT_CLASS;
-            break;
-         case ':':
-            selectType = CssSimpleSelector::SELECT_PSEUDO_CLASS;
-            if (selector->getPseudoClass ())
-               // pseudo class has been set already.
-               // As dillo currently only supports :link and :visisted, a
-               // selector with more than one pseudo class will never match.
-               // By returning false, the whole CssRule will be dropped.
-               // \todo adapt this when supporting :hover, :active...
-               return false;
-            break;
-         }
-      }
-
-      if (selectType != CssSimpleSelector::SELECT_NONE) {
-         nextToken();
-         if (spaceSeparated)
-            return false;
-
-         if (ttype == CSS_TK_SYMBOL) {
-            selector->setSelect (selectType, tval);
-            nextToken();
-         } else {
-            return false; // don't accept classes or id's starting with integer
-         }
-         if (spaceSeparated)
-            return true;
-      }
-   } while (selectType != CssSimpleSelector::SELECT_NONE);
-
-   DEBUG_MSG(DEBUG_PARSE_LEVEL, "end of simple selector (%s, %s, %s, %d)\n",
-      selector->id, selector->klass,
-      selector->pseudo, selector->element);
-
    return true;
+}
+
+bool CssParser::parseSimpleSelector(CssSimpleSelector *selector, bool negation)
+{
+   bool found = false;
+   if (ttype == CSS_TK_SYMBOL) {
+      selector->setElement(a_Html_tag_index(tval));
+      nextToken();
+      found = true;
+   } else if (ttype == CSS_TK_CHAR && tval[0] == '*') {
+      nextToken();
+      found = true;
+   }
+   while (!(found && spaceSeparated) && ttype == CSS_TK_CHAR) {
+      char kind = tval[0];
+      if (kind == '#' || kind == '.') {
+         nextToken();
+         if (ttype != CSS_TK_SYMBOL || spaceSeparated)
+            return false;
+         selector->setSelect(kind == '#' ? CssSimpleSelector::SELECT_ID :
+                                          CssSimpleSelector::SELECT_CLASS, tval);
+         nextToken();
+      } else if (kind == '[') {
+         if (!parseAttributeSelector(selector)) return false;
+      } else if (kind == ':') {
+         if (!parsePseudoSelector(selector, negation)) return false;
+      } else {
+         break;
+      }
+      found = true;
+   }
+   return found;
 }
 
 CssSelector *CssParser::parseSelector()
@@ -1492,6 +1603,9 @@ CssSelector *CssParser::parseSelector()
          break;
       } else if (ttype == CSS_TK_CHAR && tval[0] == '>') {
          selector->addSimpleSelector (CssSelector::COMB_CHILD);
+         nextToken();
+      } else if (ttype == CSS_TK_CHAR && tval[0] == '~') {
+         selector->addSimpleSelector(CssSelector::COMB_GENERAL_SIBLING);
          nextToken();
       } else if (ttype == CSS_TK_CHAR && tval[0] == '+') {
          selector->addSimpleSelector (CssSelector::COMB_ADJACENT_SIBLING);
@@ -1645,31 +1759,13 @@ void CssParser::parseImport(DilloHtml *html)
 
    nextToken();
 
-   /* parse a comma-separated list of media */
-   if (ttype == CSS_TK_SYMBOL) {
-      mediaSyntaxIsOK = false;
-      mediaIsSelected = false;
-      while (ttype == CSS_TK_SYMBOL) {
-         if (dStrAsciiCasecmp(tval, "all") == 0 ||
-             dStrAsciiCasecmp(tval, "screen") == 0)
-            mediaIsSelected = true;
-         nextToken();
-         if (ttype == CSS_TK_CHAR && tval[0] == ',') {
-            nextToken();
-         } else {
-            mediaSyntaxIsOK = true;
-            break;
-         }
-      }
-   }
-
-   if (mediaSyntaxIsOK &&
-       ttype == CSS_TK_CHAR &&
-       tval[0] == ';') {
-      importSyntaxIsOK = true;
-      nextToken();
-   } else
-      ignoreStatement();
+   char *media = mediaList(';');
+   mediaSyntaxIsOK = ttype == CSS_TK_CHAR && tval[0] == ';';
+   mediaIsSelected = context->mediaMatches(media);
+   dFree(media);
+   importSyntaxIsOK = mediaSyntaxIsOK;
+   if (mediaSyntaxIsOK) nextToken();
+   else ignoreStatement();
 
    if (urlStr) {
       if (importSyntaxIsOK && mediaIsSelected) {
@@ -1683,47 +1779,38 @@ void CssParser::parseImport(DilloHtml *html)
    }
 }
 
-void CssParser::parseMedia()
+char *CssParser::mediaList(char delimiter)
 {
-   bool mediaSyntaxIsOK = false;
-   bool mediaIsSelected = false;
-
-   nextToken();
-
-   /* parse a comma-separated list of media */
-   while (ttype == CSS_TK_SYMBOL) {
-      if (dStrAsciiCasecmp(tval, "all") == 0 ||
-          dStrAsciiCasecmp(tval, "screen") == 0)
-         mediaIsSelected = true;
-      nextToken();
-      if (ttype == CSS_TK_CHAR && tval[0] == ',') {
-         nextToken();
-      } else {
-         mediaSyntaxIsOK = true;
+   Dstr *query = dStr_new("");
+   while (ttype != CSS_TK_END &&
+          !(ttype == CSS_TK_CHAR && tval[0] == delimiter)) {
+      if (ttype == CSS_TK_CHAR && (tval[0] == '{' || tval[0] == '}'))
          break;
-      }
+      if (spaceSeparated && query->len) dStr_append_c(query, ' ');
+      dStr_append(query, tval);
+      nextToken();
    }
+   char *text = query->str;
+   dStr_free(query, false);
+   return text;
+}
 
-   /* check that the syntax is OK so far */
-   if (!(mediaSyntaxIsOK &&
-         ttype == CSS_TK_CHAR &&
-         tval[0] == '{')) {
+void CssParser::parseMedia(DilloHtml *html, int depth)
+{
+   nextToken();
+   char *query = mediaList('{');
+   bool selected = context->mediaMatches(query);
+   dFree(query);
+   if (ttype != CSS_TK_CHAR || tval[0] != '{') {
       ignoreStatement();
       return;
    }
-
-   /* parse/ignore the block as required */
-   if (mediaIsSelected) {
+   if (selected && depth < 32) {
       nextToken();
-      while (ttype != CSS_TK_END) {
-         parseRuleset();
-         if (ttype == CSS_TK_CHAR && tval[0] == '}') {
-            nextToken();
-            break;
-         }
-      }
-   } else
+      parseRules(html, true, depth + 1);
+   } else {
       ignoreBlock();
+   }
 }
 
 const char * CssParser::propertyNameString(CssPropertyName name)
@@ -1767,36 +1854,40 @@ void CssParser::ignoreStatement()
    }
 }
 
-void CssParser::parse(DilloHtml *html, const DilloUrl *baseUrl,
-                      CssContext *context,
-                      const char *buf,
-                      int buflen, CssOrigin origin)
+void CssParser::parseRules(DilloHtml *html, bool block, int depth)
 {
-   CssParser parser (context, origin, baseUrl, buf, buflen);
-   bool importsAreAllowed = true;
-
-   while (parser.ttype != CSS_TK_END) {
-      if (parser.ttype == CSS_TK_CHAR &&
-          parser.tval[0] == '@') {
-         parser.nextToken();
-         if (parser.ttype == CSS_TK_SYMBOL) {
-            if (dStrAsciiCasecmp(parser.tval, "import") == 0 &&
-                html != NULL &&
-                importsAreAllowed) {
-               parser.parseImport(html);
-            } else if (dStrAsciiCasecmp(parser.tval, "media") == 0) {
-               parser.parseMedia();
-            } else {
-               parser.ignoreStatement();
-            }
+   bool importsAreAllowed = !block;
+   while (ttype != CSS_TK_END) {
+      if (ttype == CSS_TK_CHAR && tval[0] == '}') {
+         nextToken();
+         if (block) return;
+         continue;
+      }
+      if (ttype == CSS_TK_CHAR && tval[0] == '@') {
+         nextToken();
+         if (ttype == CSS_TK_SYMBOL &&
+             !dStrAsciiCasecmp(tval, "import") && html && importsAreAllowed) {
+            parseImport(html);
+         } else if (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "media")) {
+            importsAreAllowed = false;
+            parseMedia(html, depth);
          } else {
-            parser.ignoreStatement();
+            importsAreAllowed = false;
+            ignoreStatement();
          }
       } else {
          importsAreAllowed = false;
-         parser.parseRuleset();
+         parseRuleset();
       }
    }
+}
+
+void CssParser::parse(DilloHtml *html, const DilloUrl *baseUrl,
+                      CssContext *context, const char *buf, int buflen,
+                      CssOrigin origin)
+{
+   CssParser parser(context, origin, baseUrl, buf, buflen);
+   parser.parseRules(html, false, 0);
 }
 
 void CssParser::parseDeclarationBlock(const DilloUrl *baseUrl,

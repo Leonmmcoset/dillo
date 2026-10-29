@@ -101,6 +101,10 @@ void Layout::Receiver::canvasSizeChanged (int width, int ascent, int descent)
 {
 }
 
+void Layout::Receiver::viewportSizeChanged(int width, int height)
+{
+}
+
 // ----------------------------------------------------------------------
 
 bool Layout::Emitter::emitToReceiver (lout::signal::Receiver *receiver,
@@ -120,6 +124,11 @@ bool Layout::Emitter::emitToReceiver (lout::signal::Receiver *receiver,
       layoutReceiver->resizeQueued (((Boolean*)argv[0])->getValue ());
       break;
 
+   case VIEWPORT_SIZE_CHANGED:
+      layoutReceiver->viewportSizeChanged(((Integer*)argv[0])->getValue(),
+                                          ((Integer*)argv[1])->getValue());
+      break;
+
    default:
       misc::assertNotReached ();
    }
@@ -132,6 +141,13 @@ void Layout::Emitter::emitResizeQueued (bool extremesChanged)
    Boolean ec (extremesChanged);
    Object *argv[1] = { &ec };
    emitVoid (RESIZE_QUEUED, 1, argv);
+}
+
+void Layout::Emitter::emitViewportSizeChanged(int width, int height)
+{
+   Integer w(width), h(height);
+   Object *argv[2] = {&w, &h};
+   emitVoid(VIEWPORT_SIZE_CHANGED, 2, argv);
 }
 
 void Layout::Emitter::emitCanvasSizeChanged (int width,
@@ -1336,6 +1352,8 @@ void Layout::viewportSizeChanged (View *view, int width, int height)
       viewportHeight = height;
       resizeCounter = 0;
       containerSizeChanged ();
+
+      emitter.emitViewportSizeChanged(width, height);
 
       DBG_OBJ_SET_SYM ("canvasHeightGreater",
                        canvasHeightGreater ? "true" : "false");

@@ -69,6 +69,7 @@ public:
    public:
       virtual void resizeQueued (bool extremesChanged);
       virtual void canvasSizeChanged (int width, int ascent, int descent);
+      virtual void viewportSizeChanged(int width, int height);
    };
 
    class LinkReceiver: public lout::signal::Receiver
@@ -147,7 +148,7 @@ private:
    class Emitter: public lout::signal::Emitter
    {
    private:
-      enum { RESIZE_QUEUED, CANVAS_SIZE_CHANGED };
+      enum { RESIZE_QUEUED, CANVAS_SIZE_CHANGED, VIEWPORT_SIZE_CHANGED };
 
    protected:
       bool emitToReceiver (lout::signal::Receiver *receiver, int signalNo,
@@ -158,6 +159,7 @@ private:
 
       void emitResizeQueued (bool extremesChanged);
       void emitCanvasSizeChanged (int width, int ascent, int descent);
+      void emitViewportSizeChanged(int width, int height);
    };
 
    Emitter emitter;

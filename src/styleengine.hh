@@ -29,7 +29,7 @@ class StyleEngine;
  * HTML elements and their attributes via the startElement() / endElement()
  * methods.
  */
-class StyleEngine {
+class StyleEngine : public dw::core::Layout::Receiver {
    private:
       struct Node {
          CssPropertyList *styleAttrProperties;
@@ -51,6 +51,10 @@ class StyleEngine {
       float dpmm;
       float zoom;
       DilloUrl *pageUrl, *baseUrl;
+      BrowserWindow *mediaBw;
+      CssMediaEnvironment mediaEnvironment() const;
+      void viewportSizeChanged(int width, int height);
+      static void mediaResize(void *data);
 
       void stackPush ();
       void stackPop ();
@@ -92,7 +96,11 @@ class StyleEngine {
       void setId (const char *id);
       const char * getId () { return doctree->top ()->id; };
       void setClass (const char *klass);
+      void setAttribute(const char *name, const char *value) {
+         doctree->top()->setAttribute(name, value);
+      }
       void setStyle (const char *style);
+      bool mediaMatches(const char *query) { return cssContext->mediaMatches(query); }
       void endElement (int tag);
       void setPseudoLink ();
       void setPseudoVisited ();

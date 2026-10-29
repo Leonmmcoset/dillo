@@ -39,10 +39,14 @@ class CssParser {
       bool parseRgbColor(int32_t *c);
       void parseDeclaration(CssPropertyList * props,
                             CssPropertyList * importantProps);
-      bool parseSimpleSelector(CssSimpleSelector *selector);
+      bool parseSimpleSelector(CssSimpleSelector *selector, bool negation = false);
+      bool parseAttributeSelector(CssSimpleSelector *selector);
+      bool parsePseudoSelector(CssSimpleSelector *selector, bool negation);
       char *parseUrl();
       void parseImport(DilloHtml *html);
-      void parseMedia();
+      char *mediaList(char delimiter);
+      void parseMedia(DilloHtml *html, int depth);
+      void parseRules(DilloHtml *html, bool block, int depth);
       CssSelector *parseSelector();
       void parseRuleset();
       void ignoreBlock();

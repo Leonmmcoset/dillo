@@ -225,6 +225,12 @@ static void Html_free(void *data)
    delete ((DilloHtml*)data);
 }
 
+bool_t a_Html_has_form_controls(void *v_html)
+{
+   DilloHtml *html = (DilloHtml *)v_html;
+   return html->forms->size() || html->inputs_outside_form->size();
+}
+
 /**
  * Used by the "Load images" page menuitem.
  */
@@ -1765,12 +1771,7 @@ static void Html_tag_open_style(DilloHtml *html, const char *tag, int tagsize)
       html->loadCssFromStash = false;
    }
    if ((attrbuf = a_Html_get_attr(html, tag, tagsize, "media")) &&
-       dStrAsciiCasecmp(attrbuf, "all") && !dStriAsciiStr(attrbuf, "screen")) {
-      /* HTML 4.01 sec. 6.13 says that media descriptors are case-sensitive,
-       * but sec. 14.2.3 says that the attribute is case-insensitive.
-       * TODO can be a comma-separated list.
-       * TODO handheld.
-       */
+       !html->styleEngine->mediaMatches(attrbuf)) {
       html->loadCssFromStash = false;
    }
 
@@ -3345,7 +3346,7 @@ static void Html_tag_open_link(DilloHtml *html, const char *tag, int tagsize)
    if (((attrbuf = a_Html_get_attr(html, tag, tagsize, "type")) &&
         dStrAsciiCasecmp(attrbuf, "text/css")) ||
        ((attrbuf = a_Html_get_attr(html, tag, tagsize, "media")) &&
-        !dStriAsciiStr(attrbuf, "screen") && dStrAsciiCasecmp(attrbuf, "all")))
+        !html->styleEngine->mediaMatches(attrbuf)))
       return;
 
    if (!(attrbuf = a_Html_get_attr(html, tag, tagsize, "href")) ||
@@ -3910,10 +3911,43 @@ static void Html_test_section(DilloHtml *html, int new_idx, int IsCloseTag)
 /**
  * Parse attributes that can appear on any tag.
  */
+static const char *Html_get_attr2(DilloHtml *html, const char *tag, int tagsize,
+                                 const char *attrname, int tag_parsing_flags);
+
 static void Html_parse_common_attrs(DilloHtml *html, char *tag, int tagsize)
 {
    const char *attrbuf;
    char lang[3];
+
+   /* Retain attributes for CSS matching, using the same entity decoding as
+    * other HTML attributes. Skip quoted values while enumerating names. */
+   if (prefs.parse_embedded_css || prefs.load_stylesheets) {
+      int i = 1;
+      while (i < tagsize && !dIsspace(tag[i]) && tag[i] != '>') i++;
+      while (i < tagsize) {
+         while (i < tagsize && dIsspace(tag[i])) i++;
+         int start = i;
+         while (i < tagsize && !dIsspace(tag[i]) &&
+                tag[i] != '=' && tag[i] != '>' && tag[i] != '/') i++;
+         if (i == start) break;
+         char *name = dStrndup(tag + start, i - start);
+         const char *value = Html_get_attr2(html, tag, tagsize, name, HTML_ParseEntities);
+         if (value) html->styleEngine->setAttribute(name, value);
+         dFree(name);
+         while (i < tagsize && dIsspace(tag[i])) i++;
+         if (i < tagsize && tag[i] == '=') {
+            i++;
+            while (i < tagsize && dIsspace(tag[i])) i++;
+            if (i < tagsize && (tag[i] == '\'' || tag[i] == '"')) {
+               char quote = tag[i++];
+               while (i < tagsize && tag[i] != quote) i++;
+               if (i < tagsize) i++;
+            } else {
+               while (i < tagsize && !dIsspace(tag[i]) && tag[i] != '>') i++;
+            }
+         }
+      }
+   }
 
    if (tagsize >= 8 &&        /* length of "<t id=i>" */
        (attrbuf = a_Html_get_attr(html, tag, tagsize, "id"))) {

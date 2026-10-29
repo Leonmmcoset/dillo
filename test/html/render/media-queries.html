@@ -1,0 +1,32 @@
+<!doctype html><html><head><title>CSS media queries</title>
+<style>@import url("media-query-import.css") screen and (min-width:1px);
+@import url("media-query-print.css") print;
+body{margin:0} .test{height:20px;background:red}
+@media screen and (min-width:1px) {.width{background:green}}
+@media (min-height:1px) and (orientation:landscape), (orientation:portrait) {.height{background:green}}
+@media not print {.not-print{background:green}}
+@media only screen and (max-width:100000px) {.only{background:green}}
+@media (min-width:1px) {@media (min-height:1px) {.nested{background:green}}}
+@media (unknown-feature:yes) {.invalid{background:red}}
+.invalid{background:green}
+@media print {.not-print{background:red}}
+@media screen and (min-width:100000px) {.width{background:red}}
+@media (width:1e999px) {.height{background:red}}
+.after{background:green}
+:root body .root{background:green}
+</style>
+<style media="(min-width: 1px)">.style-media{background:green}</style>
+<style media="not screen">.style-media{background:red}</style>
+<link rel="stylesheet" href="media-query-link.css" media="screen and (min-height:1px)">
+<link rel="stylesheet" href="media-query-print.css" media="print">
+</head><body><div class="test width">width</div>
+<div class="test height">height</div>
+<div class="test not-print">not-print</div>
+<div class="test only">only</div>
+<div class="test nested">nested</div>
+<div class="test invalid">invalid</div>
+<div class="test after">after</div>
+<div class="test root">root</div>
+<div class="test imported">imported</div>
+<div class="test style-media">style-media</div>
+<div class="test linked">linked</div></body></html>

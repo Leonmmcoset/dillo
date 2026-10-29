@@ -148,6 +148,25 @@ JavaScript</b> and only implements some elements of HTML 5 and CSS 3. It also
 renders plain text documents and images in PNG, JPG, GIF, SVG and WebP
 formats.</p>
 
+<p>The CSS implementation also supports <code>box-sizing: border-box</code>
+(including width, height and their min/max constraints), attribute selectors
+(<code>[attr]</code>, <code>=</code>, <code>~=</code>, <code>|=</code>,
+<code>^=</code>, <code>$=</code> and <code>*=</code>), the general sibling
+combinator <code>~</code>, <code>:root</code>, <code>:first-child</code>,
+<code>:first-of-type</code>, <code>:nth-child(an+b)</code>,
+<code>:nth-of-type(an+b)</code> and <code>:not()</code> with a simple selector.
+Attribute selectors accept the <code>i</code> and <code>s</code> case flags.</p>
+
+<p>Media Queries Level 3 syntax is supported in <code>@media</code>,
+<code>@import</code> and the <code>media</code> attribute of style and link
+elements. Supported features include width, height, orientation, aspect-ratio,
+resolution and color, with applicable min/max variants. Queries can use
+<code>and</code>, comma-separated alternatives, <code>not</code> and
+<code>only</code>. When a viewport resize changes a query result, Dillo rebuilds
+the page from its cache. Pages containing form controls apply the new queries
+on manual reload, preserving edits during a resize. Flexbox, Grid and
+Media Queries Level 4 range syntax are not implemented.</p>
+
 <h2 id="reading">Reading</h2>
 <p>In this section we cover the basics to read a web page, scrolling and finding
 or copying text.</p>

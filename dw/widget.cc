@@ -722,7 +722,8 @@ int Widget::getAvailHeight (bool forceValue)
       if (style::isAbsLength (getStyle()->height)) {
          DBG_OBJ_MSGF ("resize", 1, "absolute height: %dpx",
                        style::absLengthVal (getStyle()->height));
-         height = style::absLengthVal (getStyle()->height) + boxDiffHeight ();
+         height = getStyle()->cssHeightToContent(
+            style::absLengthVal(getStyle()->height)) + boxDiffHeight();
       } else if (style::isPerLength (getStyle()->height)) {
          DBG_OBJ_MSGF ("resize", 1, "percentage height: %g%%",
                        100 * style::perLengthVal_useThisOnlyForDebugging
@@ -942,7 +943,8 @@ int Widget::calcWidth (style::Length cssValue, int refWidth, Widget *refWidget,
    if (style::isAbsLength (cssValue)) {
       DBG_OBJ_MSGF ("resize", 1, "absolute width: %dpx",
                     style::absLengthVal (cssValue));
-      width = misc::max (style::absLengthVal (cssValue) + boxDiffWidth (),
+      width = misc::max (getStyle()->cssWidthToContent(style::absLengthVal(cssValue))
+                         + boxDiffWidth (),
                          limitMinWidth);
    } else if (style::isPerLength (cssValue)) {
       DBG_OBJ_MSGF ("resize", 1, "percentage width: %g%%",
@@ -1052,7 +1054,8 @@ int Widget::calcHeight (style::Length cssValue, bool usePercentage,
       DBG_OBJ_MSGF ("resize", 1, "absolute height: %dpx",
                     style::absLengthVal (cssValue));
       height =
-         misc::max (style::absLengthVal (cssValue) + boxDiffHeight (), 0);
+         misc::max (getStyle()->cssHeightToContent(style::absLengthVal(cssValue))
+                     + boxDiffHeight (), 0);
    } else if (style::isPerLength (cssValue)) {
       DBG_OBJ_MSGF ("resize", 1, "percentage height: %g%%",
                     100 *
@@ -1756,13 +1759,15 @@ void Widget::markExtremesChange (int ref)
 
 int Widget::applyPerWidth (int containerWidth, style::Length perWidth)
 {
-   return style::multiplyWithPerLength (containerWidth, perWidth)
+   return getStyle()->cssWidthToContent(
+             style::multiplyWithPerLength(containerWidth, perWidth))
       + boxDiffWidth ();
 }
 
 int Widget::applyPerHeight (int containerHeight, style::Length perHeight)
 {
-   return style::multiplyWithPerLength (containerHeight, perHeight)
+   return getStyle()->cssHeightToContent(
+             style::multiplyWithPerLength(containerHeight, perHeight))
       + boxDiffHeight ();
 }
 
@@ -1860,7 +1865,8 @@ int Widget::getAvailHeightOfChild (Widget *child, bool forceValue)
          if (style::isAbsLength (child->getStyle()->height)) {
             DBG_OBJ_MSGF ("resize", 1, "absolute height: %dpx",
                           style::absLengthVal (child->getStyle()->height));
-            height = misc::max (style::absLengthVal (child->getStyle()->height)
+            height = misc::max (child->getStyle()->cssHeightToContent(
+                                  style::absLengthVal(child->getStyle()->height))
                                + child->boxDiffHeight (), 0);
          } else {
             assert (style::isPerLength (child->getStyle()->height));

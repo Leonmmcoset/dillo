@@ -1,0 +1,23 @@
+<!doctype html><html><head><title>CSS selectors</title><style>body{margin:0;font-size:9px;line-height:10px} section{background:red} div{height:10px;margin:0} section div{background:green}</style></head><body><section><div data-test>attribute presence</div></section>
+<section><div data-test="Exact">attribute equals</div></section>
+<section><div data-test="first word last">attribute word</div></section>
+<section><div lang="en-US">language prefix</div></section>
+<section><div data-test="start-end">prefix</div></section>
+<section><div data-test="start-end">suffix</div></section>
+<section><div data-test="start-middle-end">substring</div></section>
+<section><div data-test="exact">case insensitive</div></section>
+<section><div data-test="exact">case sensitive</div></section>
+<section><div data-test="">empty equality</div></section>
+<section><div title="a &amp; b">entity decoding</div></section>
+<section><div data-test title="yes">multiple attributes</div></section>
+<section><div>negation</div><div class="skip" style="background:green">excluded</div></section>
+<section><div>negated attribute</div></section>
+<section><div>first child</div><div style="background:green">second</div></section>
+<section><div>odd</div><div style="background:green">even</div><div>odd</div></section>
+<section><div style="background:green">odd</div><div>even</div></section>
+<section><div>first</div><div>second</div><div style="background:green">third</div></section>
+<section><div style="background:green">first</div><div>second</div></section>
+<section><span></span><div style="background:green">first of type</div><div>second of type</div></section>
+<section><span></span><div>first of type</div></section>
+<section><span></span><p style="margin:0"></p><div>general sibling</div><div>later sibling</div></section>
+<section><div data-test>compound</div></section><section><div lang="en-US">HTML case folding</div></section><section><div>negative match 0</div></section><section><div>negative match 1</div></section><section><div>negative match 2</div></section><section><div>negative match 3</div></section><section><div>negative match 4</div></section><section><div>negative match 5</div></section><section><div>negative match 6</div></section><section><div>negative match 7</div></section><section><div>negative match 8</div></section><section><div>negative match 9</div></section><section><div>negative match 10</div></section><section><div>negative match 11</div></section><section><div>negative match 12</div></section><section><div>negative match 13</div></section><section><div>negative match 14</div></section></body></html>

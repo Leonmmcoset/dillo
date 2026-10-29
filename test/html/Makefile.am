@@ -13,6 +13,7 @@ EXTRA_DIST = \
 
 TESTS = \
 	render/b-div.html \
+	render/box-sizing.html \
 	render/div-100-percent-with-padding.html \
 	render/float-img-justify.html \
 	render/form-display-none.html \
@@ -28,6 +29,7 @@ TESTS = \
 	render/img-aspect-ratio.html \
 	render/margin-rounding.html \
 	render/main-style.html \
+	render/media-queries.html \
 	render/margin-auto.html \
 	render/max-width-body.html \
 	render/max-width-div-clamp.html \
@@ -42,6 +44,7 @@ TESTS = \
 	render/min-width-nested-div.html \
 	render/multiple-floats.html \
 	render/span-padding.html \
+	render/selectors-level3.html \
 	render/svg-current-color.html \
 	render/table-max-width.html \
 	render/table-missing-width-in-one-column.html \

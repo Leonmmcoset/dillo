@@ -18,6 +18,8 @@
 #include "styleengine.hh"
 #include "web.hh"
 #include "capi.h"
+#include "uicmd.hh"
+#include "timeout.hh"
 
 using namespace lout::misc;
 using namespace dw::core::style;
@@ -68,8 +70,12 @@ StyleEngine::StyleEngine (dw::core::Layout *layout,
    doctree = new Doctree ();
    stack = new lout::misc::SimpleVector <Node> (1);
    cssContext = new CssContext ();
-   buildUserStyle ();
    this->layout = layout;
+   this->zoom = zoom;
+   mediaBw = NULL;
+   cssContext->setMediaEnvironment(mediaEnvironment());
+   buildUserStyle ();
+   layout->connect(this);
    this->pageUrl = pageUrl ? a_Url_dup(pageUrl) : NULL;
    this->baseUrl = baseUrl ? a_Url_dup(baseUrl) : NULL;
    importDepth = 0;
@@ -100,6 +106,7 @@ StyleEngine::StyleEngine (dw::core::Layout *layout,
 }
 
 StyleEngine::~StyleEngine () {
+   a_Timeout_actually_remove(mediaResize, this);
    while (doctree->top ())
       endElement (doctree->top ()->element);
 
@@ -141,6 +148,7 @@ void StyleEngine::stackPop () {
  * \brief tell the styleEngine that a new html element has started.
  */
 void StyleEngine::startElement (int element, BrowserWindow *bw) {
+   mediaBw = bw;
    style (bw); // ensure that style of current node is computed
 
    stackPush ();
@@ -595,6 +603,11 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
          case CSS_PROPERTY_BOTTOM:
             computeLength (&attrs->bottom, p->value.lenVal, attrs->font);
             break;
+         case CSS_PROPERTY_BOX_SIZING:
+            attrs->boxSizing = p->value.intVal == 2 ?
+               stack->getRef(i - 1)->style->boxSizing :
+               p->value.intVal == 1 ? StyleAttrs::BORDER_BOX : StyleAttrs::CONTENT_BOX;
+            break;
          case CSS_PROPERTY_CLEAR:
             attrs->clear = (ClearType) p->value.intVal;
             break;
@@ -997,6 +1010,39 @@ void StyleEngine::restyle (BrowserWindow *bw) {
 
       style0 (i, bw);
    }
+}
+
+CssMediaEnvironment StyleEngine::mediaEnvironment() const
+{
+   CssMediaEnvironment env = {
+      layout->getWidthViewport() / zoom,
+      layout->getHeightViewport() / zoom,
+      layout->dpiX() * zoom
+   };
+   return env;
+}
+
+void StyleEngine::viewportSizeChanged(int width, int height)
+{
+   a_Timeout_actually_remove(mediaResize, this);
+   if (mediaBw && width > 0 && height > 0 &&
+       cssContext->mediaChanged(mediaEnvironment()))
+      a_Timeout_add(0.15, mediaResize, this);
+}
+
+void StyleEngine::mediaResize(void *data)
+{
+   StyleEngine *engine = (StyleEngine *)data;
+   /* Rebuild from cached HTML only when a query changes truth value. The
+    * deferred callback never destroys widgets from inside a layout signal. */
+   void *document = a_Bw_get_current_doc(engine->mediaBw);
+   /* Dillo rebuilds widgets when styles change. Preserve form edits and file
+    * selections: pages with controls apply changed queries on manual reload
+    * until the renderer can restyle an existing widget tree in place. */
+   if (document && !a_Html_has_form_controls(document) &&
+       engine->cssContext->mediaChanged(engine->mediaEnvironment()))
+      a_UIcmd_repush(engine->mediaBw);
+   a_Timeout_remove();
 }
 
 void StyleEngine::parse (DilloHtml *html, DilloUrl *url, const char *buf,

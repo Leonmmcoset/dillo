@@ -11,6 +11,7 @@ LDADD = \
 
 TESTS = \
 	containers \
+	css-media \
 	disposition \
 	identity \
 	i18n \
@@ -30,6 +31,8 @@ EXTRA_DIST = \
 	hyph-de.pat
 
 containers_SOURCES = containers.cc
+css_media_SOURCES = css_media_test.cc $(top_srcdir)/src/cssmedia.cc
+css_media_LDADD = $(top_builddir)/dlib/libDlib.a
 i18n_SOURCES = i18n.c
 i18n_LDADD = $(top_builddir)/dlib/libDlib.a
 prefsrc_SOURCES = prefsrc_test.cc $(top_srcdir)/src/prefsrc.cc

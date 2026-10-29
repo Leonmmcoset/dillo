@@ -13,6 +13,9 @@ class DoctreeNode {
       lout::misc::SimpleVector<char*> *klass;
       const char *pseudo;
       const char *id;
+      struct Attribute { char *name, *value; };
+      lout::misc::SimpleVector<Attribute> attributes;
+      int childIndex;
 
       DoctreeNode () {
          parent = NULL;
@@ -22,9 +25,15 @@ class DoctreeNode {
          pseudo = NULL;
          id = NULL;
          element = 0;
+         num = -1;
+         childIndex = 0;
       };
 
       ~DoctreeNode () {
+         for (int i = 0; i < attributes.size(); i++) {
+            dFree(attributes.getRef(i)->name);
+            dFree(attributes.getRef(i)->value);
+         }
          dFree ((void*) id);
          while (lastChild) {
             DoctreeNode *n = lastChild;
@@ -36,6 +45,22 @@ class DoctreeNode {
                dFree (klass->get(i));
             delete klass;
          }
+      }
+
+      void setAttribute(const char *name, const char *value) {
+         if (getAttribute(name))
+            return; // HTML uses the first occurrence of a duplicate attribute
+         attributes.increase();
+         Attribute *a = attributes.getLastRef();
+         a->name = dStrdup(name);
+         a->value = dStrdup(value);
+      }
+
+      const char *getAttribute(const char *name) const {
+         for (int i = 0; i < attributes.size(); i++)
+            if (!dStrAsciiCasecmp(attributes.get(i).name, name))
+               return attributes.get(i).value;
+         return NULL;
       }
 };
 
@@ -66,6 +91,7 @@ class Doctree {
          DoctreeNode *dn = new DoctreeNode ();
          dn->parent = topNode;
          dn->sibling = dn->parent->lastChild;
+         dn->childIndex = dn->sibling ? dn->sibling->childIndex + 1 : 1;
          dn->parent->lastChild = dn;
          dn->num = num++;
          topNode = dn;

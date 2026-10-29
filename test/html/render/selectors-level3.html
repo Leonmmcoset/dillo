@@ -1,0 +1,46 @@
+<!doctype html><html><head><title>CSS selectors</title><style>body{margin:0;font-size:9px;line-height:10px} section{background:red} div{height:10px;margin:0} .case0 [data-test] {background:green}
+.case1 [data-test="Exact"] {background:green}
+.case2 [data-test~="word"] {background:green}
+.case3 [lang|="en"] {background:green}
+.case4 [data-test^="start"] {background:green}
+.case5 [data-test$="end"] {background:green}
+.case6 [data-test*="middle"] {background:green}
+.case7 [data-test="EXACT" i] {background:green}
+.case8 [data-test="exact" s] {background:green}
+.case9 [data-test=""] {background:green}
+.case10 [title="a & b"] {background:green}
+.case11 [data-test][title="yes"] {background:green}
+.case12 :not(.skip) {background:green}
+.case13 :not([data-test]) {background:green}
+.case14 div:first-child {background:green}
+.case15 div:nth-child(2n+1) {background:green}
+.case16 div:nth-child(even) {background:green}
+.case17 div:nth-child(-n + 2) {background:green}
+.case18 div:nth-child(2) {background:green}
+.case19 div:nth-of-type(2) {background:green}
+.case20 div:first-of-type {background:green}
+.case21 span ~ div {background:green}
+.case22 div:not(.skip)[data-test]:nth-child(1) {background:green}
+.positive0 [lang|="EN"]{background:green}.negative0 div{background:green}.negative0 [data-test="wrong"]{background:red}.negative1 div{background:green}.negative1 [data-test="VALUE"]{background:red}.negative2 div{background:green}.negative2 [lang="EN" s]{background:red}.negative3 div{background:green}.negative3 [data-missing]{background:red}.negative4 div{background:green}.negative4 [data-test^=""]{background:red}.negative5 div{background:green}.negative5 [data-test$=""]{background:red}.negative6 div{background:green}.negative6 [data-test*=""]{background:red}.negative7 div{background:green}.negative7 [data-test~="two words"]{background:red}.negative8 div{background:green}.negative8 [data-test|="en"]{background:red}.negative9 div{background:green}.negative9 :not([data-test]){background:red}.negative10 div{background:green}.negative10 :nth-child(0){background:red}.negative11 div{background:green}.negative11 :nth-child(-1){background:red}.negative12 div{background:green}.negative12 :nth-child(bogus){background:red}.negative13 div{background:green}.negative13 :nth-child(999999999999999999999999){background:red}.negative14 div{background:green}.negative14 [data-test!=value]{background:red}</style></head><body><section class="case0"><div data-test>attribute presence</div></section>
+<section class="case1"><div data-test="Exact">attribute equals</div></section>
+<section class="case2"><div data-test="first word last">attribute word</div></section>
+<section class="case3"><div lang="en-US">language prefix</div></section>
+<section class="case4"><div data-test="start-end">prefix</div></section>
+<section class="case5"><div data-test="start-end">suffix</div></section>
+<section class="case6"><div data-test="start-middle-end">substring</div></section>
+<section class="case7"><div data-test="exact">case insensitive</div></section>
+<section class="case8"><div data-test="exact">case sensitive</div></section>
+<section class="case9"><div data-test="">empty equality</div></section>
+<section class="case10"><div title="a &amp; b">entity decoding</div></section>
+<section class="case11"><div data-test title="yes">multiple attributes</div></section>
+<section class="case12"><div>negation</div><div class="skip" style="background:green">excluded</div></section>
+<section class="case13"><div>negated attribute</div></section>
+<section class="case14"><div>first child</div><div style="background:green">second</div></section>
+<section class="case15"><div>odd</div><div style="background:green">even</div><div>odd</div></section>
+<section class="case16"><div style="background:green">odd</div><div>even</div></section>
+<section class="case17"><div>first</div><div>second</div><div style="background:green">third</div></section>
+<section class="case18"><div style="background:green">first</div><div>second</div></section>
+<section class="case19"><span></span><div style="background:green">first of type</div><div>second of type</div></section>
+<section class="case20"><span></span><div>first of type</div></section>
+<section class="case21"><span></span><p style="margin:0"></p><div>general sibling</div><div>later sibling</div></section>
+<section class="case22"><div data-test>compound</div></section><section class="positive0"><div lang="en-US">HTML case folding</div></section><section class="negative0"><div data-test="right">negative match 0</div></section><section class="negative1"><div data-test="value">negative match 1</div></section><section class="negative2"><div lang="en">negative match 2</div></section><section class="negative3"><div data-test="present">negative match 3</div></section><section class="negative4"><div data-test="value">negative match 4</div></section><section class="negative5"><div data-test="value">negative match 5</div></section><section class="negative6"><div data-test="value">negative match 6</div></section><section class="negative7"><div data-test="two words">negative match 7</div></section><section class="negative8"><div data-test="english">negative match 8</div></section><section class="negative9"><div data-test="present">negative match 9</div></section><section class="negative10"><div >negative match 10</div></section><section class="negative11"><div >negative match 11</div></section><section class="negative12"><div >negative match 12</div></section><section class="negative13"><div >negative match 13</div></section><section class="negative14"><div data-test="right">negative match 14</div></section></body></html>

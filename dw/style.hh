@@ -556,6 +556,7 @@ public:
    int hBorderSpacing, vBorderSpacing, wordSpacing;
    Length width, height, lineHeight, textIndent;
    Length minWidth, maxWidth, minHeight, maxHeight;
+   enum BoxSizing { CONTENT_BOX, BORDER_BOX } boxSizing;
 
    Box margin, borderWidth, padding;
    BorderCollapse borderCollapse;
@@ -599,6 +600,15 @@ public:
    inline int boxRestHeight ()
    { return margin.bottom + borderWidth.bottom + padding.bottom; }
    inline int boxDiffHeight () { return boxOffsetY () + boxRestHeight (); }
+
+   inline int cssWidthToContent(int width) {
+      return lout::misc::max(0, width - (boxSizing == BORDER_BOX ?
+         borderWidth.left + padding.left + borderWidth.right + padding.right : 0));
+   }
+   inline int cssHeightToContent(int height) {
+      return lout::misc::max(0, height - (boxSizing == BORDER_BOX ?
+         borderWidth.top + padding.top + borderWidth.bottom + padding.bottom : 0));
+   }
 
    inline bool hasBackground ()
    { return backgroundColor != NULL || backgroundImage != NULL; }

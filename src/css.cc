@@ -144,6 +144,13 @@ bool CssSelector::match (Doctree *docTree, const DoctreeNode *node,
       case COMB_ADJACENT_SIBLING:
          node = docTree->sibling (node);
          break;
+      case COMB_GENERAL_SIBLING:
+         for (node = docTree->sibling(node); node;
+              node = docTree->sibling(node))
+            if (sel->match(node) &&
+                match(docTree, node, i - 1, cs->combinator, matchCache))
+               return true;
+         return false;
       case COMB_DESCENDANT:
          node = docTree->parent (node);
          matchCacheEntry = matchCache->getRef(matchCacheOffset + i);
@@ -183,7 +190,7 @@ void CssSelector::addSimpleSelector (Combinator c) {
 
 bool CssSelector::checksPseudoClass () {
    for (int i = 0; i < selectorList.size (); i++)
-      if (selectorList.getRef (i)->selector->getPseudoClass ())
+      if (selectorList.getRef (i)->selector->checksVisited())
          return true;
    return false;
 }
@@ -235,10 +242,52 @@ CssSimpleSelector::CssSimpleSelector () {
 }
 
 CssSimpleSelector::~CssSimpleSelector () {
+   for (int i = 0; i < attributes.size(); i++) {
+      dFree(attributes.getRef(i)->name);
+      dFree(attributes.getRef(i)->value);
+   }
+   for (int i = 0; i < negations.size(); i++)
+      delete negations.get(i);
    for (int i = 0; i < klass.size (); i++)
       dFree (klass.get (i));
    dFree (id);
    dFree (pseudo);
+}
+
+void CssSimpleSelector::addAttribute(const char *name, char op,
+                                    const char *value, bool insensitive)
+{
+   attributes.increase();
+   Attribute *a = attributes.getLastRef();
+   a->name = dStrdup(name);
+   a->value = dStrdup(value);
+   a->op = op;
+   a->insensitive = insensitive;
+}
+
+void CssSimpleSelector::addStructural(char type, int a, int b)
+{
+   structural.increase();
+   Structural *s = structural.getLastRef();
+   s->type = type;
+   s->a = a;
+   s->b = b;
+}
+
+void CssSimpleSelector::addNegation(CssSimpleSelector *selector)
+{
+   negations.increase();
+   negations.set(negations.size() - 1, selector);
+}
+
+bool CssSimpleSelector::checksVisited()
+{
+   if (pseudo && !dStrAsciiCasecmp(pseudo, "visited"))
+      return true;
+   for (int i = 0; i < negations.size(); i++)
+      if (negations.get(i)->checksVisited())
+         return true;
+   return false;
 }
 
 void CssSimpleSelector::setSelect (SelectType t, const char *v) {
@@ -287,6 +336,70 @@ bool CssSimpleSelector::match (const DoctreeNode *n) {
          return false;
    }
 
+   for (int i = 0; i < attributes.size(); i++) {
+      Attribute a = attributes.get(i);
+      const char *value = n->getAttribute(a.name);
+      if (!value)
+         return false;
+      if (!a.op)
+         continue;
+      size_t length = strlen(a.value), size = strlen(value);
+      bool matches = false;
+      if (a.op == '=')
+         matches = a.insensitive ? !dStrAsciiCasecmp(value, a.value) :
+                                   !strcmp(value, a.value);
+      else if (length && size >= length) {
+         if (a.op == '^' || a.op == '|') {
+            matches = a.insensitive ? !dStrnAsciiCasecmp(value, a.value, length) :
+                                      !strncmp(value, a.value, length);
+            if (a.op == '|')
+               matches = matches && (size == length || value[length] == '-');
+         } else if (a.op == '$') {
+            const char *suffix = value + size - length;
+            matches = a.insensitive ? !dStrAsciiCasecmp(suffix, a.value) :
+                                      !strcmp(suffix, a.value);
+         } else if (a.op == '*') {
+            matches = a.insensitive ? dStriAsciiStr(value, a.value) != NULL :
+                                      strstr(value, a.value) != NULL;
+         } else if (a.op == '~' && !strpbrk(a.value, " \t\r\n\f")) {
+            for (const char *p = value; *p;) {
+               while (dIsspace(*p)) p++;
+               size_t word = strcspn(p, " \t\r\n\f");
+               if (word == length && (a.insensitive ?
+                   !dStrnAsciiCasecmp(p, a.value, length) :
+                   !strncmp(p, a.value, length))) {
+                  matches = true;
+                  break;
+               }
+               p += word;
+            }
+         }
+      }
+      if (!matches)
+         return false;
+   }
+   for (int i = 0; i < structural.size(); i++) {
+      Structural s = structural.get(i);
+      if (s.type == 'r') {
+         if (!n->parent || n->parent->num != -1)
+            return false;
+         continue;
+      }
+      int index = n->childIndex;
+      if (s.type == 't') {
+         index = 1;
+         for (const DoctreeNode *p = n->sibling; p; p = p->sibling)
+            if (p->element == n->element)
+               index++;
+      }
+      long long difference = (long long)index - s.b;
+      if (s.a ? difference % s.a != 0 || difference / s.a < 0 : difference != 0)
+         return false;
+   }
+   for (int i = 0; i < negations.size(); i++)
+      if (negations.get(i)->match(n))
+         return false;
+
    return true;
 }
 
@@ -303,6 +416,9 @@ int CssSimpleSelector::specificity () {
    spec += klass.size() << 10;
    if (pseudo)
       spec += 1 << 10;
+   spec += (attributes.size() + structural.size()) << 10;
+   for (int i = 0; i < negations.size(); i++)
+      spec += negations.get(i)->specificity();
    if (element != ELEMENT_ANY)
       spec += 1;
 
@@ -488,7 +604,40 @@ CssStyleSheet CssContext::userAgentSheet;
 
 CssContext::CssContext () {
    pos = 0;
+   mediaEnvironment.width = mediaEnvironment.height = 0;
+   mediaEnvironment.dpi = 96;
    matchCache.setSize (userAgentSheet.getRequiredMatchCache (), -1);
+}
+
+CssContext::~CssContext()
+{
+   for (int i = 0; i < mediaQueries.size(); i++)
+      dFree(mediaQueries.getRef(i)->text);
+}
+
+bool CssContext::mediaMatches(const char *query)
+{
+   bool matched = a_Css_media_matches(query, mediaEnvironment);
+   if (!query || !*query)
+      return matched;
+   for (int i = 0; i < mediaQueries.size(); i++)
+      if (!strcmp(mediaQueries.get(i).text, query))
+         return matched;
+   mediaQueries.increase();
+   MediaQuery *m = mediaQueries.getLastRef();
+   m->text = dStrdup(query);
+   m->matched = matched;
+   return matched;
+}
+
+bool CssContext::mediaChanged(const CssMediaEnvironment &env) const
+{
+   for (int i = 0; i < mediaQueries.size(); i++) {
+      MediaQuery m = mediaQueries.get(i);
+      if (a_Css_media_matches(m.text, env) != m.matched)
+         return true;
+   }
+   return false;
 }
 
 /**

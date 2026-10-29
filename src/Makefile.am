@@ -111,6 +111,8 @@ dillo_SOURCES = \
 	domain.c \
 	domain.h \
 	css.cc \
+	cssmedia.cc \
+	cssmedia.hh \
 	css.hh \
 	cssparser.cc \
 	cssparser.hh \

@@ -16,6 +16,7 @@
 #include "dw/core.hh"
 #include "doctree.hh"
 #include "html.hh"
+#include "cssmedia.hh"
 
 /* Origin and weight. Used only internally.*/
 typedef enum {
@@ -182,6 +183,7 @@ typedef enum {
    CSS_PROPERTY_BORDER_TOP_STYLE,
    CSS_PROPERTY_BORDER_TOP_WIDTH,
    CSS_PROPERTY_BOTTOM,
+   CSS_PROPERTY_BOX_SIZING,
    CSS_PROPERTY_CAPTION_SIDE,
    CSS_PROPERTY_CLEAR,
    CSS_PROPERTY_CLIP,
@@ -357,6 +359,15 @@ class CssSimpleSelector {
       int element;
       char *pseudo, *id;
       lout::misc::SimpleVector <char *> klass;
+      struct Attribute {
+         char *name, *value;
+         char op;
+         bool insensitive;
+      };
+      struct Structural { char type; int a, b; };
+      lout::misc::SimpleVector<Attribute> attributes;
+      lout::misc::SimpleVector<Structural> structural;
+      lout::misc::SimpleVector<CssSimpleSelector *> negations;
 
    public:
       enum {
@@ -375,6 +386,11 @@ class CssSimpleSelector {
       ~CssSimpleSelector ();
       inline void setElement (int e) { element = e; };
       void setSelect (SelectType t, const char *v);
+      void addAttribute(const char *name, char op, const char *value,
+                        bool insensitive);
+      void addStructural(char type, int a = 0, int b = 1);
+      void addNegation(CssSimpleSelector *selector);
+      bool checksVisited();
       inline lout::misc::SimpleVector <char *> *getClass () { return &klass; };
       inline const char *getPseudoClass () { return pseudo; };
       inline const char *getId () { return id; };
@@ -400,6 +416,7 @@ class CssSelector {
          COMB_NONE,
          COMB_DESCENDANT,
          COMB_CHILD,
+         COMB_GENERAL_SIBLING,
          COMB_ADJACENT_SIBLING
       } Combinator;
 
@@ -521,9 +538,16 @@ class CssContext {
       CssStyleSheet sheet[CSS_PRIMARY_USER_IMPORTANT + 1];
       MatchCache matchCache;
       int pos;
+      struct MediaQuery { char *text; bool matched; };
+      lout::misc::SimpleVector<MediaQuery> mediaQueries;
+      CssMediaEnvironment mediaEnvironment;
 
    public:
       CssContext ();
+      ~CssContext();
+      void setMediaEnvironment(const CssMediaEnvironment &env) { mediaEnvironment = env; }
+      bool mediaMatches(const char *query);
+      bool mediaChanged(const CssMediaEnvironment &env) const;
 
       void addRule (CssSelector *sel, CssPropertyList *props,
                     CssPrimaryOrder order);

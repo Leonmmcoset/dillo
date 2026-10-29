@@ -74,6 +74,7 @@ void StyleAttrs::initValues ()
    backgroundPositionY = createPerLength (0);
    width = height = lineHeight = LENGTH_AUTO;
    minWidth = maxWidth = minHeight = maxHeight = LENGTH_AUTO;
+   boxSizing = CONTENT_BOX;
    vloat = FLOAT_NONE;
    clear = CLEAR_NONE;
    overflow = OVERFLOW_VISIBLE;
@@ -120,6 +121,7 @@ void StyleAttrs::resetValues ()
    backgroundPositionY = createPerLength (0);
    width = LENGTH_AUTO;
    height = LENGTH_AUTO;
+   boxSizing = CONTENT_BOX;
    minWidth = maxWidth = minHeight = maxHeight = LENGTH_AUTO;
 
    margin.setVal (0);
@@ -181,6 +183,7 @@ bool StyleAttrs::equals (object::Object *other) {
        wordSpacing == otherAttrs->wordSpacing &&
        width == otherAttrs->width &&
        height == otherAttrs->height &&
+       boxSizing == otherAttrs->boxSizing &&
        minWidth == otherAttrs->minWidth &&
        maxWidth == otherAttrs->maxWidth &&
        minHeight == otherAttrs->minHeight &&
@@ -239,6 +242,7 @@ int StyleAttrs::hashValue () {
       wordSpacing +
       width +
       height +
+      boxSizing +
       minWidth +
       maxWidth +
       minHeight +
@@ -367,6 +371,7 @@ void Style::copyAttrs (StyleAttrs *attrs)
    wordSpacing = attrs->wordSpacing;
    width = attrs->width;
    height = attrs->height;
+   boxSizing = attrs->boxSizing;
    lineHeight = attrs->lineHeight;
    textIndent = attrs->textIndent;
    minWidth = attrs->minWidth;

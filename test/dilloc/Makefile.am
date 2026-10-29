@@ -10,6 +10,7 @@ TESTS = \
 	cmd-load.sh \
 	cmd-load-multi.sh \
 	cmd-load-deadlock.sh \
+	cmd-media-resize.sh \
 	cmd-title.sh
 
 EXTRA_DIST = \
