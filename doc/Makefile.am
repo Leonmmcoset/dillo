@@ -5,6 +5,7 @@ EXTRA_DIST = \
 	Cookies.txt \
 	dillo.1.in \
 	user_help.in.html \
+	i18n.md \
 	install.md
 
 dillo.1: $(srcdir)/dillo.1.in Makefile

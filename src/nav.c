@@ -12,6 +12,7 @@
 /** @file
  * Support for a navigation stack */
 
+#include "dlib/i18n.h"
 #include <stdio.h>
 #include <sys/stat.h>
 #include "msg.h"
@@ -514,9 +515,9 @@ static void Nav_reload_callback(void *data)
          confirmed = 1;
       } else if (URL_FLAGS(h_url) & URL_Post) {
          /* Attempt to repost data, let's confirm... */
-         choice = a_Dialog_choice("Dillo: Repost form?",
-                                  "Repost form data?",
-                                  "No", "Yes", "Cancel", NULL);
+         choice = a_Dialog_choice(_("Dillo: Repost form?"),
+                                  _("Repost form data?"),
+                                  _("No"), _("Yes"), _("Cancel"), NULL);
          confirmed = (choice == 2);  /* "Yes" */
       }
 
@@ -579,7 +580,7 @@ static void Nav_save_cb(int Op, CacheClient_t *Client)
       fflush(Web->stream);
       fstat(fileno(Web->stream), &st);
       fclose(Web->stream);
-      a_UIcmd_set_msg(Web->bw, "File saved (%d Bytes)", st.st_size);
+      a_UIcmd_set_msg(Web->bw, _("File saved (%d Bytes)"), st.st_size);
    } else {
       if ((Bytes = Client->BufSize - Web->SavedBytes) > 0) {
          Bytes = fwrite((char *) Client->Buf + Web->SavedBytes, 1, Bytes, Web->stream);

@@ -17,6 +17,7 @@
 /*-----------------------------------------------------------------------------
  * Includes
  *---------------------------------------------------------------------------*/
+#include "dlib/i18n.h"
 #include <string.h>     /* for memcpy and memmove */
 #include <stdlib.h>
 #include <stdio.h>      /* for sprintf */
@@ -3203,7 +3204,7 @@ static void Html_tag_open_meta(DilloHtml *html, const char *tag, int tagsize)
             html->stop_parser = true;
             if (URL_FLAGS(html->base_url) & URL_SpamSafe) {
                a_UIcmd_set_msg(html->bw,
-                  "WARNING: local URL with META refresh.  Aborting.");
+                  _("WARNING: local URL with META refresh.  Aborting."));
             } else if (a_Capi_dpi_verify_request(html->bw, new_url)) {
                a_UIcmd_redirection0((void*)html->bw, new_url);
             }

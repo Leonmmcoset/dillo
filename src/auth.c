@@ -17,6 +17,7 @@
  */
 
 
+#include "dlib/i18n.h"
 #include "auth.h"
 #include "msg.h"
 #include "misc.h"
@@ -619,21 +620,23 @@ static int Auth_do_auth_dialog(const AuthParse_t *auth_parse,
                                const DilloUrl *url)
 {
    int ret;
-   char *title, *msg;
+   char *title;
+   Dstr *msg = dStr_new("");
    AuthDialogData_t *data;
    const char *typestr = auth_parse->type == DIGEST ? "Digest" : "Basic";
 
    _MSG("auth.c: Auth_do_auth_dialog: realm = '%s'\n", auth_parse->realm);
 
-   title = dStrconcat("Dillo: Password for ", auth_parse->realm, NULL);
-   msg = dStrconcat("The server at ", URL_HOST(url), " requires a username"
-                    " and password for  \"", auth_parse->realm, "\".\n\n"
-                    "Authentication scheme: ", typestr, NULL);
+   title = dStrconcat(_("Dillo: Password for "), auth_parse->realm, NULL);
+   dStr_sprintf(msg, _("The server at %s requires a username and password "
+                      "for \"%s\".\n\nAuthentication scheme: %s"),
+                URL_HOST(url), auth_parse->realm, typestr);
    data = dNew(AuthDialogData_t, 1);
    data->auth_parse = auth_parse;
    data->url = a_Url_dup(url);
-   ret = a_Dialog_user_password(title, msg, Auth_do_auth_dialog_cb, data);
-   dFree(title); dFree(msg);
+   ret = a_Dialog_user_password(title, msg->str, Auth_do_auth_dialog_cb, data);
+   dFree(title);
+   dStr_free(msg, 1);
    a_Url_free((void *)data->url);
    dFree(data);
    return ret;

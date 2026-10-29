@@ -10,6 +10,7 @@
  * (at your option) any later version.
  */
 
+#include "dlib/i18n.h"
 #include <FL/Fl.H>
 #include <stdio.h>
 #include <stdlib.h>        /* strtol */
@@ -439,7 +440,8 @@ void Keys::genAboutKeys(void)
          "<!DOCTYPE HTML>\n"
          "<html>\n"
          "<head>\n"
-         "  <title>Keyboard shortcuts</title>\n"
+         "  <meta charset=\"utf-8\">\n"
+         "  <title>%s</title>\n"
          "  <style>\n"
          "    body {\n"
          "      background: white;\n"
@@ -482,13 +484,16 @@ void Keys::genAboutKeys(void)
          "<body>\n"
          "<div class=\"main\">\n"
          "\n"
-         "<h1>Keyboard shortcuts</h1>\n"
+         "<h1>%s</h1>\n"
          "\n"
-         "<p>The following table contains the current key bindings in Dillo.\n"
-         "To change them, edit the configuration file <code>~/.dillo/keysrc</code> \n"
-         "and restart the browser.</p>\n"
+         "<p>%s</p>\n"
          "<table>\n"
-         "<tr><th>Shortcut<th>Action</tr>\n");
+         "<tr><th>%s<th>%s</tr>\n",
+         _("Keyboard shortcuts"), _("Keyboard shortcuts"),
+         _("The following table contains the current key bindings in Dillo. "
+           "To change them, edit the configuration file "
+           "<code>~/.dillo/keysrc</code> and restart the browser."),
+         _("Shortcut"), _("Action"));
 
    for (int i = 0; i < len; i++) {
       KeyBinding_t *node = (KeyBinding_t*)dList_nth_data(bindings, i);

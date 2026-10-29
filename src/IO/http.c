@@ -15,6 +15,7 @@
  */
 
 
+#include "dlib/i18n.h"
 #include "config.h"
 
 #include <unistd.h>
@@ -226,7 +227,7 @@ void a_Http_connect_done(int fd, bool_t success)
          Http_send_query(sd);
       } else {
          if (valid_web)
-            MSG_BW(sd->web, 1, "Could not establish connection.");
+            MSG_BW(sd->web, 1, _("Could not establish connection."));
          MSG("fd %d is done and failed\n", sd->SockFD);
          dClose(fd);
          Http_socket_free(VOIDP2INT(info->LocalKey)); /* free sd */
@@ -497,8 +498,8 @@ static void Http_send_query(SocketData_t *S)
          S->flags & HTTP_SOCKET_TLS);
    dbuf = a_Chain_dbuf_new(query->str, query->len, 0);
 
-   MSG_BW(S->web, 1, "Sending query%s...",
-                     S->flags & HTTP_SOCKET_USE_PROXY ? " through proxy" : "");
+   MSG_BW(S->web, 1, _("Sending query%s..."),
+                     S->flags & HTTP_SOCKET_USE_PROXY ? _(" through proxy") : "");
 
    if (prefs.trace_http)
       MSG(">>> sending HTTP:\n%s\n", dStr_printable(query, 8192));
@@ -521,7 +522,7 @@ static void Http_connect_tls(ChainLink *info)
       char *connect_str = Http_get_connect_str(S->url);
       DataBuf *dbuf = a_Chain_dbuf_new(connect_str, strlen(connect_str), 0);
 
-      MSG_BW(S->web, 1, "Tunnel secure connection through proxy...");
+      MSG_BW(S->web, 1, _("Tunnel secure connection through proxy..."));
       a_Chain_bfcb(OpSend, info, &S->SockFD, "FD");
       S->https_proxy_reply = dStr_new(NULL);
       a_Chain_bcb(OpSend, info, dbuf, NULL);
@@ -529,7 +530,7 @@ static void Http_connect_tls(ChainLink *info)
       dFree(dbuf);
       dFree(connect_str);
    } else {
-      MSG_BW(S->web, 1, "Secure connection negotiation...");
+      MSG_BW(S->web, 1, _("Secure connection negotiation..."));
       a_Tls_connect(S->SockFD, S->url);
    }
 }
@@ -636,7 +637,7 @@ static void Http_connect_socket(ChainLink *Info)
       }
 #endif
       } /* switch */
-      MSG_BW(S->web, 1, "Contacting host...");
+      MSG_BW(S->web, 1, _("Contacting host..."));
 
       if (connect(S->SockFD, (struct sockaddr *)&name, socket_len) == 0) {
          /* probably never succeeds immediately on any system */
@@ -767,7 +768,7 @@ static void Http_dns_cb(int Status, Dlist *addr_list, void *data)
             Http_connect_queued_sockets(srv);
          } else {
             /* DNS wasn't able to resolve the hostname */
-            MSG_BW(S->web, 0, "ERROR: DNS can't resolve %s", host);
+            MSG_BW(S->web, 0, _("ERROR: DNS can't resolve %s"), host);
          }
       }
       if (clean_up) {
@@ -813,7 +814,7 @@ static int Http_get(ChainLink *Info, void *Data1)
       S->flags |= HTTP_SOCKET_TLS;
 
    /* Let the user know what we'll do */
-   MSG_BW(S->web, 1, "DNS resolving %s", hostname);
+   MSG_BW(S->web, 1, _("DNS resolving %s"), hostname);
 
    /* Let the DNS engine resolve the hostname, and when done,
     * we'll try to connect the socket from the callback function */
@@ -934,7 +935,7 @@ void a_Http_ccc(int Op, int Branch, int Dir, ChainLink *Info,
          case OpAbort:
             _MSG("ABORT 1F\n");
             if ((sd = a_Klist_get_data(ValidSocks, SKey)))
-               MSG_BW(sd->web, 1, "Can't get %s", URL_STR(sd->url));
+               MSG_BW(sd->web, 1, _("Can't get %s"), URL_STR(sd->url));
             Http_socket_free(SKey);
             a_Chain_fcb(OpAbort, Info, NULL, "Both");
             dFree(Info);
@@ -962,10 +963,10 @@ void a_Http_ccc(int Op, int Branch, int Dir, ChainLink *Info,
                          sd->https_proxy_reply->str);
                      dStr_free(sd->https_proxy_reply, 1);
                      sd->https_proxy_reply = NULL;
-                     MSG_BW(sd->web, 1, "Secure connection negotiation...");
+                     MSG_BW(sd->web, 1, _("Secure connection negotiation..."));
                      a_Tls_connect(sd->SockFD, sd->url);
                   } else {
-                     MSG_BW(sd->web, 1, "Can't connect through proxy to %s",
+                     MSG_BW(sd->web, 1, _("Can't connect through proxy to %s"),
                             URL_HOST(sd->url));
                      MSG("CONNECT through proxy failed. Server sent:\n%s\n",
                          sd->https_proxy_reply->str);

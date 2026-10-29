@@ -14,6 +14,8 @@
  * A FLTK-based GUI for the downloads dpi (dillo plugin).
  */
 
+#include "dlib/i18n.h"
+#include "dw/fltki18n.hh"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -353,20 +355,20 @@ DLItem::DLItem(const char *full_filename, const char *url, const char *user_agen
    prTitle->align(FL_ALIGN_LEFT|FL_ALIGN_INSIDE|FL_ALIGN_CLIP);
    prTitle->copy_label(shortname);
    // Attach this 'log_text' to the tooltip
-   log_text_add("Target File: ", 13);
+   log_text_add(_("Target File: "), strlen(_("Target File: ")));
    log_text_add(fullname, strlen(fullname));
    log_text_add("\n\n", 2);
 
    prBar = new ProgressBar(24, 40, 92, 20);
    prBar->box(FL_THIN_UP_BOX);
-   prBar->tooltip("Progress Status");
+   prBar->tooltip(_("Progress Status"));
 
    int ix = 122, iy = 37, iw = 50, ih = 14;
-   Fl_Widget *o = new Fl_Box(ix,iy,iw,ih, "Got");
+   Fl_Widget *o = new Fl_Box(ix,iy,iw,ih, _("Got"));
    o->box(FL_RFLAT_BOX);
    o->color(FL_DARK2);
    o->labelsize(12);
-   o->tooltip("Downloaded Size");
+   o->tooltip(_("Downloaded Size"));
    prGot = new Fl_Box(ix,iy+14,iw,ih, "0KB");
    prGot->align(FL_ALIGN_CENTER|FL_ALIGN_INSIDE);
    prGot->labelcolor(FL_BLUE);
@@ -374,51 +376,51 @@ DLItem::DLItem(const char *full_filename, const char *url, const char *user_agen
    prGot->box(FL_NO_BOX);
 
    ix += iw;
-   o = new Fl_Box(ix,iy,iw,ih, "Size");
+   o = new Fl_Box(ix,iy,iw,ih, _("Size"));
    o->box(FL_RFLAT_BOX);
    o->color(FL_DARK2);
    o->labelsize(12);
-   o->tooltip("Total Size");
+   o->tooltip(_("Total Size"));
    prSize = new Fl_Box(ix,iy+14,iw,ih, "??");
    prSize->align(FL_ALIGN_CENTER|FL_ALIGN_INSIDE);
    prSize->labelsize(12);
    prSize->box(FL_NO_BOX);
 
    ix += iw;
-   o = new Fl_Box(ix,iy,iw,ih, "Rate");
+   o = new Fl_Box(ix,iy,iw,ih, _("Rate"));
    o->box(FL_RFLAT_BOX);
    o->color(FL_DARK2);
    o->labelsize(12);
-   o->tooltip("Current transfer Rate (KBytes/sec)");
+   o->tooltip(_("Current transfer Rate (KBytes/sec)"));
    prRate = new Fl_Box(ix,iy+14,iw,ih, "??");
    prRate->align(FL_ALIGN_CENTER|FL_ALIGN_INSIDE);
    prRate->labelsize(12);
    prRate->box(FL_NO_BOX);
 
    ix += iw;
-   o = new Fl_Box(ix,iy,iw,ih, "~Rate");
+   o = new Fl_Box(ix,iy,iw,ih, _("~Rate"));
    o->box(FL_RFLAT_BOX);
    o->color(FL_DARK2);
    o->labelsize(12);
-   o->tooltip("Average transfer Rate (KBytes/sec)");
+   o->tooltip(_("Average transfer Rate (KBytes/sec)"));
    pr_Rate = new Fl_Box(ix,iy+14,iw,ih, "??");
    pr_Rate->align(FL_ALIGN_CENTER|FL_ALIGN_INSIDE);
    pr_Rate->labelsize(12);
    pr_Rate->box(FL_NO_BOX);
 
    ix += iw;
-   prETAt = o = new Fl_Box(ix,iy,iw,ih, "ETA");
+   prETAt = o = new Fl_Box(ix,iy,iw,ih, _("ETA"));
    o->box(FL_RFLAT_BOX);
    o->color(FL_DARK2);
    o->labelsize(12);
-   o->tooltip("Estimated Time of Arrival");
+   o->tooltip(_("Estimated Time of Arrival"));
    prETA = new Fl_Box(ix,iy+14,iw,ih, "??");
    prETA->align(FL_ALIGN_CENTER|FL_ALIGN_INSIDE);
    prETA->labelsize(12);
    prETA->box(FL_NO_BOX);
 
-   prButton = new Fl_Button(326, 9, 44, 19, "Stop");
-   prButton->tooltip("Stop this transfer");
+   prButton = new Fl_Button(326, 9, 44, 19, _("Stop"));
+   prButton->tooltip(_("Stop this transfer"));
    prButton->box(FL_UP_BOX);
    prButton->clear_visible_focus();
    prButton->callback(prButton_scb, this);
@@ -566,7 +568,7 @@ void DLItem::log_text_add(const char *buf, ssize_t st)
 
    // Show we're connecting...
    if (curr_bytesize == 0) {
-      prTitle->copy_label("Connecting...");
+      prTitle->copy_label(_("Connecting..."));
    }
 }
 
@@ -652,12 +654,12 @@ void DLItem::child_finished(int status)
    wget_status(status);
 
    if (status == 0) {
-      prButton->label("Done");
-      prButton->tooltip("Close this information panel");
+      prButton->label(_("Done"));
+      prButton->tooltip(_("Close this information panel"));
    } else {
-      prButton->label("Close");
-      prButton->tooltip("Close this information panel");
-      status_msg("ABORTED");
+      prButton->label(_("Close"));
+      prButton->tooltip(_("Close this information panel"));
+      status_msg(_("ABORTED"));
       if (curr_bytesize == 0) {
          // Update the title
          prTitle->copy_label(shortname);
@@ -728,15 +730,15 @@ void DLItem::update()
    /* ETA */
    if (fork_done()) {
       updates_done(1); // Last update
-      prETAt->label("Time");
-      prETAt->tooltip("Download Time");
+      prETAt->label(_("Time"));
+      prETAt->tooltip(_("Download Time"));
       prETAt->redraw();
       secs2timestr((int)csec, str);
       prETA->copy_label(str);
       if (total_bytesize == -1) {
          update_prSize(curr_bytesize);
          if (wget_status() == 0)
-            status_msg("Done");
+            status_msg(_("Done"));
       }
    } else {
       if (_rate > 0 && total_bytesize > 0 && curr_bytesize > 0) {
@@ -916,12 +918,12 @@ end:
  */
 static void dlwin_esc_cb(Fl_Widget *, void *)
 {
-   const char *msg = "There are running downloads.\n"
-                     "ABORT them and EXIT anyway?";
+   const char *msg = _("There are running downloads.\n"
+                     "ABORT them and EXIT anyway?");
 
    if (dl_win && dl_win->num_running() > 0) {
-      fl_message_title("Dillo Downloads: Abort downloads?");
-      int ch = fl_choice("%s", "Cancel", "*No", "Yes", msg);
+      fl_message_title(_("Dillo Downloads: Abort downloads?"));
+      int ch = fl_choice("%s", _("Cancel"), _("*No"), _("Yes"), msg);
       if (ch == 0 || ch == 1)
          return;
    }
@@ -1048,7 +1050,7 @@ DLWin::DLWin(int ww, int wh) {
    mDList = new DLItemList();
 
    // Create the empty main window
-   mWin = new Fl_Window(ww, wh, "Dillo Downloads");
+   mWin = new Fl_Window(ww, wh, _("Dillo Downloads"));
    mWin->begin();
    mScroll = new DlScroll(0,0,ww,wh);
    mScroll->begin();
@@ -1067,7 +1069,7 @@ DLWin::DLWin(int ww, int wh) {
    sigaddset(&mask_sigchld, SIGCHLD);
    est_sigchld();
 
-   fl_message_title_default("Dillo Downloads: Message");
+   fl_message_title_default(_("Dillo Downloads: Message"));
 
    // Set the cleanup timeout
    Fl::add_timeout(1.0, cleanup_cb, mDList);
@@ -1108,12 +1110,19 @@ int main()
 {
    int ww = 420, wh = 85;
 
+   a_I18n_init();
+   a_I18n_init_fltk();
+
    Fl::lock();
 
    // Disable '@' and '&' interpretation in normal labels.
    Fl::set_labeltype(FL_NORMAL_LABEL, custLabelDraw, custLabelMeasure);
 
    Fl::scheme(NULL);
+
+   Fl_Font chinese_font;
+   if (a_I18n_fltk_font(&chinese_font))
+      Fl::set_font(FL_HELVETICA, chinese_font);
 
    // Create the download window
    dl_win = new DLWin(ww, wh);

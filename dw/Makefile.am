@@ -38,6 +38,7 @@ libDw_core_a_SOURCES = \
 	widget.hh
 
 libDw_fltk_a_SOURCES = \
+	fltki18n.hh \
 	fltkcomplexbutton.cc \
 	fltkcomplexbutton.hh \
 	fltkcore.hh \

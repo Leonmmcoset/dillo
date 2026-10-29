@@ -15,6 +15,7 @@
  * Dillo's cache module
  */
 
+#include "dlib/i18n.h"
 #include <sys/types.h>
 
 #include <limits.h>
@@ -129,7 +130,7 @@ void a_Cache_init(void)
    /* inject the splash screen in the cache */
    {
       DilloUrl *url = a_Url_new("about:splash", NULL);
-      Dstr *ds = dStr_new(AboutSplash);
+      Dstr *ds = a_About_splash();
       a_Cache_entry_inject(url, ds->str, ds->len,
             CA_GotHeader | CA_GotLength | CA_InternalUrl);
       dStr_free(ds, 1);
@@ -1144,7 +1145,7 @@ static int Cache_redirect(CacheEntry_t *entry, int Flags, BrowserWindow *bw)
 
    /* Don't allow redirection for SpamSafe/local URLs */
    if (URL_FLAGS(entry->Url) & URL_SpamSafe) {
-      a_UIcmd_set_msg(bw, "WARNING: local URL with redirection.  Aborting.");
+      a_UIcmd_set_msg(bw, _("WARNING: local URL with redirection.  Aborting."));
       return 0;
    }
 
@@ -1153,7 +1154,7 @@ static int Cache_redirect(CacheEntry_t *entry, int Flags, BrowserWindow *bw)
       entry->Flags |= CA_RedirectLoop;
 
    if (entry->Flags & CA_RedirectLoop) {
-      a_UIcmd_set_msg(bw, "ERROR: redirect loop for: %s", URL_STR_(entry->Url));
+      a_UIcmd_set_msg(bw, _("ERROR: redirect loop for: %s"), URL_STR_(entry->Url));
       bw->redirect_level = 0;
       return 0;
    }
@@ -1369,8 +1370,8 @@ static CacheEntry_t *Cache_process_queue(CacheEntry_t *entry)
                entry->Flags |= CA_MsgErased;
             }
             if (TypeMismatch) {
-               a_UIcmd_set_msg(Client_bw,"HTTP warning: Content-Type '%s' "
-                               "doesn't match the real data.", entry->TypeHdr);
+               a_UIcmd_set_msg(Client_bw,_("HTTP warning: Content-Type '%s' "
+                               "doesn't match the real data."), entry->TypeHdr);
                OfferDownload = TRUE;
             }
             if (entry->Flags & CA_Redirect) {
@@ -1382,7 +1383,7 @@ static CacheEntry_t *Cache_process_queue(CacheEntry_t *entry)
                Client_bw->redirect_level = 0;
             }
             if (entry->Flags & CA_HugeFile) {
-               a_UIcmd_set_msg(Client_bw, "Huge file! (%d MB)",
+               a_UIcmd_set_msg(Client_bw, _("Huge file! (%d MB)"),
                                entry->ExpectedSize / (1024*1024));
                AbortEntry = OfferDownload = TRUE;
             }
@@ -1463,8 +1464,8 @@ static CacheEntry_t *Cache_process_queue(CacheEntry_t *entry)
             (Client->Callback)(CA_Close, Client);
             if (ClientWeb->flags & WEB_RootUrl) {
                if (entry->Flags & CA_Aborted) {
-                  a_UIcmd_set_msg(Client_bw, "ERROR: Connection closed early, "
-                                             "read not complete.");
+                  a_UIcmd_set_msg(Client_bw, _("ERROR: Connection closed early, "
+                                             "read not complete."));
                }
                a_UIcmd_set_page_prog(Client_bw, 0, 0);
             }

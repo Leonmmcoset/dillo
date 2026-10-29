@@ -12,6 +12,15 @@ Screenshot of the [Dillo Website][dillo] rendered in Dillo:
 
 To install Dillo follow the [installation guide](doc/install.md).
 
+The user interface supports English and Simplified Chinese. Dillo chooses the
+language at startup from the first nonempty variable among `LC_ALL`,
+`LC_MESSAGES`, and `LANG`. Simplified Chinese locales (`zh_CN`, `zh_SG`,
+`zh_Hans` / `zh-Hans`, and `zh`) select Chinese; other locales use English.
+For example, run `LC_ALL=zh_CN.UTF-8 dillo` for Chinese or `LC_ALL=C dillo` for
+English. Chinese UI text requires a font with Chinese glyphs, such as Noto Sans
+CJK. Translations are built into the executable; no extra language packages are
+required. See [the translation guide](doc/i18n.md) for development details.
+
 You can clone the latest version of Dillo directly from our git server:
 
 - <https://git.dillo-browser.org/dillo>

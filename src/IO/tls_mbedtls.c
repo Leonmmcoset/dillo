@@ -20,6 +20,7 @@
  * TLS: https://datatracker.ietf.org/wg/tls/documents/
  */
 
+#include "dlib/i18n.h"
 #include "config.h"
 #include "../msg.h"
 
@@ -572,7 +573,7 @@ static void Tls_cert_expired(const mbedtls_x509_crt *cert, Dstr *ds)
 {
    const mbedtls_x509_time *date = &cert->valid_to;
 
-   dStr_sprintfa(ds,"Certificate expired at: %04d/%02d/%02d %02d:%02d:%02d.\n",
+   dStr_sprintfa(ds,_("Certificate expired at: %04d/%02d/%02d %02d:%02d:%02d.\n"),
                  date->year, date->mon, date->day, date->hour, date->min,
                  date->sec);
 }
@@ -586,8 +587,8 @@ static void Tls_cert_cn_mismatch(const mbedtls_x509_crt *cert, Dstr *ds)
    char cert_info_buf[buflen];
    char *san, *s;
 
-   dStr_append(ds, "This host is not one of the hostnames listed on the TLS "
-                   "certificate that it sent");
+   dStr_append(ds, _("This host is not one of the hostnames listed on the TLS "
+                   "certificate that it sent"));
    /*
     *
     * Taking the human-readable certificate info and scraping it is brittle
@@ -624,9 +625,9 @@ static void Tls_cert_trust_chain_failed(const mbedtls_x509_crt *cert, Dstr *ds)
       cert = cert->next;
    mbedtls_x509_dn_gets(buf, buflen, &cert->issuer);
 
-   dStr_sprintfa(ds, "Couldn't reach any trusted root certificate from "
+   dStr_sprintfa(ds, _("Couldn't reach any trusted root certificate from "
                      "supplied certificate. The issuer at the end of the "
-                     "chain was: \"%s\"\n", buf);
+                     "chain was: \"%s\"\n"), buf);
 }
 
 /*
@@ -636,8 +637,8 @@ static void Tls_cert_not_valid_yet(const mbedtls_x509_crt *cert, Dstr *ds)
 {
    const mbedtls_x509_time *date = &cert->valid_to;
 
-   dStr_sprintfa(ds, "Certificate validity begins in the future at: "
-                     "%04d/%02d/%02d %02d:%02d:%02d.\n",
+   dStr_sprintfa(ds, _("Certificate validity begins in the future at: "
+                     "%04d/%02d/%02d %02d:%02d:%02d.\n"),
                      date->year, date->mon, date->day, date->hour, date->min,
                      date->sec);
 }
@@ -666,8 +667,8 @@ static void Tls_cert_bad_hash(const mbedtls_x509_crt *cert, Dstr *ds)
 #endif
                       "Unrecognized";
 
-   dStr_sprintfa(ds, "This certificate's hash algorithm is not accepted "
-                     "(%s).\n", hash);
+   dStr_sprintfa(ds, _("This certificate's hash algorithm is not accepted "
+                     "(%s).\n"), hash);
 }
 
 /*
@@ -677,8 +678,8 @@ static void Tls_cert_bad_pk_alg(const mbedtls_x509_crt *cert, Dstr *ds)
 {
    const char *type_str = mbedtls_pk_get_name(&cert->pk);
 
-   dStr_sprintfa(ds, "This certificate's public key algorithm is not accepted "
-                     "(%s).\n", type_str);
+   dStr_sprintfa(ds, _("This certificate's public key algorithm is not accepted "
+                     "(%s).\n"), type_str);
 }
 
 /*
@@ -689,8 +690,8 @@ static void Tls_cert_bad_key(const mbedtls_x509_crt *cert, Dstr *ds) {
    int key_bits = mbedtls_pk_get_bitlen(&cert->pk);
    const char *type_str = mbedtls_pk_get_name(&cert->pk);
 
-   dStr_sprintfa(ds, "This certificate's key is not accepted, which generally "
-                     "means it's too weak (%d-bit %s).\n", key_bits, type_str);
+   dStr_sprintfa(ds, _("This certificate's key is not accepted, which generally "
+                     "means it's too weak (%d-bit %s).\n"), key_bits, type_str);
 }
 
 /*
@@ -722,7 +723,7 @@ static char *Tls_make_bad_cert_msg(const mbedtls_x509_crt *cert,uint32_t flags)
       }
    }
    if (flags)
-      dStr_sprintfa(ds, "Unknown certificate error(s): flag value 0x%04x",
+      dStr_sprintfa(ds, _("Unknown certificate error(s): flag value 0x%04x"),
                     flags);
    ret = ds->str;
    dStr_free(ds, 0);
@@ -780,14 +781,14 @@ static int Tls_examine_certificate(mbedtls_ssl_context *ssl, Server_t *srv)
    const mbedtls_x509_crt *cert;
    uint32_t st;
    int choice = -1, ret = -1;
-   char *title = dStrconcat("Dillo TLS security warning: ",srv->hostname,NULL);
+   char *title = dStrconcat(_("Dillo TLS security warning: "),srv->hostname,NULL);
 
    cert = mbedtls_ssl_get_peer_cert(ssl);
    if (cert == NULL){
       /* Inform user that remote system cannot be trusted */
       choice = a_Dialog_choice(title,
-         "No certificate received from this site. Can't verify who it is.",
-         "Continue", "Cancel", NULL);
+         _("No certificate received from this site. Can't verify who it is."),
+         _("Continue"), _("Cancel"), NULL);
 
       /* Abort on anything but "Continue" */
       if (choice == 1){
@@ -815,8 +816,8 @@ static int Tls_examine_certificate(mbedtls_ssl_context *ssl, Server_t *srv)
       } else {
          char *dialog_warning_msg = Tls_make_bad_cert_msg(cert, st);
 
-         choice = a_Dialog_choice(title, dialog_warning_msg, "Continue",
-                                  "Cancel", NULL);
+         choice = a_Dialog_choice(title, dialog_warning_msg, _("Continue"),
+                                  _("Cancel"), NULL);
          if (choice == 1) {
             ret = 0;
          }

@@ -13,6 +13,7 @@ TESTS = \
 	containers \
 	disposition \
 	identity \
+	i18n \
 	liang \
 	notsosimplevector \
 	shapes \
@@ -28,6 +29,8 @@ EXTRA_DIST = \
 	hyph-de.pat
 
 containers_SOURCES = containers.cc
+i18n_SOURCES = i18n.c
+i18n_LDADD = $(top_builddir)/dlib/libDlib.a
 containers_LDADD = \
 	$(top_builddir)/lout/liblout.a \
 	$(top_builddir)/dlib/libDlib.a

@@ -65,6 +65,7 @@
 #include "styleengine.hh"
 
 #include "dw/fltkcore.hh"
+#include "dw/fltki18n.hh"
 #include "dw/widget.hh"
 #include "dw/textblock.hh"
 #include "dw/table.hh"
@@ -426,6 +427,9 @@ int main(int argc, char **argv)
    char **opt_argv;
    FILE *fp;
 
+   a_I18n_init();
+   a_I18n_init_fltk();
+
    srand((uint_t)(time(0) ^ getpid()));
 
    // Some OSes exit dillo without this (not GNU/Linux).
@@ -473,6 +477,13 @@ int main(int argc, char **argv)
 
    // set the default values for the preferences
    a_Prefs_init();
+
+   // Select a readable Chinese default before parsing the user's font choice.
+   const char *chinese_font = a_I18n_fltk_font();
+   if (chinese_font) {
+      dFree(prefs.font_sans_serif);
+      prefs.font_sans_serif = dStrdup(chinese_font);
+   }
 
    // create ~/.dillo if not present
    Paths::init();
@@ -561,8 +572,6 @@ int main(int argc, char **argv)
    Fl::set_font(FL_HELVETICA, defaultFont); // this seems to be the
                                             // only way to set the
                                             // default font in fltk1.3
-
-   fl_message_title_default("Dillo: Message");
 
    // Create a new UI/bw pair
    BrowserWindow *bw = a_UIcmd_browser_window_new(0, 0, xid, NULL);

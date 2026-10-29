@@ -14,6 +14,7 @@
  * UI for Dillo
  */
 
+#include "dlib/i18n.h"
 #include <unistd.h>
 #include <stdio.h>
 #include <math.h>      /* rint */
@@ -486,23 +487,23 @@ void UI::make_toolbar(int tw, int th)
       icons->ImgStopIn->desaturate();
       icons->ImgStopIn->color_average(FL_BACKGROUND_COLOR, .14f);
    }
-   Back = make_button("Back", icons->ImgLeft, icons->ImgLeftIn, UI_BACK, 1);
-   Forw = make_button("Forw", icons->ImgRight, icons->ImgRightIn, UI_FORW);
-   Home = make_button("Home", icons->ImgHome, NULL, UI_HOME);
-   Reload = make_button("Reload", icons->ImgReload, NULL, UI_RELOAD);
-   Save = make_button("Save", icons->ImgSave, NULL, UI_SAVE);
-   Stop = make_button("Stop", icons->ImgStop, icons->ImgStopIn, UI_STOP);
-   Bookmarks = make_button("Book", icons->ImgBook, NULL, UI_BOOK);
-   Tools = make_button("Tools", icons->ImgTools, NULL, UI_TOOLS);
+   Back = make_button(_("Back"), icons->ImgLeft, icons->ImgLeftIn, UI_BACK, 1);
+   Forw = make_button(_("Forw"), icons->ImgRight, icons->ImgRightIn, UI_FORW);
+   Home = make_button(_("Home"), icons->ImgHome, NULL, UI_HOME);
+   Reload = make_button(_("Reload"), icons->ImgReload, NULL, UI_RELOAD);
+   Save = make_button(_("Save"), icons->ImgSave, NULL, UI_SAVE);
+   Stop = make_button(_("Stop"), icons->ImgStop, icons->ImgStopIn, UI_STOP);
+   Bookmarks = make_button(_("Book"), icons->ImgBook, NULL, UI_BOOK);
+   Tools = make_button(_("Tools"), icons->ImgTools, NULL, UI_TOOLS);
 
-   Back->set_tooltip("Previous page");
-   Forw->set_tooltip("Next page");
-   Home->set_tooltip("Go to the Home page\nMiddle-click for new tab.");
-   Reload->set_tooltip("Reload");
-   Save->set_tooltip("Save this page");
-   Stop->set_tooltip("Stop loading");
-   Bookmarks->set_tooltip("View bookmarks\nMiddle-click for new tab.");
-   Tools->set_tooltip("Settings");
+   Back->set_tooltip(_("Previous page"));
+   Forw->set_tooltip(_("Next page"));
+   Home->set_tooltip(_("Go to the Home page\nMiddle-click for new tab."));
+   Reload->set_tooltip(_("Reload"));
+   Save->set_tooltip(_("Save this page"));
+   Stop->set_tooltip(_("Stop loading"));
+   Bookmarks->set_tooltip(_("View bookmarks\nMiddle-click for new tab."));
+   Tools->set_tooltip(_("Settings"));
 }
 
 /**
@@ -517,7 +518,7 @@ void UI::make_location(int ww)
     b->callback(clear_cb, this);
     b->clear_visible_focus();
     b->box(FL_THIN_UP_BOX);
-    b->set_tooltip("Clear the URL box.\nMiddle-click to paste a URL.");
+    b->set_tooltip(_("Clear the URL box.\nMiddle-click to paste a URL."));
     p_xpos += b->w();
 
     LocationGroup = new Fl_Group(p_xpos,0,ww-p_xpos-32,lh,0);
@@ -526,7 +527,7 @@ void UI::make_location(int ww)
      Location = i;
      i->when(FL_WHEN_ENTER_KEY);
      i->callback(location_cb, this);
-     i->set_tooltip("Location");
+     i->set_tooltip(_("Location"));
      i->textsize((int) rint(14.0 * prefs.font_factor));
      p_xpos += i->w();
     LocationGroup->box(FL_THIN_UP_BOX);   // or FL_FLAT_BOX
@@ -537,7 +538,7 @@ void UI::make_location(int ww)
     b->callback(search_cb, this);
     b->clear_visible_focus();
     b->box(FL_THIN_UP_BOX);
-    b->set_tooltip("Search the Web");
+    b->set_tooltip(_("Search the Web"));
     p_xpos += b->w();
 
     Help = b = new CustButton(p_xpos,0,16,lh,0);
@@ -545,7 +546,7 @@ void UI::make_location(int ww)
     b->callback(help_cb, this);
     b->clear_visible_focus();
     b->box(FL_THIN_UP_BOX);
-    b->set_tooltip("Help");
+    b->set_tooltip(_("Help"));
     p_xpos += b->w();
 
 }
@@ -559,13 +560,13 @@ void UI::make_progress_bars(int wide, int thin_up)
     IProg = new CustProgressBox(p_xpos,p_ypos,pw,bh);
     IProg->labelsize(12);
     IProg->box(thin_up ? FL_THIN_UP_BOX : FL_EMBOSSED_BOX);
-    IProg->update_label(wide ? "Images\n0 of 0" : "0 of 0");
+    IProg->update_label(wide ? _("Images\n0 of 0") : _("0 of 0"));
     p_xpos += pw;
     // Page
     PProg = new CustProgressBox(p_xpos,p_ypos,pw,bh);
     PProg->labelsize(12);
     PProg->box(thin_up ? FL_THIN_UP_BOX : FL_EMBOSSED_BOX);
-    PProg->update_label(wide ? "Page\n0.0 KB" : "0.0 KB");
+    PProg->update_label(wide ? _("Page\n0.0 KB") : "0.0 KB");
 }
 
 /**
@@ -581,7 +582,7 @@ void UI::make_filemenu_button()
    btn->labeltype(FL_FREE_LABELTYPE);
    btn->measure_label(w, h);
    padding = w;
-   btn->copy_label(PanelSize == P_tiny ? "&F" : "&File");
+   btn->copy_label(PanelSize == P_tiny ? _("&F") : _("&File"));
    btn->measure_label(w,h);
    h = (PanelSize == P_tiny) ? bh : lh;
    btn->size(w+padding, h);
@@ -589,7 +590,7 @@ void UI::make_filemenu_button()
    _MSG("UI::make_filemenu_button w=%d h=%d padding=%d\n", w, h, padding);
    btn->box(FL_THIN_UP_BOX);
    btn->callback(filemenu_cb, this);
-   btn->set_tooltip("File menu");
+   btn->set_tooltip(_("File menu"));
    btn->clear_visible_focus();
    if (!prefs.show_filemenu)
       btn->hide();
@@ -698,7 +699,7 @@ void UI::make_status_bar(int ww, int wh)
     BugMeter->image(icons->ImgMeterOK);
     BugMeter->box(FL_THIN_DOWN_BOX);
     BugMeter->align(FL_ALIGN_INSIDE | FL_ALIGN_TEXT_NEXT_TO_IMAGE);
-    BugMeter->set_tooltip("Show HTML bugs\n(right-click for menu)");
+    BugMeter->set_tooltip(_("Show HTML bugs\n(right-click for menu)"));
     BugMeter->callback(bugmeter_cb, this);
     BugMeter->clear_visible_focus();
 
@@ -737,7 +738,7 @@ UI::UI(int x, int y, int ui_w, int ui_h, const char* label, const UI *cur_ui) :
     make_panel(ui_w);
 
     // Render area
-    Main = new Fl_Group(0,0,0,0,"Welcome..."); // size is set by rearrange()
+    Main = new Fl_Group(0,0,0,0,_("Welcome...")); // size is set by rearrange()
     Main->align(FL_ALIGN_CENTER|FL_ALIGN_INSIDE);
     Main->box(FL_FLAT_BOX);
     Main->labelfont(FL_HELVETICA_BOLD_ITALIC);
@@ -947,7 +948,7 @@ void UI::set_status(const char *str)
  */
 void UI::set_page_prog(size_t nbytes, int cmd)
 {
-   char str[32];
+   char str[64];
 
    if (cmd == 0) {
       PProg->deactivate();
@@ -964,8 +965,8 @@ void UI::set_page_prog(size_t nbytes, int cmd)
             prefix = 'K';
             magnitude = nbytes / 1024.0;
          }
-         snprintf(str, 32, "%s%.1f %cB",
-                  (PanelSize == 0) ? "" : "Page\n", magnitude, prefix);
+         snprintf(str, sizeof(str), "%s%.1f %cB",
+                  (PanelSize == 0) ? "" : _("Page\n"), magnitude, prefix);
       } else if (cmd == 2) {
          str[0] = '\0';
       }
@@ -979,15 +980,15 @@ void UI::set_page_prog(size_t nbytes, int cmd)
  */
 void UI::set_img_prog(int n_img, int t_img, int cmd)
 {
-   char str[32];
+   char str[64];
 
    if (cmd == 0) {
       IProg->deactivate();
    } else {
       IProg->activate();
       if (cmd == 1) {
-         snprintf(str, 32, "%s%d of %d",
-                  (PanelSize == 0) ? "" : "Images\n", n_img, t_img);
+         snprintf(str, sizeof(str), _("%s%d of %d"),
+                  (PanelSize == 0) ? "" : _("Images\n"), n_img, t_img);
       } else if (cmd == 2) {
          str[0] = '\0';
       }

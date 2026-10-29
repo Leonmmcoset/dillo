@@ -14,6 +14,7 @@
  * UI dialogs
  */
 
+#include "dlib/i18n.h"
 #include <math.h> // for rint()
 #include <stdlib.h>
 #include <string.h>
@@ -152,7 +153,7 @@ int EnterButton::handle(int e)
 void a_Dialog_msg(const char *title, const char *msg)
 {
    if (!(title && *title))
-      title = "Dillo: Message";
+      title = _("Dillo: Message");
    fl_message_title(title);
    fl_message("%s", msg);
 }
@@ -181,7 +182,7 @@ const char *a_Dialog_input(const char *title, const char *msg)
    input_answer = 0;
 
    if (!(title && *title))
-      title = "Dillo: Input";
+      title = _("Dillo: Input");
 
    Fl_Window *window = new Fl_Window(ww,wh,title);
    window->set_modal();
@@ -223,18 +224,18 @@ const char *a_Dialog_input(const char *title, const char *msg)
           pm[j++].label(FL_NORMAL_LABEL, dStrdup(label));
        }
     }
-    ch->tooltip("Select search engine");
+    ch->tooltip(_("Select search engine"));
     ch->menu(pm);
     ch->value(prefs.search_url_idx);
 
     int xpos = ww-2*(gap+bw), ypos = ih+3*gap;
-    Fl_Return_Button *rb = new Fl_Return_Button(xpos, ypos, bw, bh, "OK");
+    Fl_Return_Button *rb = new Fl_Return_Button(xpos, ypos, bw, bh, _("OK"));
     rb->align(FL_ALIGN_INSIDE|FL_ALIGN_CLIP);
     rb->box(FL_UP_BOX);
     rb->callback(input_cb, INT2VOIDP(1));
 
     xpos = ww-(gap+bw);
-    Fl_Button *b = new Fl_Button(xpos, ypos, bw, bh, "Cancel");
+    Fl_Button *b = new Fl_Button(xpos, ypos, bw, bh, _("Cancel"));
     b->align(FL_ALIGN_INSIDE|FL_ALIGN_CLIP);
     b->box(FL_UP_BOX);
     b->callback(input_cb, INT2VOIDP(2));
@@ -261,7 +262,7 @@ const char *a_Dialog_input(const char *title, const char *msg)
 const char *a_Dialog_passwd(const char *title, const char *msg)
 {
    if (!(title && *title))
-      title = "Dillo: Password";
+      title = _("Dillo: Password");
    fl_message_title(title);
    return fl_password("%s", "", msg);
 }
@@ -326,7 +327,7 @@ void a_Dialog_text_window(const char *title, const char *txt)
    int wh = prefs.height, ww = prefs.width, bh = 30;
 
    if (!(title && *title))
-      title = "Dillo: Text";
+      title = _("Dillo: Text");
 
    Fl_Window *window = new Fl_Window(ww, wh, title);
    Fl_Group::current(0);
@@ -342,7 +343,7 @@ void a_Dialog_text_window(const char *title, const char *txt)
     td->wrap_mode(Fl_Text_Display::WRAP_AT_BOUNDS, 0);
    window->add(td);
 
-    Fl_Return_Button *b = new Fl_Return_Button (0, wh-bh, ww, bh, "Close");
+    Fl_Return_Button *b = new Fl_Return_Button (0, wh-bh, ww, bh, _("Close"));
     b->callback(text_window_close_cb, td);
    window->add(b);
 
@@ -373,7 +374,7 @@ int a_Dialog_choice(const char *title, const char *msg, ...)
    int i, n;
 
    if (title == NULL || *title == '\0')
-      title = "Dillo: Choice";
+      title = _("Dillo: Choice");
 
    va_start(ap, msg);
    for (n = 0; va_arg(ap, char *) != NULL; n++);
@@ -448,7 +449,7 @@ int a_Dialog_user_password(const char *title, const char *msg,
 
    /* window is resized below */
    if (!(title && *title))
-      title = "Dillo: User/Password";
+      title = _("Dillo: User/Password");
    Fl_Window *window = new Fl_Window(window_w,window_h,title);
    Fl_Group::current(0);
    window->user_data(NULL);
@@ -470,27 +471,27 @@ int a_Dialog_user_password(const char *title, const char *msg,
 
    /* inputs */
    y += msg_h + 20;
-   Fl_Input *user_input = new Fl_Input(input_x, y, input_w, input_h, "User");
+   Fl_Input *user_input = new Fl_Input(input_x, y, input_w, input_h, _("User"));
    user_input->labelsize(14);
    user_input->textsize(14);
    window->add(user_input);
    y += input_h + 10;
    Fl_Secret_Input *password_input =
-      new Fl_Secret_Input(input_x, y, input_w, input_h, "Password");
+      new Fl_Secret_Input(input_x, y, input_w, input_h, _("Password"));
    password_input->labelsize(14);
    password_input->textsize(14);
    window->add(password_input);
 
    /* "OK" button */
    y += input_h + 20;
-   Fl_Button *ok_button = new EnterButton(200, y, 50, button_h, "OK");
+   Fl_Button *ok_button = new EnterButton(200, y, 50, button_h, _("OK"));
    ok_button->labelsize(14);
    ok_button->callback(Dialog_user_password_cb);
    window->add(ok_button);
 
    /* "Cancel" button */
    Fl_Button *cancel_button =
-      new EnterButton(50, y, 100, button_h, "Cancel");
+      new EnterButton(50, y, 100, button_h, _("Cancel"));
    cancel_button->labelsize(14);
    cancel_button->callback(Dialog_user_password_cb);
    window->add(cancel_button);

@@ -15,6 +15,7 @@
  * Functions/Methods for commands triggered from the UI
  */
 
+#include "dlib/i18n.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -54,7 +55,7 @@
 #include "nav.h"
 
 //#define DEFAULT_TAB_LABEL "-.untitled.-"
-#define DEFAULT_TAB_LABEL "-.new.-"
+#define DEFAULT_TAB_LABEL _("-.new.-")
 
 // Handy macro
 #define BW2UI(bw) ((UI*)((bw)->ui))
@@ -171,8 +172,8 @@ public:
        CloseBtn->box(FL_THIN_UP_BOX);
        CloseBtn->clear_visible_focus();
        CloseBtn->set_tooltip(prefs.right_click_closes_tab ?
-          "Close current tab.\nor Right-click tab label to close." :
-          "Close current tab.\nor Middle-click tab label to close.");
+          _("Close current tab.\nor Right-click tab label to close.") :
+          _("Close current tab.\nor Middle-click tab label to close."));
        CloseBtn->callback(close_tab_btn_cb, this);
        CloseBtn->hide();
       Control->end();
@@ -540,9 +541,9 @@ static void win_cb (Fl_Widget *w, void *cb_data) {
    }
 
    if (prefs.show_quit_dialog && ntabs > 1)
-      choice = a_Dialog_choice("Dillo: Close window?",
-                               "Window contains more than one tab.",
-                               "Close", "Cancel", NULL);
+      choice = a_Dialog_choice(_("Dillo: Close window?"),
+                               _("Window contains more than one tab."),
+                               _("Close"), _("Cancel"), NULL);
    if (choice == 1)
       while (ntabs-- > 0)
          a_UIcmd_close_bw(a_UIcmd_get_bw_by_widget(tabs->wizard()->value()));
@@ -728,9 +729,9 @@ void a_UIcmd_close_all_bw(void *force)
    int choice = 1;
 
    if (!force && prefs.show_quit_dialog && a_Bw_num() > 1)
-      choice = a_Dialog_choice("Dillo: Quit?",
-                               "More than one open tab or window.",
-                               "Quit", "Cancel", NULL);
+      choice = a_Dialog_choice(_("Dillo: Quit?"),
+                               _("More than one open tab or window."),
+                               _("Quit"), _("Cancel"), NULL);
    if (force || choice == 1)
       while ((bw = a_Bw_get(0)))
          a_UIcmd_close_bw((void*)bw);
@@ -1002,7 +1003,7 @@ void a_UIcmd_zoom_in(void *vbw)
    if (bw->zoom > 10.0)
       bw->zoom = 10.0;
 
-   a_UIcmd_set_msg(bw, "Zoom set to %.0f%%", bw->zoom * 100.0);
+   a_UIcmd_set_msg(bw, _("Zoom set to %.0f%%"), bw->zoom * 100.0);
 
    a_Nav_repush((BrowserWindow*)vbw);
 }
@@ -1018,7 +1019,7 @@ void a_UIcmd_zoom_out(void *vbw)
    if (bw->zoom < 0.10)
       bw->zoom = 0.10;
 
-   a_UIcmd_set_msg(bw, "Zoom set to %.0f%%", bw->zoom * 100.0);
+   a_UIcmd_set_msg(bw, _("Zoom set to %.0f%%"), bw->zoom * 100.0);
 
    a_Nav_repush((BrowserWindow*)vbw);
 }
@@ -1031,7 +1032,7 @@ void a_UIcmd_zoom_reset(void *vbw)
    BrowserWindow *bw = (BrowserWindow*) vbw;
    bw->zoom = 1.0;
 
-   a_UIcmd_set_msg(bw, "Zoom set to %.0f%%", bw->zoom * 100.0);
+   a_UIcmd_set_msg(bw, _("Zoom set to %.0f%%"), bw->zoom * 100.0);
 
    a_Nav_repush((BrowserWindow*)vbw);
 }
@@ -1113,10 +1114,10 @@ static int UIcmd_save_file_check(const char *name)
       int ch;
       ds = dStr_sized_new(128);
       dStr_sprintf(ds,
-                  "The file: %s (%d Bytes) already exists. What do we do?",
+                  _("The file: %s (%d Bytes) already exists. What do we do?"),
                    name, (int)ss.st_size);
-      ch = a_Dialog_choice("Dillo Save: File exists!", ds->str,
-                           "Abort", "Continue", "Rename", NULL);
+      ch = a_Dialog_choice(_("Dillo Save: File exists!"), ds->str,
+                           _("Abort"), _("Continue"), _("Rename"), NULL);
       dStr_free(ds, 1);
       return ch;
    } else {
@@ -1168,7 +1169,7 @@ void a_UIcmd_save(void *vbw)
    const DilloUrl *url = a_History_get_url(NAV_TOP_UIDX(bw));
 
    if (url) {
-      UIcmd_save(bw, url, NULL, "Save Page as File");
+      UIcmd_save(bw, url, NULL, _("Save Page as File"));
    }
 }
 
@@ -1177,7 +1178,7 @@ void a_UIcmd_save(void *vbw)
  */
 const char *a_UIcmd_select_file()
 {
-   return a_Dialog_select_file("Dillo: Select a File", NULL, NULL);
+   return a_Dialog_select_file(_("Dillo: Select a File"), NULL, NULL);
 }
 
 /*
@@ -1210,7 +1211,7 @@ void a_UIcmd_open_file(void *vbw)
    char *name;
    DilloUrl *url;
 
-   name = a_Dialog_open_file("Dillo: Open File", NULL, "");
+   name = a_Dialog_open_file(_("Dillo: Open File"), NULL, "");
 
    if (name) {
       url = a_Url_new(name, "file:");
@@ -1264,7 +1265,7 @@ void a_UIcmd_search_dialog(void *vbw)
 {
    const char *query;
 
-   if ((query = a_Dialog_input("Dillo: Search", "Search the Web:"))) {
+   if ((query = a_Dialog_input(_("Dillo: Search"), _("Search the Web:")))) {
       char *url_str = UIcmd_make_search_str(query);
       a_UIcmd_open_urlstr(vbw, url_str);
       dFree(url_str);
@@ -1277,8 +1278,8 @@ void a_UIcmd_search_dialog(void *vbw)
 const char *a_UIcmd_get_passwd(const char *user)
 {
    const char *passwd;
-   const char *title = "Dillo: Password";
-   char *msg = dStrconcat("Password for user \"", user, "\"", NULL);
+   const char *title = _("Dillo: Password");
+   char *msg = dStrconcat(_("Password for user \""), user, "\"", NULL);
    passwd = a_Dialog_passwd(title, msg);
    dFree(msg);
    return passwd;
@@ -1289,7 +1290,7 @@ const char *a_UIcmd_get_passwd(const char *user)
  */
 void a_UIcmd_save_link(BrowserWindow *bw, const DilloUrl *url, char *filename)
 {
-   UIcmd_save(bw, url, filename, "Dillo: Save Link as File");
+   UIcmd_save(bw, url, filename, _("Dillo: Save Link as File"));
 }
 
 /*
@@ -1414,9 +1415,9 @@ void a_UIcmd_view_page_bugs(void *vbw)
    BrowserWindow *bw = (BrowserWindow*)vbw;
 
    if (bw->num_page_bugs > 0) {
-      a_Dialog_text_window("Dillo: Detected HTML errors", bw->page_bugs->str);
+      a_Dialog_text_window(_("Dillo: Detected HTML errors"), bw->page_bugs->str);
    } else {
-      a_Dialog_msg("Dillo: Good HTML!", "No HTML errors found while parsing!");
+      a_Dialog_msg(_("Dillo: Good HTML!"), _("No HTML errors found while parsing!"));
    }
 }
 
@@ -1712,11 +1713,11 @@ void a_UIcmd_findtext_search(BrowserWindow *bw, const char *key,
 
    switch (l->search(key, case_sens, backward)) {
    case FindtextState::RESTART:
-      a_UIcmd_set_msg(bw, backward?"Top reached; restarting from the bottom."
-                                  :"Bottom reached; restarting from the top.");
+      a_UIcmd_set_msg(bw, backward?_("Top reached; restarting from the bottom.")
+                                  :_("Bottom reached; restarting from the top."));
       break;
    case FindtextState::NOT_FOUND:
-      a_UIcmd_set_msg(bw, "\"%s\" not found.", key);
+      a_UIcmd_set_msg(bw, _("\"%s\" not found."), key);
       break;
    case FindtextState::SUCCESS:
    default:

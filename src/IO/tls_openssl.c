@@ -31,6 +31,7 @@
  * TLS: http://datatracker.ietf.org/wg/tls/documents/
  */
 
+#include "dlib/i18n.h"
 #include "config.h"
 #include "../msg.h"
 
@@ -503,11 +504,11 @@ static bool_t Tls_check_cert_strength(SSL *ssl, Server_t *srv, int *choice)
                      MSG_WARN("In 2015, browsers have begun to deprecate SHA1 "
                               "certificates.\n");
                } else if (!strncmp(buf, "md", 2) && success == TRUE) {
-                  const char *msg = "A certificate in the chain uses the MD5 "
+                  const char *msg = _("A certificate in the chain uses the MD5 "
                                     "signature algorithm, which is too weak "
-                                    "to trust.";
-                  *choice = a_Dialog_choice("Dillo TLS security warning", msg,
-                                            "Continue", "Cancel", NULL);
+                                    "to trust.");
+                  *choice = a_Dialog_choice(_("Dillo TLS security warning"), msg,
+                                            _("Continue"), _("Cancel"), NULL);
                   if (*choice != 1)
                      success = FALSE;
                }
@@ -531,11 +532,11 @@ static bool_t Tls_check_cert_strength(SSL *ssl, Server_t *srv, int *choice)
             /* Ask the user what to do if not already failed */
             if (success) {
                const char *msg =
-                  "The public key of a certificate in the chain cannot be decoded. "
-                  "Cannot trust remote server, continue?";
+                  _("The public key of a certificate in the chain cannot be decoded. "
+                  "Cannot trust remote server, continue?");
 
-               *choice = a_Dialog_choice("Dillo TLS security warning", msg,
-                     "Continue", "Cancel", NULL);
+               *choice = a_Dialog_choice(_("Dillo TLS security warning"), msg,
+                     _("Continue"), _("Cancel"), NULL);
 
                if (*choice != 1)
                   success = FALSE;
@@ -655,8 +656,8 @@ static bool_t Tls_check_cert_hostname(X509 *cert, const char *host,
       /* Test subject alternative names */
 
       Dstr *err = dStr_new("");
-      dStr_sprintf(err, "Hostname %s does not match any of certificate's "
-                        "Subject Alternative Names: ", host);
+      dStr_sprintf(err, _("Hostname %s does not match any of certificate's "
+                        "Subject Alternative Names: "), host);
 
       /* Do we want to check for dNSNAmes or ipAddresses (see RFC 2818)?
        * Signal it by host_in_octet_string. */
@@ -716,8 +717,8 @@ static bool_t Tls_check_cert_hostname(X509 *cert, const char *host,
       if (alt_name_checked == TRUE && i >= numaltnames)
         {
          success = FALSE;
-         *choice = a_Dialog_choice("Dillo TLS security warning",
-            err->str, "Continue", "Cancel", NULL);
+         *choice = a_Dialog_choice(_("Dillo TLS security warning"),
+            err->str, _("Continue"), _("Cancel"), NULL);
 
          switch (*choice){
             case 1:
@@ -743,10 +744,10 @@ static bool_t Tls_check_cert_hostname(X509 *cert, const char *host,
       if (!pattern_match (common_name, host))
         {
           success = FALSE;
-         msg = dStrconcat("Certificate common name ", common_name,
-                          " doesn't match requested host name ", host, NULL);
-         *choice = a_Dialog_choice("Dillo TLS security warning",
-            msg, "Continue", "Cancel", NULL);
+         msg = dStrconcat(_("Certificate common name "), common_name,
+                          _(" doesn't match requested host name "), host, NULL);
+         *choice = a_Dialog_choice(_("Dillo TLS security warning"),
+            msg, _("Continue"), _("Cancel"), NULL);
          dFree(msg);
 
          switch (*choice){
@@ -787,12 +788,12 @@ static bool_t Tls_check_cert_hostname(X509 *cert, const char *host,
           if (strlen (common_name) != (size_t)ASN1_STRING_length (sdata))
             {
               success = FALSE;
-         msg = dStrconcat("Certificate common name is invalid (contains a NUL "
+         msg = dStrconcat(_("Certificate common name is invalid (contains a NUL "
                           "character). This may be an indication that the "
                           "host is not who it claims to be -- that is, not "
-                          "the real ", host, NULL);
-         *choice = a_Dialog_choice("Dillo TLS security warning",
-            msg, "Continue", "Cancel", NULL);
+                          "the real "), host, NULL);
+         *choice = a_Dialog_choice(_("Dillo TLS security warning"),
+            msg, _("Continue"), _("Cancel"), NULL);
          dFree(msg);
 
          switch (*choice){
@@ -864,7 +865,7 @@ static int Tls_examine_certificate(SSL *ssl, Server_t *srv)
    const uint_t buflen = 4096;
    char buf[buflen], *cn, *msg;
    int choice = -1, ret = -1;
-   char *title = dStrconcat("Dillo TLS security warning: ",srv->hostname,NULL);
+   char *title = dStrconcat(_("Dillo TLS security warning: "),srv->hostname,NULL);
 
 #if OPENSSL_VERSION_NUMBER < 0x30000000L
    remote_cert = SSL_get_peer_certificate(ssl);
@@ -875,9 +876,9 @@ static int Tls_examine_certificate(SSL *ssl, Server_t *srv)
    if (remote_cert == NULL){
       /* Inform user that remote system cannot be trusted */
       choice = a_Dialog_choice(title,
-         "The remote system is not presenting a certificate. "
-         "This site cannot be trusted. Sending data is not safe.",
-         "Continue", "Cancel", NULL);
+         _("The remote system is not presenting a certificate. "
+         "This site cannot be trusted. Sending data is not safe."),
+         _("Continue"), _("Cancel"), NULL);
 
       /* Abort on anything but "Continue" */
       if (choice == 1){
@@ -911,10 +912,10 @@ static int Tls_examine_certificate(SSL *ssl, Server_t *srv)
             buf[cn_end - cn] = '\0';
          }
          OPENSSL_free(subj);
-         msg = dStrconcat("The remote certificate is self-signed and "
-                          "untrusted. For address: ", buf, NULL);
+         msg = dStrconcat(_("The remote certificate is self-signed and "
+                          "untrusted. For address: "), buf, NULL);
          choice = a_Dialog_choice(title,
-            msg, "Continue", "Cancel", "Save Certificate", NULL);
+            msg, _("Continue"), _("Cancel"), _("Save Certificate"), NULL);
          dFree(msg);
 
          switch (choice){
@@ -935,9 +936,9 @@ static int Tls_examine_certificate(SSL *ssl, Server_t *srv)
       case X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT:
       case X509_V_ERR_UNABLE_TO_DECODE_ISSUER_PUBLIC_KEY:
          choice = a_Dialog_choice(title,
-            "The issuer for the remote certificate cannot be found. "
-            "The authenticity of the remote certificate cannot be trusted.",
-            "Continue", "Cancel", NULL);
+            _("The issuer for the remote certificate cannot be found. "
+            "The authenticity of the remote certificate cannot be trusted."),
+            _("Continue"), _("Cancel"), NULL);
 
          if (choice == 1) {
             ret = 0;
@@ -949,9 +950,9 @@ static int Tls_examine_certificate(SSL *ssl, Server_t *srv)
       case X509_V_ERR_CERT_SIGNATURE_FAILURE:
       case X509_V_ERR_CRL_SIGNATURE_FAILURE:
          choice = a_Dialog_choice(title,
-            "The remote certificate signature could not be read "
-            "or is invalid and should not be trusted",
-            "Continue", "Cancel", NULL);
+            _("The remote certificate signature could not be read "
+            "or is invalid and should not be trusted"),
+            _("Continue"), _("Cancel"), NULL);
 
          if (choice == 1) {
             ret = 0;
@@ -960,12 +961,12 @@ static int Tls_examine_certificate(SSL *ssl, Server_t *srv)
       case X509_V_ERR_CERT_NOT_YET_VALID:
       case X509_V_ERR_CRL_NOT_YET_VALID:
          choice = a_Dialog_choice(title,
-            "Part of the remote certificate is not yet valid. "
+            _("Part of the remote certificate is not yet valid. "
             "Certificates usually have a range of dates over which "
             "they are to be considered valid, and the certificate "
             "presented has a starting validity after today's date "
-            "You should be cautious about using this site",
-            "Continue", "Cancel", NULL);
+            "You should be cautious about using this site"),
+            _("Continue"), _("Cancel"), NULL);
 
          if (choice == 1) {
             ret = 0;
@@ -974,10 +975,10 @@ static int Tls_examine_certificate(SSL *ssl, Server_t *srv)
       case X509_V_ERR_CERT_HAS_EXPIRED:
       case X509_V_ERR_CRL_HAS_EXPIRED:
          Tls_get_expiration_str(remote_cert, buf, buflen);
-         msg = dStrconcat("The remote certificate expired on: ", buf,
-                          ". This site can no longer be trusted.", NULL);
+         msg = dStrconcat(_("The remote certificate expired on: "), buf,
+                          _(". This site can no longer be trusted."), NULL);
 
-         choice = a_Dialog_choice(title, msg, "Continue", "Cancel", NULL);
+         choice = a_Dialog_choice(title, msg, _("Continue"), _("Cancel"), NULL);
          if (choice == 1) {
             ret = 0;
          }
@@ -988,11 +989,11 @@ static int Tls_examine_certificate(SSL *ssl, Server_t *srv)
       case X509_V_ERR_ERROR_IN_CRL_LAST_UPDATE_FIELD:
       case X509_V_ERR_ERROR_IN_CRL_NEXT_UPDATE_FIELD:
          choice = a_Dialog_choice(title,
-            "There was an error in the certificate presented. "
+            _("There was an error in the certificate presented. "
             "Some of the certificate data was improperly formatted "
             "making it impossible to determine if the certificate "
-            "is valid.  You should not trust this certificate.",
-            "Continue", "Cancel", NULL);
+            "is valid.  You should not trust this certificate."),
+            _("Continue"), _("Cancel"), NULL);
          if (choice == 1) {
             ret = 0;
          }
@@ -1003,11 +1004,11 @@ static int Tls_examine_certificate(SSL *ssl, Server_t *srv)
       case X509_V_ERR_CERT_REJECTED:
       case X509_V_ERR_KEYUSAGE_NO_CERTSIGN:
          choice = a_Dialog_choice(title,
-            "One of the certificates in the chain is being used "
+            _("One of the certificates in the chain is being used "
             "incorrectly (possibly due to configuration problems "
             "with the remote system.  The connection should not "
-            "be trusted",
-            "Continue", "Cancel", NULL);
+            "be trusted"),
+            _("Continue"), _("Cancel"), NULL);
          if (choice == 1) {
             ret = 0;
          }
@@ -1016,19 +1017,19 @@ static int Tls_examine_certificate(SSL *ssl, Server_t *srv)
       case X509_V_ERR_AKID_SKID_MISMATCH:
       case X509_V_ERR_AKID_ISSUER_SERIAL_MISMATCH:
          choice = a_Dialog_choice(title,
-            "Some of the information presented by the remote system "
+            _("Some of the information presented by the remote system "
             "does not match other information presented. "
-            "This may be an attempt to eavesdrop on communications",
-            "Continue", "Cancel", NULL);
+            "This may be an attempt to eavesdrop on communications"),
+            _("Continue"), _("Cancel"), NULL);
          if (choice == 1) {
             ret = 0;
          }
          break;
       case X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN:
          Tls_get_issuer_name(Tls_get_end_of_chain(ssl), buf, buflen);
-         msg = dStrconcat("Certificate chain led to a self-signed certificate "
-                          "instead of a trusted root. Name: ",  buf , NULL);
-         choice = a_Dialog_choice(title, msg, "Continue", "Cancel", NULL);
+         msg = dStrconcat(_("Certificate chain led to a self-signed certificate "
+                          "instead of a trusted root. Name: "),  buf , NULL);
+         choice = a_Dialog_choice(title, msg, _("Continue"), _("Cancel"), NULL);
          if (choice == 1) {
             ret = 0;
          }
@@ -1036,9 +1037,9 @@ static int Tls_examine_certificate(SSL *ssl, Server_t *srv)
          break;
       case X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY:
          Tls_get_issuer_name(Tls_get_end_of_chain(ssl), buf, buflen);
-         msg = dStrconcat("The issuer certificate of an untrusted certificate "
-                          "cannot be found. Issuer: ", buf, NULL);
-         choice = a_Dialog_choice(title, msg, "Continue", "Cancel", NULL);
+         msg = dStrconcat(_("The issuer certificate of an untrusted certificate "
+                          "cannot be found. Issuer: "), buf, NULL);
+         choice = a_Dialog_choice(title, msg, _("Continue"), _("Cancel"), NULL);
          if (choice == 1) {
             ret = 0;
          }
@@ -1046,9 +1047,9 @@ static int Tls_examine_certificate(SSL *ssl, Server_t *srv)
          break;
       default:             /* Need to add more options later */
          snprintf(buf, 80,
-                  "The remote certificate cannot be verified (code %ld)", st);
+                  _("The remote certificate cannot be verified (code %ld)"), st);
          choice = a_Dialog_choice(title,
-            buf, "Continue", "Cancel", NULL);
+            buf, _("Continue"), _("Cancel"), NULL);
          /* abort on anything but "Continue" */
          if (choice == 1){
             ret = 0;

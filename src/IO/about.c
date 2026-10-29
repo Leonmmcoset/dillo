@@ -11,15 +11,18 @@
  */
 
 #include <config.h>
+#include "IO.h"
+#include "dlib/i18n.h"
 
 /**
  * HTML text for startup screen
  */
-const char *const AboutSplash=
+static const char splash_template[] =
 "<!DOCTYPE HTML>\n"
 "<html>\n"
 "<head>\n"
-"  <title>Quickstart</title>\n"
+"  <meta charset=\"utf-8\">\n"
+"  <title>%s</title>\n"
 "  <style>\n"
 "    body {\n"
 "      background: white;\n"
@@ -42,23 +45,44 @@ const char *const AboutSplash=
 "<body>\n"
 "<div class=\"main\">\n"
 "\n"
-"<h1>Quickstart</h1>\n"
+"<h1>%s</h1>\n"
 "\n"
-"<p>Welcome to Dillo " VERSION ", a small and fast graphical web browser. To\n"
-"access the help click the question mark button <code><kbd>?</kbd></code> in the top\n"
-"right corner at any time. Here are some tips to get you started:</p>\n"
+"<p>%s</p>\n"
 "\n"
 "<ul>\n"
-"  <li>The main configuration file is at <code>~/.dillo/dillorc</code>.</li>\n"
-"  <li>Most actions can also be done by using the <a href='about:keys'>keyboard</a>.</li>\n"
-"  <li>Cookies are <em>disabled by default</em>.</li>\n"
-"  <li>Several Dillo plugins are available.</li>\n"
+"  <li>%s</li>\n"
+"  <li>%s</li>\n"
+"  <li>%s</li>\n"
+"  <li>%s</li>\n"
 "</ul>\n"
 "\n"
-"<p>See more details in the\n"
-"<a href=\"https://dillo-browser.org/\">Dillo website</a>.</p>\n"
+"<p>%s</p>\n"
 "\n"
 "</div>\n"
 "</body>\n"
 "</html>\n";
 
+
+Dstr *a_About_splash(void)
+{
+   Dstr *page = dStr_new("");
+   Dstr *welcome = dStr_new("");
+
+   dStr_sprintf(welcome, _("Welcome to Dillo %s, a small and fast graphical "
+      "web browser. To access the help click the question mark button "
+      "<code><kbd>?</kbd></code> in the top right corner at any time. "
+      "Here are some tips to get you started:"), VERSION);
+   dStr_sprintf(page, splash_template,
+      _("Quickstart"),
+      _("Quickstart"),
+      welcome->str,
+      _("The main configuration file is at <code>~/.dillo/dillorc</code>."),
+      _("Most actions can also be done by using the "
+        "<a href='about:keys'>keyboard</a>."),
+      _("Cookies are <em>disabled by default</em>."),
+      _("Several Dillo plugins are available."),
+      _("See more details in the "
+        "<a href=\"https://dillo-browser.org/\">Dillo website</a>."));
+   dStr_free(welcome, 1);
+   return page;
+}

@@ -17,6 +17,7 @@
  * to get the requests served. Kind of a broker.
  */
 
+#include "dlib/i18n.h"
 #include <string.h>
 #include <errno.h>
 
@@ -462,7 +463,7 @@ int a_Capi_open_url(DilloWeb *web, CA_Callback_t Call, void *CbData)
          if (!dStrAsciiCasecmp(scheme, "https")) {
             if (web->flags & WEB_RootUrl)
                a_UIcmd_set_msg(web->bw,
-                               "HTTPS was disabled at compilation time.");
+                               _("HTTPS was disabled at compilation time."));
             a_Web_free(web);
             return 0;
          }
@@ -708,8 +709,8 @@ void a_Capi_ccc(int Op, int Branch, int Dir, ChainLink *Info,
             if (Data2) {
                if (!strcmp(Data2, "DpidERROR")) {
                   a_UIcmd_set_msg(conn->bw,
-                                  "ERROR: can't start dpid daemon "
-                                  "(URL scheme = '%s')!",
+                                  _("ERROR: can't start dpid daemon "
+                                  "(URL scheme = '%s')!"),
                                   conn->url ? URL_SCHEME(conn->url) : "");
                } else if (!strcmp(Data2, "Both") && conn->InfoRecv) {
                   /* abort the other branch too */

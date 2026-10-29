@@ -20,6 +20,8 @@
  * final '>' of a tag.
  */
 
+#include "dlib/i18n.h"
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -82,7 +84,7 @@ typedef struct {
 /*
  * Local data
  */
-static char *Header = "Content-type: text/html\n\n";
+static char *Header = "Content-type: text/html; charset=utf-8\n\n";
 static char *BmFile = NULL;
 static time_t BmFileTimeStamp = 0;
 static Dlist *B_bms = NULL;
@@ -105,44 +107,44 @@ static const char *mainpage_header =
 DOCTYPE
 "<html>\n"
 "<head>\n"
-"<title>Bookmarks</title>\n"
+"<title>%s</title>\n"
 CSS_STYLE
 "</head>\n"
 "<body id='dillo_bm'>\n"
 "\n"
-"  <h1>Bookmarks</h1>\n"
+"  <h1>%s</h1>\n"
 "  <div style='float: right; padding: 1em'>\n"
-"    [<a href='dpi:/bm/modify'>Modify</a>]\n"
+"    [<a href='dpi:/bm/modify'>%s</a>]\n"
 "  </div>\n";
 
 static const char *modifypage_header =
 DOCTYPE
 "<html>\n"
 "<head>\n"
-"<title>Bookmarks</title>\n"
+"<title>%s</title>\n"
 CSS_STYLE
 "</head>\n"
 "<body id='dillo_bm'>\n"
-"  <h1>Bookmarks</h1>\n"
+"  <h1>%s</h1>\n"
 "\n"
 "<form action='modify'>\n"
 "<div class='modify-menu'>\n"
 "  <div style='float: right'>\n"
-"    [<a href='dpi:/bm/'>Dismiss</a>]\n"
+"    [<a href='dpi:/bm/'>%s</a>]\n"
 "  </div>\n"
-"  <p>Select an operation\n"
+"  <p>%s\n"
 "  <select name='operation'>\n"
 "    <option value='none' selected>--\n"
-"    <option value='delete'>Delete\n"
-"    <option value='move'>Move\n"
-"    <option value='modify'>Modify\n"
-"    <option value='add_sec'>Add Section\n"
-"    <option value='add_url'>Add URL\n"
+"    <option value='delete'>%s\n"
+"    <option value='move'>%s\n"
+"    <option value='modify'>%s\n"
+"    <option value='add_sec'>%s\n"
+"    <option value='add_url'>%s\n"
 "  </select>\n"
-"  , mark its operands and\n"
-"  <input type='submit' name='submit' value='Submit'>\n"
-"  <p>You can also modify the bookmarks by editing the\n"
-"  <a href='file:~/.dillo/bm.txt'><code>~/.dillo/bm.txt</code></a> file.\n"
+"  %s\n"
+"  <input type='submit' name='submit' value='%s'>\n"
+"  <p>%s\n"
+"  <a href='file:~/.dillo/bm.txt'><code>~/.dillo/bm.txt</code></a>%s\n"
 "</div>\n";
 
 static const char *mainpage_sections_header =
@@ -208,18 +210,18 @@ static const char *modifypage_add_section_page =
 DOCTYPE
 "<html>\n"
 "<head>\n"
-"<title>Bookmarks</title>\n"
+"<title>%s</title>\n"
 CSS_STYLE
 "</head>\n"
 "<body id='dillo_bm'>\n"
-"<h1>Boorkmarks: New section</h1>\n"
+"<h1>%s</h1>\n"
 "<form action='modify'>\n"
 "  <input type='hidden' name='operation' value='add_section'>\n"
 "  <p>\n"
-"   New section title:\n"
+"   %s\n"
 "   <input type='text' name='title' size='32'>\n"
-"   <input type='submit' name='submit' value='Submit'>\n"
-"   or <a href='dpi:/bm/'>Cancel</a>\n"
+"   <input type='submit' name='submit' value='%s'>\n"
+"   %s<a href='dpi:/bm/'>%s</a>\n"
 "  </p>\n"
 "</form>\n"
 "</body>\n"
@@ -231,11 +233,11 @@ static const char *modifypage_update_header =
 DOCTYPE
 "<html>\n"
 "<head>\n"
-"<title>Bookmarks</title>\n"
+"<title>%s</title>\n"
 CSS_STYLE
 "</head>\n"
 "<body id='dillo_bm'>\n"
-"<h1>Bookmarks: Update</h1>\n"
+"<h1>%s</h1>\n"
 "<form action='modify'>\n"
 "<input type='hidden' name='operation' value='modify2'>\n";
 
@@ -260,7 +262,7 @@ static const char *modifypage_update_item_footer =
 "</ul>\n";
 
 static const char *modifypage_update_footer =
-"<input type='submit' name='submit' value='Submit'>\n"
+"<input type='submit' name='submit' value='%s'>\n"
 "</form>\n"
 "</body>\n"
 "</html>\n";
@@ -270,22 +272,22 @@ static const char *modifypage_add_url =
 DOCTYPE
 "<html>\n"
 "<head>\n"
-"<title>Bookmarks</title>\n"
+"<title>%s</title>\n"
 CSS_STYLE
 "</head>\n"
 "<body id='dillo_bm'>\n"
-"<h1>Bookmarks: Add URL</h1>\n"
+"<h1>%s</h1>\n"
 "<form action='modify'>\n"
 "<input type='hidden' name='operation' value='add_url2'>\n"
-"<p>Title:\n"
+"<p>%s\n"
 "  <input type='text' name='title' size='64'>\n"
 "</p>\n"
-"<p>URL:\n"
+"<p>%s\n"
 "  <input type='text' name='url' size='64'>\n"
 "</p>\n"
 "<p>\n"
-"  <input type='submit' name='submit' value='Submit'>\n"
-"  or <a href='dpi:/bm/'>Cancel</a>\n"
+"  <input type='submit' name='submit' value='%s'>\n"
+"  %s<a href='dpi:/bm/'>%s</a>\n"
 "</p>\n"
 "</form>\n"
 "</body>\n"
@@ -351,7 +353,7 @@ static void Unencode_str(char *e_str)
 /*
  * Send a short message to dillo's status bar.
  */
-static int Bmsrv_dpi_send_status_msg(Dsh *sh, char *str)
+static int Bmsrv_dpi_send_status_msg(Dsh *sh, const char *str)
 {
    int st;
    char *d_cmd;
@@ -360,6 +362,21 @@ static int Bmsrv_dpi_send_status_msg(Dsh *sh, char *str)
    st = a_Dpip_dsh_write_str(sh, 1, d_cmd);
    dFree(d_cmd);
    return st;
+}
+
+/* Format translated UI text into a built-in HTML template. */
+static int Bmsrv_send_template(Dsh *sh, int flush, const char *format, ...)
+{
+   va_list ap;
+   Dstr *page = dStr_new("");
+   int status;
+
+   va_start(ap, format);
+   dStr_vsprintf(page, format, ap);
+   va_end(ap);
+   status = a_Dpip_dsh_write_str(sh, flush, page->str);
+   dStr_free(page, 1);
+   return status;
 }
 
 /* -- ADT for bookmarks ---------------------------------------------------- */
@@ -775,7 +792,7 @@ static int Bms_save(void)
 static int Bmsrv_add_bm(Dsh *sh, char *url, char *title)
 {
    char *u_title;
-   char *msg="Added bookmark!";
+   const char *msg=_("Added bookmark!");
    int section = 0;
 
    /* Add in memory */
@@ -847,7 +864,12 @@ static int Bmsrv_send_modify_page(Dsh *sh)
       dstr = dStr_new("");
 
    /* send modify page header */
-   if (a_Dpip_dsh_write_str(sh, 0, modifypage_header))
+   if (Bmsrv_send_template(sh, 0, modifypage_header,
+         _("Bookmarks"), _("Bookmarks"), _("Dismiss"),
+         _("Select an operation"), _("Delete"), _("Move"), _("Modify"),
+         _("Add Section"), _("Add URL"), _(", mark its operands and"),
+         _("Submit"), _("You can also modify the bookmarks by editing the"),
+         _(" file.")))
       return 1;
 
    /* write sections header */
@@ -912,7 +934,9 @@ static int Bmsrv_send_modify_page(Dsh *sh)
 static int Bmsrv_send_modify_page_add_section(Dsh *sh)
 {
    /* send modify page2 */
-   if (a_Dpip_dsh_write_str(sh, 1, modifypage_add_section_page))
+   if (Bmsrv_send_template(sh, 1, modifypage_add_section_page,
+         _("Bookmarks"), _("Boorkmarks: New section"),
+         _("New section title:"), _("Submit"), _("or "), _("Cancel")))
       return 1;
 
    return 2;
@@ -924,7 +948,9 @@ static int Bmsrv_send_modify_page_add_section(Dsh *sh)
  */
 static int Bmsrv_send_modify_page_add_url(Dsh *sh)
 {
-   if (a_Dpip_dsh_write_str(sh, 1, modifypage_add_url))
+   if (Bmsrv_send_template(sh, 1, modifypage_add_url,
+         _("Bookmarks"), _("Bookmarks: Add URL"), _("Title:"), _("URL:"),
+         _("Submit"), _("or "), _("Cancel")))
       return 1;
    return 2;
 }
@@ -958,7 +984,8 @@ static int Bmsrv_send_modify_update(Dsh *sh, char *url)
    }
 
    /* send HTML here */
-   if (a_Dpip_dsh_write_str(sh, 0, modifypage_update_header))
+   if (Bmsrv_send_template(sh, 0, modifypage_update_header,
+         _("Bookmarks"), _("Bookmarks: Update")))
       return 1;
 
    /* Count number of marked urls and sections */
@@ -1003,7 +1030,8 @@ static int Bmsrv_send_modify_update(Dsh *sh, char *url)
       a_Dpip_dsh_write_str(sh, 0, modifypage_update_item_footer);
    }
 
-   a_Dpip_dsh_write_str(sh, 1, modifypage_update_footer);
+   Bmsrv_send_template(sh, 1, modifypage_update_footer,
+         _("Submit"));
 
    return 2;
 }
@@ -1272,7 +1300,8 @@ static int Bmsrv_modify_add_url(Dsh *sh, char *s_url)
  */
 static int Bmsrv_check_modify_request(Dsh *sh, char *url)
 {
-   char *p, *msg;
+   char *p;
+   const char *msg;
    int n_sec, n_url;
 
    /* Count number of marked urls and sections */
@@ -1282,22 +1311,22 @@ static int Bmsrv_check_modify_request(Dsh *sh, char *url)
    if (strstr(p, "operation=delete&")) {
       if (n_url || n_sec)
          return 0;
-      msg = "Delete: you must mark what to delete!";
+      msg = _("Delete: you must mark what to delete!");
 
    } else if (strstr(url, "operation=move&")) {
       if (n_url && n_sec)
          return 0;
       else if (n_url)
-         msg = "Move: you must mark a target section!";
+         msg = _("Move: you must mark a target section!");
       else if (n_sec)
-         msg = "Move: can not move a section (yet).";
+         msg = _("Move: can not move a section (yet).");
       else
-         msg = "Move: you must mark some urls, and a target section!";
+         msg = _("Move: you must mark some urls, and a target section!");
 
    } else if (strstr(url, "operation=modify&")) {
       if (n_url || n_sec)
          return 0;
-      msg = "Modify: you must mark what to update!";
+      msg = _("Modify: you must mark what to update!");
 
    } else if (strstr(url, "operation=modify2&")) {
       /* nothing to check here */
@@ -1314,17 +1343,17 @@ static int Bmsrv_check_modify_request(Dsh *sh, char *url)
    } else if (strstr(url, "operation=add_url&")) {
       if (n_sec <= 1)
          return 0;
-      msg = "Add url: only one target section is allowed!";
+      msg = _("Add url: only one target section is allowed!");
 
    } else if (strstr(url, "operation=add_url2&")) {
       /* nothing to check here */
       return 0;
 
    } else if (strstr(url, "operation=none&")) {
-      msg = "No operation, just do nothing!";
+      msg = _("No operation, just do nothing!");
 
    } else {
-      msg = "Sorry, not implemented yet.";
+      msg = _("Sorry, not implemented yet.");
    }
 
    Bmsrv_dpi_send_status_msg(sh, msg);
@@ -1412,7 +1441,8 @@ static int send_bm_page(Dsh *sh)
    if (!dstr)
       dstr = dStr_new("");
 
-   if (a_Dpip_dsh_write_str(sh, 0, mainpage_header))
+   if (Bmsrv_send_template(sh, 0, mainpage_header,
+         _("Bookmarks"), _("Bookmarks"), _("Modify")))
       return 1;
 
    /* write sections header */
@@ -1615,6 +1645,8 @@ int main(void) {
    socklen_t address_size;
    char *tok;
    Dsh *sh;
+
+   a_I18n_init();
 
    /* Arrange the cleanup function for terminations via exit() */
    atexit(cleanup);
