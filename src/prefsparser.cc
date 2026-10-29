@@ -34,6 +34,7 @@ typedef enum {
    PREFS_STRING,
    PREFS_STRINGS,
    PREFS_URL,
+   PREFS_PROXY_URL,
    PREFS_INT32,
    PREFS_DOUBLE,
    PREFS_FRACTION_100,
@@ -100,8 +101,10 @@ static int parseOption(char *name, char *value,
       break;
    }
    case PREFS_URL:
+   case PREFS_PROXY_URL:
       a_Url_free(*(DilloUrl **)node->pref);
-      *(DilloUrl **)node->pref = a_Url_new(value, NULL);
+      *(DilloUrl **)node->pref = node->type == PREFS_PROXY_URL ?
+         a_Url_new_proxy(value) : a_Url_new(value, NULL);
       break;
    case PREFS_INT32:
       *(int32_t *)node->pref = strtol(value, NULL, 10);
@@ -156,6 +159,7 @@ void PrefsParser::parse(FILE *fp)
       { "bg_color", &prefs.bg_color, PREFS_COLOR, 0 },
       { "buffered_drawing", &prefs.buffered_drawing, PREFS_INT32, 0 },
       { "contrast_visited_color", &prefs.contrast_visited_color, PREFS_BOOL, 0 },
+      { "cookies_enabled", &prefs.cookies_enabled, PREFS_BOOL, 0 },
       { "enterpress_forces_submit", &prefs.enterpress_forces_submit,
         PREFS_BOOL, 0 },
       { "focus_new_tab", &prefs.focus_new_tab, PREFS_BOOL, 0 },
@@ -174,7 +178,7 @@ void PrefsParser::parse(FILE *fp)
       { "http_language", &prefs.http_language, PREFS_STRING, 0 },
       { "http_max_conns", &prefs.http_max_conns, PREFS_INT32, 0 },
       { "http_persistent_conns", &prefs.http_persistent_conns, PREFS_BOOL, 0 },
-      { "http_proxy", &prefs.http_proxy, PREFS_URL, 0 },
+      { "http_proxy", &prefs.http_proxy, PREFS_PROXY_URL, 0 },
       { "http_proxyuser", &prefs.http_proxyuser, PREFS_STRING, 0 },
       { "http_referer", &prefs.http_referer, PREFS_STRING, 0 },
       { "http_strict_transport_security",&prefs.http_strict_transport_security,

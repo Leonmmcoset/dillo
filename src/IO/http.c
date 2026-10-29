@@ -120,12 +120,12 @@ int a_Http_init(void)
 {
    char *env_proxy = getenv("http_proxy");
 
-   HTTP_Language_hdr = prefs.http_language ?
+   HTTP_Language_hdr = prefs.http_language && *prefs.http_language ?
       dStrconcat("Accept-Language: ", prefs.http_language, "\r\n", NULL) :
       dStrdup("");
 
    if (env_proxy && strlen(env_proxy))
-      HTTP_Proxy = a_Url_new(env_proxy, NULL);
+      HTTP_Proxy = a_Url_new_proxy(env_proxy);
    if (!HTTP_Proxy && prefs.http_proxy)
       HTTP_Proxy = a_Url_dup(prefs.http_proxy);
 

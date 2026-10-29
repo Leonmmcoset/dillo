@@ -29,6 +29,7 @@
 #include "ui.hh" // for (UI *)
 #include "keys.hh"
 #include "timeout.hh"
+#include "settings.hh"
 
 #include <unistd.h>
 
@@ -876,6 +877,11 @@ static void Menu_bgimg_load_toggle_cb(Fl_Widget *wid, void*)
 /**
  * Tools popup menu (construction & popup).
  */
+static void Menu_preferences_cb(Fl_Widget *, void *)
+{
+   a_Settings_show(popup_bw);
+}
+
 void a_Menu_tools_popup(BrowserWindow *bw, int x, int y)
 {
    const Fl_Menu_Item *item;
@@ -899,6 +905,7 @@ void a_Menu_tools_popup(BrowserWindow *bw, int x, int y)
          {_("small icons"), 0,Menu_panel_change_cb,(void*)10,
            FL_MENU_TOGGLE,0,0,0,0},
          {0,0,0,0,0,0,0,0,0},
+      {_("Preferences..."), 0, Menu_preferences_cb, 0,0,0,0,0,0},
       {0,0,0,0,0,0,0,0,0}
    };
 
@@ -906,16 +913,11 @@ void a_Menu_tools_popup(BrowserWindow *bw, int x, int y)
    int cur_panelsize = ui->get_panelsize();
    int cur_smallicons = ui->get_smallicons();
 
-   if (prefs.load_stylesheets)
-      pm[0].set();
-   if (prefs.parse_embedded_css)
-      pm[1].set();
-   if (prefs.load_images)
-      pm[2].set();
-   if (prefs.load_background_images)
-      pm[3].set();
-   if (prefs.http_force_https)
-      pm[4].set();
+   prefs.load_stylesheets ? pm[0].set() : pm[0].clear();
+   prefs.parse_embedded_css ? pm[1].set() : pm[1].clear();
+   prefs.load_images ? pm[2].set() : pm[2].clear();
+   prefs.load_background_images ? pm[3].set() : pm[3].clear();
+   prefs.http_force_https ? pm[4].set() : pm[4].clear();
    /* Method setonly(void) is deprecated in FLTK 1.5,
     * available since 1.4.0. */
 #if FL_API_VERSION < 10400

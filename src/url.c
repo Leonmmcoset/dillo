@@ -367,7 +367,8 @@ done:
  *
  *  Return NULL if URL is badly formed.
  */
-DilloUrl* a_Url_new(const char *url_str, const char *base_url)
+static DilloUrl* Url_new(const char *url_str, const char *base_url,
+                         bool_t enforce_https)
 {
    DilloUrl *url;
    char *urlstr = (char *)url_str;  /* auxiliary variable, don't free */
@@ -432,7 +433,8 @@ DilloUrl* a_Url_new(const char *url_str, const char *base_url)
 
    bool_t switch_to_https = FALSE;
 
-   if (url->scheme && !dStrAsciiCasecmp(url->scheme, "http")) {
+   if (enforce_https && url->scheme &&
+       !dStrAsciiCasecmp(url->scheme, "http")) {
       /*
        * A site's HTTP Strict Transport Security policy may direct us to transform
        * URLs like "http://en.wikipedia.org:80" to "https://en.wikipedia.org:443".
@@ -467,6 +469,18 @@ DilloUrl* a_Url_new(const char *url_str, const char *base_url)
    }
 
    return url;
+}
+
+/* Page URLs honor HTTPS policies; the proxy endpoint itself must retain
+ * its configured transport, even when the requested page requires HTTPS. */
+DilloUrl* a_Url_new(const char *url_str, const char *base_url)
+{
+   return Url_new(url_str, base_url, TRUE);
+}
+
+DilloUrl* a_Url_new_proxy(const char *url_str)
+{
+   return Url_new(url_str, NULL, FALSE);
 }
 
 

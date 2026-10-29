@@ -114,6 +114,7 @@ keywords. Generated for version __VERSION__.</p>
     </ul>
   <li><a href="#configuration">Configuration</a>
     <ul>
+      <li><a href="#preferences">Preferences window</a></li>
       <li><a href="#dillorc">Dillorc</a></li>
       <li><a href="#cookiesrc">Cookiesrc</a></li>
       <li><a href="#domainrc">Domainrc</a></li>
@@ -492,6 +493,32 @@ page.
 </ul>
 
 <h2 id="configuration">Configuration</h2>
+
+<h3 id="preferences">Preferences window</h3>
+
+<p>Open the tools/settings menu and choose <b>Preferences...</b> to edit common
+settings without editing a configuration file. The window has four tabs:</p>
+<ul>
+  <li><b>General:</b> startup, home and new-tab pages, the download folder,
+      tab behavior, images and stylesheets.</li>
+  <li><b>Fonts:</b> installed font families, text scale, minimum and maximum
+      font sizes, with a preview.</li>
+  <li><b>Network:</b> HTTP proxy, proxy username, domains to access directly,
+      and the website language (the HTTP Accept-Language header).</li>
+  <li><b>Privacy:</b> the cookie master switch, HTTPS and HSTS, Referer and
+      User-Agent headers.</li>
+</ul>
+<p><b>Save</b> writes to <code>~/.dillo/dillorc</code>, preserving comments,
+custom searches and other options. If no user file exists, the system dillorc
+is used as the starting point. <b>Cancel</b> discards edits. The window follows
+the system locale, using Simplified Chinese or English.</p>
+<p>Reload pages to use new font and content settings. Restart Dillo after
+changing the proxy, proxy username, website language or interface font.
+The <code>http_proxy</code> environment variable overrides the proxy field;
+downloads use wget's own proxy settings. An empty proxy field disables the
+configured proxy. Turning off cookies blocks both sending and receiving
+cookies, but does not delete stored cookies. Turning them on still respects
+the <a href="#cookiesrc">per-site cookie rules</a>.</p>
 
 <p>Dillo has <b>several configuration files</b> that control the behavior of the
 browser. Each configuration file is searched <em>first</em> in the

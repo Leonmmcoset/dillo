@@ -70,6 +70,10 @@ dillo_SOURCES = \
 	history.c \
 	prefs.c \
 	prefs.h \
+	prefsrc.cc \
+	prefsrc.hh \
+	settings.cc \
+	settings.hh \
 	prefsparser.cc \
 	prefsparser.hh \
 	keys.cc \

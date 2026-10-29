@@ -104,6 +104,7 @@ typedef struct {
 
 
 DilloUrl* a_Url_new(const char *url_str, const char *base_url);
+DilloUrl* a_Url_new_proxy(const char *url_str);
 void a_Url_free(DilloUrl *u);
 char *a_Url_str(const DilloUrl *url);
 const char *a_Url_hostname(const DilloUrl *u);

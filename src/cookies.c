@@ -42,6 +42,7 @@ void a_Cookies_init(void)
 #include "IO/Url.h"
 #include "list.h"
 #include "cookies.h"
+#include "prefs.h"
 #include "capi.h"
 #include "../dpip/dpip.h"
 
@@ -147,7 +148,7 @@ void a_Cookies_set(Dlist *cookie_strings, const DilloUrl *set_url,
    const char *path;
    int i;
 
-   if (disabled)
+   if (disabled || !prefs.cookies_enabled)
       return;
 
    action = Cookies_control_check(set_url);
@@ -189,7 +190,7 @@ char *a_Cookies_get_query(const DilloUrl *query_url, const DilloUrl *requester,
    const char *path;
    CookieControlAction action;
 
-   if (disabled)
+   if (disabled || !prefs.cookies_enabled)
       return dStrdup("");
 
    action = Cookies_control_check(query_url);

@@ -105,6 +105,7 @@ typedef struct {
    bool_t http_persistent_conns;
    bool_t http_strict_transport_security;
    bool_t http_force_https;
+   bool_t cookies_enabled;
    int32_t buffered_drawing;
    char *font_serif;
    char *font_sans_serif;

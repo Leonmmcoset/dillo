@@ -583,7 +583,7 @@ int main(int argc, char **argv)
    ((Fl_Widget *)bw->ui)->window()->make_current();
 
    /* Proxy authentication */
-   if (prefs.http_proxyuser && !a_Http_proxy_auth()) {
+   if (prefs.http_proxyuser && *prefs.http_proxyuser && !a_Http_proxy_auth()) {
       const char *passwd = a_UIcmd_get_passwd(prefs.http_proxyuser);
       if (passwd) {
          a_Http_set_proxy_passwd(passwd);

@@ -16,6 +16,7 @@ TESTS = \
 	i18n \
 	liang \
 	notsosimplevector \
+	prefsrc \
 	shapes \
 	unicode_test
 
@@ -31,6 +32,8 @@ EXTRA_DIST = \
 containers_SOURCES = containers.cc
 i18n_SOURCES = i18n.c
 i18n_LDADD = $(top_builddir)/dlib/libDlib.a
+prefsrc_SOURCES = prefsrc_test.cc $(top_srcdir)/src/prefsrc.cc
+prefsrc_LDADD = $(top_builddir)/dlib/libDlib.a
 containers_LDADD = \
 	$(top_builddir)/lout/liblout.a \
 	$(top_builddir)/dlib/libDlib.a

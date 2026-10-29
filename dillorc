@@ -5,6 +5,7 @@
 # "#option=..." shows the built-in default.
 # "# option=..." is an additional example.
 # "option=..." overrides the built-in value.
+# Common options can also be changed in Tools > Preferences.
 
 #-------------------------------------------------------------------------
 #                             FIRST SECTION                             :)
@@ -254,6 +255,11 @@ search_url="mj Mojeek https://www.mojeek.com/search?q=%s"
 # a more secure HTTPS connection. This will prevent sites from loading
 # if they only support HTTP.
 #http_force_https=NO
+
+# Master switch for receiving and sending cookies. YES still follows the
+# per-site rules in cookiesrc (cookies are denied by default). NO blocks all
+# cookies without changing those rules or deleting stored cookies.
+#cookies_enabled=YES
 
 # Set the proxy information for http/https.
 # Note that the http_proxy environment variable overrides this setting.
