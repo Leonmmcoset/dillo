@@ -42,6 +42,7 @@ typedef struct _DilloImage DilloImage;
 typedef enum {
    DILLO_IMG_TYPE_INDEXED,
    DILLO_IMG_TYPE_RGB,
+   DILLO_IMG_TYPE_RGBA,
    DILLO_IMG_TYPE_GRAY,
    DILLO_IMG_TYPE_CMYK_INV,
    DILLO_IMG_TYPE_NOTSET    /* Initial value */
@@ -59,6 +60,8 @@ typedef enum {
 
 struct _DilloImage {
    void *layout, *img_rndr;
+   void *javascript;
+   int dom_node;
 
    /* Parameters as told by image data */
    uint_t width;
@@ -86,6 +89,7 @@ void *a_Image_get_dw(DilloImage *Image);
 void a_Image_ref(DilloImage *Image);
 void a_Image_unref(DilloImage *Image);
 
+void a_Image_set_dom_node(DilloImage *Image, void *javascript, int node);
 void a_Image_set_parms(DilloImage *Image, void *v_imgbuf, DilloUrl *url,
                        int version, uint_t width, uint_t height,
                        DilloImgType type);

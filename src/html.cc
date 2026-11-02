@@ -2174,10 +2174,20 @@ DilloImage *a_Html_image_new(DilloHtml *html, const char *tag, int tagsize)
    DilloUrl *url;
    DilloImage *image;
 
-   if (!(attrbuf = a_Html_get_attr(html, tag, tagsize, "src")) ||
-       !*attrbuf || strspn(attrbuf, " \t\r\n\f") == strlen(attrbuf) ||
-       !(url = a_Html_url_new(html, attrbuf, NULL, 0)))
+   attrbuf = a_Html_get_attr(html, tag, tagsize, "src");
+   char *srcsetChoice = NULL;
+   if (!attrbuf || !*attrbuf || strspn(attrbuf, " \t\r\n\f") == strlen(attrbuf)) {
+      const char *srcset = a_Html_get_attr(html, tag, tagsize, "srcset");
+      if (srcset && *srcset) {
+         size_t length = strcspn(srcset, ", \t\r\n\f");
+         if (length) srcsetChoice = dStrndup(srcset, length);
+      }
+      attrbuf = srcsetChoice;
+   }
+   if (!attrbuf || !*attrbuf || !(url = a_Html_url_new(html, attrbuf, NULL, 0))) {
+      dFree(srcsetChoice);
       return NULL;
+   }
 
    alt_ptr = a_Html_get_attr_wdef(html, tag, tagsize, "alt", NULL);
    if (!alt_ptr || !*alt_ptr) {
@@ -2195,6 +2205,8 @@ DilloImage *a_Html_image_new(DilloHtml *html, const char *tag, int tagsize)
       a_Image_new(html->dw->getLayout(), (void*)(dw::core::ImgRenderer*)dw, 0, 0);
    
    a_Image_ref(image);
+   if (html->javascript)
+      a_Image_set_dom_node(image, html->javascript, S_TOP(html)->javascript_node);
 
    if (HT2TB(html)->getBgColor())
       image->bg_color = HT2TB(html)->getBgColor()->getColor();
@@ -2220,6 +2232,7 @@ DilloImage *a_Html_image_new(DilloHtml *html, const char *tag, int tagsize)
       hi->image = image;
    }
 
+   dFree(srcsetChoice);
    dFree(alt_ptr);
    return image;
 }
@@ -2243,6 +2256,36 @@ static bool Html_load_image(BrowserWindow *bw, DilloUrl *url,
       a_Bw_add_url(bw, url);
    }
    return ClientKey != 0;
+}
+
+class HtmlPreloadRenderer : public dw::core::ImgRenderer {
+public:
+   void setBuffer(dw::core::Imgbuf *, bool) override { }
+   void drawRow(int) override { }
+   void finish() override { delete this; }
+   void fatal() override { delete this; }
+};
+
+int a_Html_preload_image(void *v_html, const char *value, int node)
+{
+   DilloHtml *html = static_cast<DilloHtml *>(v_html);
+   if (!html || !html->javascript || !value || !*value ||
+       (URL_FLAGS(html->base_url) & URL_SpamSafe)) return 0;
+   DilloUrl *url = a_Html_url_new(html, value, NULL, 0);
+   if (!url) return 0;
+   HtmlPreloadRenderer *renderer = new HtmlPreloadRenderer();
+   DilloImage *image = a_Image_new(html->dw->getLayout(),
+      (void *)(dw::core::ImgRenderer *)renderer, 0, 0);
+   a_Image_ref(image);
+   a_Image_set_dom_node(image, html->javascript, node);
+   bool started = Html_load_image(html->bw, url, html->page_url, image);
+   if (started) a_Image_unref(image);
+   else {
+      a_Image_abort(image);
+      a_Image_unref(image);
+   }
+   a_Url_free(url);
+   return started ? 1 : 0;
 }
 
 static void Html_tag_open_img(DilloHtml *html, const char *tag, int tagsize)

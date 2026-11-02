@@ -30,7 +30,6 @@ typedef struct {
    DilloImage *Image;           /* Image meta data */
    DilloUrl *url;               /* Primary Key for the dicache */
    int version;                 /* Secondary Key for the dicache */
-   int bgcolor;                 /* Parent widget background color */
    int state;
    int y;
    WebPIDecoder* idec;
@@ -109,7 +108,8 @@ void a_Webp_callback(int Op, void *data)
 
          a_Dicache_set_parms(webp->url, webp->version, webp->Image,
                              features.width, features.height,
-                             DILLO_IMG_TYPE_RGB, 1 / 2.2);
+                             features.has_alpha ? DILLO_IMG_TYPE_RGBA :
+                                DILLO_IMG_TYPE_RGB, 1 / 2.2);
 
          webp->idec = WebPINewDecoder(&webp->output_buffer);
          webp->state = IS_nextdata;
@@ -128,40 +128,10 @@ void a_Webp_callback(int Op, void *data)
          if (!output) {
             _MSG("webp decoding no output\n");
          } else {
-            unsigned char *line;
-            int row = webp->y;
-
-            if (webp->output_buffer.colorspace == MODE_RGBA)
-               line = dNew(unsigned char, width * 3);
-            else
-               line = output + row * stride;
-
-            for (; row < last_y; row++) {
-
-               if (webp->output_buffer.colorspace == MODE_RGBA) {
-                  int j;
-
-                  uint_t bg_blue  = (webp->bgcolor) & 0xFF;
-                  uint_t bg_green = (webp->bgcolor>>8) & 0xFF;
-                  uint_t bg_red   = (webp->bgcolor>>16) & 0xFF;
-                  for (j = 0; j < width; j++) {
-                     uchar_t alpha = output[row * stride + 4 * j + 3];
-                     uchar_t r = output[row * stride + 4 * j];
-                     uchar_t g = output[row * stride + 4 * j + 1];
-                     uchar_t b = output[row * stride + 4 * j + 2];
-                     line[3 * j] = (r * alpha + (bg_red * (0xFF - alpha))) / 0xFF;
-                     line[3 * j + 1] = (g * alpha + (bg_green * (0xFF - alpha))) / 0xFF;
-                     line[3 * j + 2] = (b * alpha + (bg_blue * (0xFF - alpha))) / 0xFF;
-                  }
-               } else {
-                  line = output + row * stride;
-               }
-               a_Dicache_write(webp->url, webp->version, line, row);
-            }
+            for (int row = webp->y; row < last_y; row++)
+               a_Dicache_write(webp->url, webp->version,
+                               output + row * stride, row);
             webp->y = last_y;
-
-            if (webp->output_buffer.colorspace == MODE_RGBA)
-               dFree(line);
          }
       } else {
          MSG("webp WebPIUpdate failed with %d\n", ret);
@@ -202,7 +172,6 @@ void *a_Webp_new(DilloImage *Image, DilloUrl *url, int version)
    webp->url = url;
    webp->version = version;
 
-   webp->bgcolor = Image->bg_color;
    webp->state = IS_init;
    webp->y = 0;
    webp->idec = NULL;

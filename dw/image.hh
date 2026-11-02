@@ -142,6 +142,8 @@ private:
    char *altText;
    core::Imgbuf *buffer;
    int bufWidth, bufHeight;
+   void fitBuffer(int width, int height);
+   void objectOffset(int *x, int *y);
    int altTextWidth;
    bool clicking;
    int currLink;

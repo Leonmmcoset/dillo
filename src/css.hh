@@ -258,6 +258,8 @@ typedef enum {
    CSS_PROPERTY_MAX_WIDTH,
    CSS_PROPERTY_MIN_HEIGHT,
    CSS_PROPERTY_MIN_WIDTH,
+   CSS_PROPERTY_OBJECT_FIT,
+   CSS_PROPERTY_OBJECT_POSITION,
    CSS_PROPERTY_ORDER,
    CSS_PROPERTY_OUTLINE_COLOR,
    CSS_PROPERTY_OUTLINE_OFFSET,
@@ -323,6 +325,8 @@ struct CssGradient {
 struct CssBackgroundImages {
    enum { MAX_LAYERS = 8 };
    std::vector<CssGradient> layers;
+   std::vector<std::string> urls;
+   std::vector<bool> isUrl;
 };
 
 struct CssBackgroundBoxes {

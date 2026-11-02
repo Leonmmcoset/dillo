@@ -25,6 +25,8 @@ void a_Javascript_delete(JavascriptDocument *document, DilloHtml *view);
 void a_Javascript_write(JavascriptDocument *document, const char *buf,
                         size_t size, bool eof, int clientKey);
 void a_Javascript_render(JavascriptDocument *document);
+void a_Javascript_image_event(JavascriptDocument *document, int node,
+                              const char *type, unsigned width, unsigned height);
 bool a_Javascript_event(JavascriptDocument *document, int node, const char *type);
 bool a_Javascript_ui_event(void *document, int node, const char *type,
                            const char *key, int keyCode);

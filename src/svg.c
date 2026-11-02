@@ -13,158 +13,175 @@
 
 #ifdef ENABLE_SVG
 
-#include <stdlib.h> /* For abort() */
-
+#include <math.h>
 #include "msg.h"
 #include "image.hh"
+#include "imgbuf.hh"
 #include "cache.h"
 #include "dicache.h"
 
+#ifdef HAVE_RSVG
+#include <librsvg/rsvg.h>
+#else
 #define NANOSVG_ALL_COLOR_KEYWORDS
 #define NANOSVG_IMPLEMENTATION
 #include "nanosvg.h"
 #define NANOSVGRAST_IMPLEMENTATION
 #include "nanosvgrast.h"
+#endif
 
 typedef struct {
-   DilloImage *Image;           /* Image meta data */
-   DilloUrl *url;               /* Primary Key for the dicache */
-   int version;                 /* Secondary Key for the dicache */
-   int bgcolor;                 /* Parent widget background color */
-   int fgcolor;                 /* Parent widget foreground color */
+   DilloImage *Image;
+   DilloUrl *url;
+   int version, fgcolor, decoded;
+   float dpi;
 } DilloSvg;
 
-/*
- * Free up the resources for this image.
- */
-static void Svg_free(DilloSvg *svg)
+#ifdef HAVE_RSVG
+typedef struct { RsvgHandle *handle; double width, height; } SvgSource;
+static void Svg_source_free(void *data)
 {
-   _MSG("Svg_free: svg=%p\n", svg);
-
-   dFree(svg);
+   SvgSource *source = data;
+   g_object_unref(source->handle);
+   dFree(source);
 }
-
-/*
- * Finish the decoding process (and free the memory)
- */
-static void Svg_close(DilloSvg *svg, CacheClient_t *Client)
+static int Svg_render(void *data, int width, int height,
+                      unsigned char *dest, int stride)
 {
-   _MSG("Svg_close\n");
-   /* Let dicache know decoding is over */
-   a_Dicache_close(svg->url, svg->version, Client);
-   Svg_free(svg);
-}
-
-/*
- * Receive and process new chunks of SVG image data
- */
-static void Svg_write(DilloSvg *svg, void *Buf, uint_t BufSize)
-{
-   static NSVGrasterizer *rasterizer = NULL;
-
-   if (!rasterizer)
-      rasterizer = nsvgCreateRasterizer();
-
-   if (Buf == NULL || BufSize <= 0)
-      return;
-
-   /* SVG image not finished yet */
-   if (strstr(Buf, "</svg>") == NULL)
-      return;
-
-   /* Use foreground as the current color, but transform to
-    * nanosvg color format (BGR). */
-   unsigned fg_r = (svg->fgcolor >> 16) & 0xff;
-   unsigned fg_g = (svg->fgcolor >>  8) & 0xff;
-   unsigned fg_b = (svg->fgcolor >>  0) & 0xff;
-   unsigned curcolor = NSVG_RGB(fg_r, fg_g, fg_b);
-
-   /* NULL-terminate Buf */
-   char *str = dStrndup(Buf, BufSize);
-   NSVGimage *nimg = nsvgParse(str, "px", svg->Image->dpi, curcolor);
-   dFree(str);
-
-   if (nimg == NULL) {
-      MSG_ERR("Svg_write: cannot parse SVG image\n");
-      return;
-   }
-
-   /* The height and width values can be nonintegral */
-   unsigned width = nimg->width;
-   unsigned height = nimg->height;
-
-   if (width == 0 || height == 0 || width > IMAGE_MAX_AREA / height) {
-      MSG_WARN("Svg_write: suspicious image size request %u x %u\n", width, height);
-      nsvgDelete(nimg);
-      return;
-   }
-
-   DilloImgType type = DILLO_IMG_TYPE_RGB;
-   unsigned stride = width * 4;
-
-   a_Dicache_set_parms(svg->url, svg->version, svg->Image,
-         width, height, type, 1 / 2.2);
-
-   unsigned char *dest = dNew(unsigned char, height * stride);
-
-   nsvgRasterizeXY(rasterizer, nimg, 0, 0, 1, 1, dest, width, height, stride);
-
-   unsigned bg_blue  = (svg->bgcolor) & 0xFF;
-   unsigned bg_green = (svg->bgcolor >> 8) & 0xFF;
-   unsigned bg_red   = (svg->bgcolor >> 16) & 0xFF;
-
-   unsigned char *line = dNew(unsigned char, width * 3);
-   for (unsigned i = 0; i < height; i++) {
-      for (unsigned j = 0; j < width; j++) {
-         unsigned r = dest[i * stride + 4 * j];
-         unsigned g = dest[i * stride + 4 * j + 1];
-         unsigned b = dest[i * stride + 4 * j + 2];
-         unsigned alpha = dest[i * stride + 4 * j + 3];
-
-         line[3 * j + 0] = (r * alpha + (bg_red   * (0xFF - alpha))) / 0xFF;
-         line[3 * j + 1] = (g * alpha + (bg_green * (0xFF - alpha))) / 0xFF;
-         line[3 * j + 2] = (b * alpha + (bg_blue  * (0xFF - alpha))) / 0xFF;
+   SvgSource *source = data;
+   cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+   cairo_t *cr = cairo_create(surface);
+   // Stretch the intrinsic viewport as an image. SVG's preserveAspectRatio
+   // still applies inside that viewport when the file uses a viewBox.
+   cairo_scale(cr, width / source->width, height / source->height);
+   RsvgRectangle viewport = {0, 0, source->width, source->height};
+   int ok = rsvg_handle_render_document(source->handle, cr, &viewport, NULL);
+   cairo_destroy(cr);
+   cairo_surface_flush(surface);
+   if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) ok = 0;
+   if (ok) {
+      unsigned char *pixels = cairo_image_surface_get_data(surface);
+      int src_stride = cairo_image_surface_get_stride(surface);
+      for (int y = 0; y < height; ++y) {
+         const uint32_t *src = (const uint32_t *)(pixels + y * src_stride);
+         unsigned char *row = dest + y * stride;
+         for (int x = 0; x < width; ++x) {
+            unsigned a = src[x] >> 24;
+            row[4*x] = a ? (((src[x] >> 16) & 255) * 255 + a/2) / a : 0;
+            row[4*x+1] = a ? (((src[x] >> 8) & 255) * 255 + a/2) / a : 0;
+            row[4*x+2] = a ? ((src[x] & 255) * 255 + a/2) / a : 0;
+            row[4*x+3] = a;
+         }
       }
-      a_Dicache_write(svg->url, svg->version, line, i);
    }
-   dFree(dest);
-   dFree(line);
-   nsvgDelete(nimg);
+   cairo_surface_destroy(surface);
+   return ok;
 }
-
-void a_Svg_callback(int Op, void *data)
+#else
+typedef struct { NSVGimage *image; } SvgSource;
+static void Svg_source_free(void *data)
 {
-   if (Op == CA_Send) {
-      CacheClient_t *Client = data;
-      Svg_write(Client->CbData, Client->Buf, Client->BufSize);
-   } else if (Op == CA_Close) {
-      CacheClient_t *Client = data;
-      Svg_close(Client->CbData, Client);
-   } else if (Op == CA_Abort) {
-      Svg_free(data);
+   SvgSource *source = data;
+   nsvgDelete(source->image);
+   dFree(source);
+}
+static int Svg_render(void *data, int width, int height,
+                      unsigned char *dest, int stride)
+{
+   SvgSource *source = data;
+   NSVGrasterizer *rasterizer = nsvgCreateRasterizer();
+   if (!rasterizer) return 0;
+   nsvgRasterizeXY(rasterizer, source->image, 0, 0,
+      width / source->image->width, height / source->image->height,
+      dest, width, height, stride);
+   nsvgDeleteRasterizer(rasterizer);
+   return 1;
+}
+#endif
+
+static void Svg_write(DilloSvg *svg, const void *buf, uint_t size, int final)
+{
+   if (svg->decoded || !buf || !size || size > 8 * 1024 * 1024) return;
+   char *str = dStrndup(buf, size);
+   // Accept whitespace in closing tags and self-closing SVG roots. Parsing
+   // happens once, with a final attempt at EOF for other legal XML forms.
+   if (!final && !strstr(str, "</svg")) {
+      char *root = strstr(str, "<svg"), *end = root ? strchr(root, '>') : NULL;
+      if (!end || end == root || end[-1] != '/') { dFree(str); return; }
    }
+   SvgSource *source = dNew0(SvgSource, 1);
+   double w = 0, h = 0;
+#ifdef HAVE_RSVG
+   source->handle = rsvg_handle_new_from_data((const guint8 *)str, size, NULL);
+   if (source->handle) {
+      rsvg_handle_set_dpi(source->handle, svg->dpi);
+      char css[64];
+      int len = snprintf(css, sizeof(css), ":root { color: #%06x; }", svg->fgcolor & 0xffffff);
+      rsvg_handle_set_stylesheet(source->handle, (const guint8 *)css, len, NULL);
+      if (!rsvg_handle_get_intrinsic_size_in_pixels(source->handle, &w, &h)) {
+         gboolean has_viewbox;
+         RsvgRectangle viewbox;
+         rsvg_handle_get_intrinsic_dimensions(source->handle, NULL, NULL,
+            NULL, NULL, &has_viewbox, &viewbox);
+         w = has_viewbox ? viewbox.width : 300;
+         h = has_viewbox ? viewbox.height : 150;
+      }
+   }
+   source->width = w; source->height = h;
+#else
+   unsigned color = NSVG_RGB((svg->fgcolor >> 16) & 255,
+                            (svg->fgcolor >> 8) & 255, svg->fgcolor & 255);
+   source->image = nsvgParse(str, "px", svg->dpi, color);
+   if (source->image) { w = source->image->width; h = source->image->height; }
+#endif
+   dFree(str);
+   if (!isfinite(w) || !isfinite(h) || w <= 0 || h <= 0 ||
+       w > 32767 || h > 32767 || ceil(w) > IMAGE_MAX_AREA / ceil(h)) {
+#ifdef HAVE_RSVG
+      if (source->handle) Svg_source_free(source); else dFree(source);
+#else
+      if (source->image) Svg_source_free(source); else dFree(source);
+#endif
+      return;
+   }
+   unsigned width = ceil(w), height = ceil(h);
+   unsigned char *dest = dNew(unsigned char, width * height * 4);
+   if (!Svg_render(source, width, height, dest, width * 4)) {
+      dFree(dest); Svg_source_free(source); return;
+   }
+   a_Dicache_set_parms(svg->url, svg->version, svg->Image,
+      width, height, DILLO_IMG_TYPE_RGBA, 1 / 2.2);
+   DICacheEntry *entry = a_Dicache_get_entry(svg->url, svg->version);
+   a_Imgbuf_set_rasterizer(entry->v_imgbuf, Svg_render, source, Svg_source_free);
+   for (unsigned y = 0; y < height; ++y)
+      a_Dicache_write(svg->url, svg->version, dest + y * width * 4, y);
+   dFree(dest);
+   svg->decoded = 1;
+   svg->Image = NULL;
 }
 
-/*
- * Create the image state data that must be kept between calls
- */
-void *a_Svg_new(DilloImage *Image, DilloUrl *url, int version)
+void a_Svg_callback(int op, void *data)
+{
+   if (op == CA_Send || op == CA_Close) {
+      CacheClient_t *client = data;
+      DilloSvg *svg = client->CbData;
+      Svg_write(svg, client->Buf, client->BufSize, op == CA_Close);
+      if (op == CA_Close) {
+         a_Dicache_close(svg->url, svg->version, client);
+         dFree(svg);
+      }
+   } else if (op == CA_Abort) dFree(data);
+}
+
+void *a_Svg_new(DilloImage *image, DilloUrl *url, int version)
 {
    DilloSvg *svg = dNew0(DilloSvg, 1);
-   _MSG("a_Svg_new: svg=%p\n", svg);
-
-   svg->Image = Image;
-   svg->url = url;
-   svg->version = version;
-   svg->bgcolor = Image->bg_color;
-   svg->fgcolor = Image->fg_color;
-
+   svg->Image = image; svg->url = url; svg->version = version;
+   svg->fgcolor = image->fg_color; svg->dpi = image->dpi;
    return svg;
 }
 
-#else /* ENABLE_SVG */
-
+#else
 void *a_Svg_new() { return 0; }
 void a_Svg_callback() { return; }
-
-#endif /* ENABLE_SVG */
+#endif

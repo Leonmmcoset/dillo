@@ -484,13 +484,37 @@ void drawBackgroundPaint(View *view, Layout *layout, Rectangle *area,
    });
 }
 
+void drawRoundedImage(View *view, Imgbuf *buffer, Rectangle *area,
+   int imageX, int imageY, int x, int y, int width, int height, const StyleAttrs *style)
+{
+   int leftInset = style->borderWidth.left + style->padding.left;
+   int topInset = style->borderWidth.top + style->padding.top;
+   int rightInset = style->borderWidth.right + style->padding.right;
+   int bottomInset = style->borderWidth.bottom + style->padding.bottom;
+   RoundedBox outer(style, width + leftInset + rightInset, height + topInset + bottomInset);
+   RoundedBox clip = outer.inset(leftInset, topInset, rightInset, bottomInset);
+   if (!hasRoundedCorners(style)) {
+      view->drawImage(buffer, imageX, imageY, area->x - imageX, area->y - imageY, area->width, area->height);
+      return;
+   }
+   for (int row = area->y; row < area->y + area->height; ++row) {
+      int left = area->x, right = left + area->width;
+      while (left < right && !clip.contains(left - x + .5, row - y + .5)) ++left;
+      while (right > left && !clip.contains(right - x - .5, row - y + .5)) --right;
+      if (left < right) view->drawImage(buffer, imageX, imageY,
+         left - imageX, row - imageY, right - left, 1);
+   }
+}
+
 void drawRoundedBackgroundImage(View *view, Layout *layout, Rectangle *area,
    int x, int y, int width, int height, int xRef, int yRef, int widthRef,
    int heightRef, const StyleAttrs *style)
 {
-   (void)layout;
    BackgroundArea clip(style, x, y, width, height, style->backgroundClip.at(0));
    BackgroundArea origin(style, xRef, yRef, widthRef, heightRef, style->backgroundOrigin.at(0));
+   if (style->backgroundAttachment == BACKGROUND_ATTACHMENT_FIXED)
+      origin.bounds = Rectangle(layout->getScrollPosX(), layout->getScrollPosY(),
+         layout->getContentWidthViewport(), layout->getContentHeightViewport());
    Rectangle visible;
    if (!area->intersectsWith(&clip.bounds, &visible)) return;
    const BackgroundSizes::Size &size = style->backgroundSize.at(0);

@@ -18,6 +18,9 @@ private:
       uchar map[256];
    };
 
+   Rasterizer rasterizer;
+   RasterizerFree rasterizerFree;
+   void *vectorSource;
    FltkImgbuf *root;
    int refCount;
    bool deleteOnUnref;
@@ -58,6 +61,7 @@ public:
 
    static void freeall ();
 
+   void setRasterizer(Rasterizer render, void *source, RasterizerFree destroy);
    void setCMap (int *colors, int num_colors);
    inline void scaleRow (int row, const core::byte *data);
    inline void scaleRowSimple (int row, const core::byte *data);

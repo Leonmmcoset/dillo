@@ -19,6 +19,7 @@
 #include "msg.h"
 
 #include "image.hh"
+#include "javascript.hh"
 #include "dw/core.hh"
 #include "dw/image.hh"
 #include "prefs.h"
@@ -39,6 +40,8 @@ DilloImage *a_Image_new(void *layout, void *img_rndr,
 
    Image = dNew(DilloImage, 1);
    Image->layout = layout;
+   Image->javascript = NULL;
+   Image->dom_node = 0;
    Image->img_rndr = img_rndr;
    Image->width = 0;
    Image->height = 0;
@@ -104,6 +107,12 @@ void a_Image_ref(DilloImage *Image)
       ++Image->RefCount;
 }
 
+void a_Image_set_dom_node(DilloImage *Image, void *javascript, int node)
+{
+   Image->javascript = javascript;
+   Image->dom_node = node;
+}
+
 /**
  * Set initial parameters of the image
  */
@@ -146,6 +155,9 @@ void a_Image_close(DilloImage *Image)
 {
    _MSG("a_Image_close\n");
    I2IR(Image)->finish();
+   if (Image->javascript && Image->dom_node)
+      a_Javascript_image_event((JavascriptDocument *)Image->javascript,
+         Image->dom_node, "load", Image->width, Image->height);
 }
 
 /**
@@ -155,5 +167,8 @@ void a_Image_abort(DilloImage *Image)
 {
    _MSG("a_Image_abort\n");
    I2IR(Image)->fatal();
+   if (Image->javascript && Image->dom_node)
+      a_Javascript_image_event((JavascriptDocument *)Image->javascript,
+         Image->dom_node, "error", 0, 0);
 }
 

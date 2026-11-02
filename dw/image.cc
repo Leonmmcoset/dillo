@@ -22,6 +22,9 @@
 
 //#define DEBUG_LEVEL 1
 #include "image.hh"
+#include "paint.hh"
+#include <algorithm>
+#include <cmath>
 #include "dlib/dlib.h"
 #include "../lout/msg.h"
 #include "../lout/misc.hh"
@@ -304,25 +307,7 @@ void Image::sizeAllocateImpl (core::Allocation *allocation)
    int newBufHeight =
       allocation->ascent + allocation->descent - boxDiffHeight ();
 
-   if (buffer && newBufWidth > 0 && newBufHeight > 0 &&
-       // Save some time when size did not change:
-       (newBufWidth != bufWidth || newBufHeight != bufHeight)) {
-      DBG_OBJ_MSG ("resize", 1, "replacing buffer");
-
-      DEBUG_MSG(1, "Image::sizeAllocateImpl new buffer size: w=%d h=%d\n",
-            newBufWidth, newBufHeight);
-
-      core::Imgbuf *oldBuffer = buffer;
-      buffer = oldBuffer->getScaledBuf (newBufWidth, newBufHeight);
-      oldBuffer->unref ();
-
-      bufWidth = newBufWidth;
-      bufHeight = newBufHeight;
-
-      DBG_OBJ_ASSOC_CHILD (this->buffer);
-      DBG_OBJ_SET_NUM ("bufWidth", bufWidth);
-      DBG_OBJ_SET_NUM ("bufHeight", bufHeight);
-   }
+   fitBuffer(newBufWidth, newBufHeight);
 
    DEBUG_MSG(1, "Image::sizeAllocateImpl x=%d y=%d w=%d h=(%d + %d)\n",
                   allocation->x, allocation->y, allocation->width,
@@ -446,18 +431,18 @@ void Image::draw (core::View *view, core::Rectangle *area,
    drawWidgetBox (view, area, false);
 
    if (buffer) {
-      dx = boxOffsetX ();
-      dy = boxOffsetY ();
-      content.x = dx;
-      content.y = dy;
-      content.width = getContentWidth ();
-      content.height = getContentHeight ();
-
-      if (area->intersectsWith (&content, &intersection))
-         view->drawImage (buffer,
-                          allocation.x + dx, allocation.y + dy,
-                          intersection.x - dx, intersection.y - dy,
-                          intersection.width, intersection.height);
+      objectOffset(&dx, &dy);
+      content.x = boxOffsetX(); content.y = boxOffsetY();
+      content.width = getContentWidth(); content.height = getContentHeight();
+      core::Rectangle image(dx, dy, bufWidth, bufHeight), clipped;
+      if (area->intersectsWith(&content, &intersection) &&
+          intersection.intersectsWith(&image, &clipped)) {
+         clipped.x += allocation.x; clipped.y += allocation.y;
+         core::style::drawRoundedImage(view, buffer, &clipped,
+            allocation.x + dx, allocation.y + dy,
+            allocation.x + content.x, allocation.y + content.y,
+            content.width, content.height, getStyle());
+      }
    } else {
       core::View *clippingView;
 
@@ -515,24 +500,12 @@ void Image::setBuffer (core::Imgbuf *buffer, bool resize)
 {
    core::Imgbuf *oldBuf = this->buffer;
 
-   if (wasAllocated () && needsResize () &&
-      getContentWidth () > 0 && getContentHeight () > 0) {
-      // Don't create a new buffer for the transition from alt text to img,
-      // and only scale when both dimensions are known.
-
-      bufWidth = getContentWidth ();
-      bufHeight = getContentHeight ();
-      this->buffer = buffer->getScaledBuf (bufWidth, bufHeight);
-   } else {
-      this->buffer = buffer;
-      bufWidth = buffer->getRootWidth ();
-      bufHeight = buffer->getRootHeight ();
-      buffer->ref ();
-   }
-   queueResize (0, true);
-
-   if (bufWidth)
-      this->ratio = (float) bufWidth / (float) bufHeight;
+   this->buffer = buffer;
+   buffer->ref();
+   bufWidth = buffer->getRootWidth(); bufHeight = buffer->getRootHeight();
+   if (bufHeight) this->ratio = (float)bufWidth / bufHeight;
+   if (wasAllocated()) fitBuffer(getContentWidth(), getContentHeight());
+   queueResize(0, true);
 
    DBG_OBJ_ASSOC_CHILD (this->buffer);
    DBG_OBJ_SET_NUM ("bufWidth", bufWidth);
@@ -542,6 +515,40 @@ void Image::setBuffer (core::Imgbuf *buffer, bool resize)
       oldBuf->unref ();
 }
 
+void Image::fitBuffer(int width, int height)
+{
+   if (!buffer || width <= 0 || height <= 0) return;
+   using core::style::StyleAttrs;
+   int iw = buffer->getRootWidth(), ih = buffer->getRootHeight();
+   StyleAttrs::ObjectFit fit = getStyle()->objectFit;
+   if (fit != StyleAttrs::OBJECT_FILL && iw > 0 && ih > 0) {
+      double scale = fit == StyleAttrs::OBJECT_COVER ?
+         std::max((double)width / iw, (double)height / ih) :
+         std::min((double)width / iw, (double)height / ih);
+      if (fit == StyleAttrs::OBJECT_NONE) scale = 1;
+      if (fit == StyleAttrs::OBJECT_SCALE_DOWN) scale = std::min(1.0, scale);
+      width = std::max(1, (int)std::floor(iw * scale + .5));
+      height = std::max(1, (int)std::floor(ih * scale + .5));
+   }
+   if (width != bufWidth || height != bufHeight) {
+      core::Imgbuf *old = buffer;
+      buffer = old->getScaledBuf(width, height);
+      old->unref();
+      bufWidth = buffer->getWidth(); bufHeight = buffer->getHeight();
+   }
+}
+
+void Image::objectOffset(int *x, int *y)
+{
+   using namespace core::style;
+   auto offset = [](Length value, int space) {
+      return isPerLength(value) ? multiplyWithPerLength(space, value) +
+         (isCalcLength(value) ? calcLengthPixels(value) : 0) : absLengthVal(value);
+   };
+   *x = boxOffsetX() + offset(getStyle()->objectPositionX, getContentWidth() - bufWidth);
+   *y = boxOffsetY() + offset(getStyle()->objectPositionY, getContentHeight() - bufHeight);
+}
+
 void Image::drawRow (int row)
 {
    core::Rectangle area;
@@ -549,9 +556,9 @@ void Image::drawRow (int row)
    assert (buffer != NULL);
 
    buffer->getRowArea (row, &area);
+   int x, y; objectOffset(&x, &y);
    if (area.width && area.height)
-      queueDrawArea (area.x + boxOffsetX (), area.y + boxOffsetY (), area.width,
-                     area.height);
+      queueDrawArea(area.x + x, area.y + y, area.width, area.height);
 }
 
 void Image::finish ()

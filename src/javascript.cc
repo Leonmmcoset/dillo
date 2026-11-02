@@ -3,6 +3,7 @@
 #include "jsengine.hh"
 #include "jsstorage.hh"
 #include "html_common.hh"
+#include "html.hh"
 #include "dw/textblock.hh"
 #include "prefs.h"
 #include "capi.h"
@@ -166,6 +167,7 @@ public:
          credentials(1), received(0), method("GET") {}
    };
    struct Timer { JavascriptDocument *document; int id; };
+   struct ImageEvent { int node; std::string type; unsigned width, height; };
    BrowserWindow *bw;
    DilloHtml *view;
    DilloUrl *url;
@@ -173,6 +175,7 @@ public:
    std::map<int, Timer *> timers;
    std::vector<Request *> requests;
    std::deque<Request *> deferred, ordered;
+   std::deque<ImageEvent> imageEvents;
    size_t offset;
    int rootKey;
    bool eof, ready, domReady, renderQueued, dirty, stopped, navigating, rendering, rendered;
@@ -214,6 +217,12 @@ public:
    void log(const std::string &message) { MSG_WARN("JavaScript [%s] %s\n", URL_STR(url), message.c_str()); }
    void title(const std::string &text) {
       a_UIcmd_set_page_title(bw, text.c_str()); a_History_set_title_by_url(url, text.c_str());
+   }
+   void imageEvent(int node, const char *type, unsigned width, unsigned height) {
+      if (stopped || !node || imageEvents.size() >= 10000) return;
+      ImageEvent event = {node, type ? type : "error", width, height};
+      imageEvents.push_back(event);
+      wake();
    }
    void changed() {
       dirty = true;
@@ -286,6 +295,8 @@ public:
          a_Nav_jump(d->bw, offset, 0);
    }
    std::string control(int node, const std::string &property, const std::string *value) {
+      if (property == "imagePreload" && value)
+         return a_Html_preload_image(view, value->c_str(), node) ? "1" : "0";
       if (property == "historyLength") return std::to_string(a_Nav_stack_size(bw));
       if (property == "historyState") return std::to_string(a_Nav_stack_ptr(bw)) + "\n" + a_Nav_history_state(bw);
       if ((property == "historyPush" || property == "historyReplace") && value) {
@@ -670,6 +681,17 @@ public:
       d->advance();
       d->engine.evaluate("__dillo.stylesheets()", "dillo:stylesheets");
       if (d->dirty) { d->dirty = false; d->render(); }
+      // Image-cache callbacks can arrive while a new HTML view is being
+      // built. Defer their JS events until its render stack has unwound.
+      while (!d->imageEvents.empty() && !d->stopped) {
+         ImageEvent event = d->imageEvents.front();
+         d->imageEvents.pop_front();
+         ++d->eventDepth;
+         d->engine.evaluate("__dillo.image(" + std::to_string(event.node) + ",\"" +
+            event.type + "\"," + std::to_string(event.width) + "," +
+            std::to_string(event.height) + ")", "dillo:image");
+         --d->eventDepth;
+      }
       d->maybeLoaded();
       if (d->engine.hasPendingJobs()) d->wake(.001);
       a_UIcmd_finish_loading(d->bw);
@@ -739,6 +761,11 @@ bool a_Javascript_event(JavascriptDocument *d, int node, const char *type)
    bool result = d->engine.event(node, type); --d->eventDepth;
    if (d->engine.hasPendingJobs()) d->wake(.001);
    return result;
+}
+void a_Javascript_image_event(JavascriptDocument *d, int node,
+                              const char *type, unsigned width, unsigned height)
+{
+   if (d) d->imageEvent(node, type, width, height);
 }
 bool a_Javascript_ui_event(void *data, int node, const char *type, const char *key, int code)
 {
@@ -816,6 +843,7 @@ void a_Javascript_delete(JavascriptDocument *, DilloHtml *) {}
 void a_Javascript_callback(int, CacheClient_t *) {}
 void a_Javascript_write(JavascriptDocument *, const char *, size_t, bool, int) {}
 void a_Javascript_render(JavascriptDocument *) {}
+void a_Javascript_image_event(JavascriptDocument *, int, const char *, unsigned, unsigned) {}
 bool a_Javascript_event(JavascriptDocument *, int, const char *) { return true; }
 bool a_Javascript_ui_event(void *, int, const char *, const char *, int) { return true; }
 int a_Javascript_node(JavascriptDocument *, const char *) { return 0; }

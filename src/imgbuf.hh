@@ -14,6 +14,9 @@ extern "C" {
 /*
  * Function prototypes
  */
+void a_Imgbuf_set_rasterizer(void *v_imgbuf,
+   int (*render)(void *, int, int, unsigned char *, int), void *source,
+   void (*destroy)(void *));
 void a_Imgbuf_ref(void *v_imgbuf);
 void a_Imgbuf_unref(void *v_imgbuf);
 void *a_Imgbuf_new(void *v_ir, int img_type, uint_t width, uint_t height,

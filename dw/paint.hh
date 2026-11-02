@@ -5,6 +5,8 @@
 #include "core.hh"
 
 namespace dw { namespace core { namespace style {
+void drawRoundedImage(View *view, Imgbuf *buffer, Rectangle *area,
+   int imageX, int imageY, int x, int y, int width, int height, const StyleAttrs *style);
 bool hasRoundedCorners(const StyleAttrs *style);
 void drawBoxShadows(View *view, Layout *layout, Rectangle *area,
    int x, int y, int width, int height, Style *style, bool inset, bool inverse);

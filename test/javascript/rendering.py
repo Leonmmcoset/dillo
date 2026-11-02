@@ -352,8 +352,8 @@ def main():
                  [(50,25,(0,0,255))]),
                 ('layer-unknown', 'background:blue;background:linear-gradient(red,red),unknown',
                  [(50,25,(0,0,255))]),
-                ('layer-url-unsupported', 'background:blue;background:linear-gradient(red,red),url(tile.svg)',
-                 [(50,25,(0,0,255))]),
+                ('layer-url-supported', 'background:blue;background:url(tile.svg),linear-gradient(red,red)',
+                 [(50,25,(224,32,48))]),
                 ('clip-invalid-list', 'border:5px solid transparent;background:red;background-clip:content-box,invalid',
                  [(1,25,(255,0,0))]),
                 ('layer-reset', 'border:5px solid transparent;background:linear-gradient(red,red) content-box,linear-gradient(blue,blue) content-box;background:lime',
@@ -797,6 +797,25 @@ def main():
             check(len(events) == 1 and events[0]['target'] == 'mouse-button' and
                   all(events[0][key] == 0 for key in ['clientX','clientY','pageX','pageY','screenX','screenY','detail']),
                   'native keyboard activation does not inherit the last mouse coordinates', events)
+            command('eval', '''globalThis.detachedImage=new Image();globalThis.detachedImageEvents=[];
+              detachedImage.onload=()=>detachedImageEvents.push('load');
+              detachedImage.onerror=()=>detachedImageEvents.push('error');
+              detachedImage.src='tile.svg?detached-image';'''.replace('\n', ' '))
+            for _ in range(60):
+                if evaluate('detachedImage.complete'):
+                    break
+                time.sleep(.05)
+            check(evaluate('[detachedImage.complete,detachedImage.naturalWidth,detachedImage.naturalHeight,detachedImageEvents]') ==
+                  [True,80,60,['load']], 'detached Image src assignment loads and dispatches load')
+            command('eval', '''globalThis.detachedAttributeImage=new Image();globalThis.detachedAttributeEvents=[];
+              detachedAttributeImage.onload=()=>detachedAttributeEvents.push('load');
+              detachedAttributeImage.setAttribute('src','tile.svg?detached-attribute');'''.replace('\n', ' '))
+            for _ in range(60):
+                if evaluate('detachedAttributeImage.complete'):
+                    break
+                time.sleep(.05)
+            check(evaluate('[detachedAttributeImage.complete,detachedAttributeImage.naturalWidth,detachedAttributeEvents]') ==
+                  [True,80,['load']], 'detached Image setAttribute starts loading')
             command('quit')
             check(browser.wait(timeout=8) == 0, 'clean browser shutdown')
             log.flush()

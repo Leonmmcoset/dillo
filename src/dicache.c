@@ -275,12 +275,11 @@ void a_Dicache_set_parms(DilloUrl *url, int version, DilloImage *Image,
 
    _MSG("  RefCount=%d version=%d\n", DicEntry->RefCount, DicEntry->version);
 
-   /* BUG: there's just one image-type now */
-   #define I_RGB 0
    DicEntry->v_imgbuf =
-      a_Imgbuf_new(Image->layout, I_RGB, width, height, gamma);
+      a_Imgbuf_new(Image->layout, type, width, height, gamma);
 
-   DicEntry->TotalSize = width * height * 3;
+   DicEntry->TotalSize = width * height *
+      ((type == DILLO_IMG_TYPE_RGBA || type == DILLO_IMG_TYPE_INDEXED) ? 4 : 3);
    DicEntry->width = width;
    DicEntry->height = height;
    DicEntry->type = type;
@@ -303,13 +302,13 @@ void a_Dicache_set_cmap(DilloUrl *url, int version, int bg_color,
    dReturn_if_fail ( DicEntry != NULL );
 
    dFree(DicEntry->cmap);
-   DicEntry->cmap = dNew0(uchar_t, 3 * num_colors_max);
-   memcpy(DicEntry->cmap, cmap, 3 * num_colors);
-   if (bg_index >= 0 && (uint_t)bg_index < num_colors) {
-      DicEntry->cmap[bg_index * 3]     = (bg_color >> 16) & 0xff;
-      DicEntry->cmap[bg_index * 3 + 1] = (bg_color >> 8) & 0xff;
-      DicEntry->cmap[bg_index * 3 + 2] = (bg_color) & 0xff;
+   /* Keep the palette's alpha independent of the first embedding widget. */
+   DicEntry->cmap = dNew0(uchar_t, 4 * num_colors_max);
+   for (uint_t i = 0; i < num_colors; ++i) {
+      memcpy(DicEntry->cmap + 4 * i, cmap + 3 * i, 3);
+      DicEntry->cmap[4 * i + 3] = ((int)i == bg_index) ? 0 : 255;
    }
+   (void) bg_color;
 
    DicEntry->State = DIC_SetCmap;
 }
@@ -530,7 +529,7 @@ void a_Dicache_callback(int Op, CacheClient_t *Client)
    }
 
    /* when the data stream is not an image 'v_imgbuf' remains NULL */
-   if (Op == CA_Send && DicEntry->v_imgbuf) {
+   if ((Op == CA_Send || Op == CA_Close) && DicEntry->v_imgbuf) {
       if (Image->height == 0 && DicEntry->State >= DIC_SetParms) {
          /* Set parms */
          a_Image_set_parms(
@@ -538,7 +537,7 @@ void a_Dicache_callback(int Op, CacheClient_t *Client)
             DicEntry->version, DicEntry->width, DicEntry->height,
             DicEntry->type);
       }
-      if (DicEntry->State == DIC_Write) {
+      if (DicEntry->State == DIC_Write || DicEntry->State == DIC_Close) {
          if (DicEntry->ScanNumber == Image->ScanNumber) {
             for (i = 0; i < DicEntry->height; ++i)
                if (a_Bitvec_get_bit(DicEntry->BitVec, (int)i) &&
@@ -557,7 +556,8 @@ void a_Dicache_callback(int Op, CacheClient_t *Client)
             Image->ScanNumber = DicEntry->ScanNumber;
          }
       }
-   } else if (Op == CA_Close) {
+   }
+   if (Op == CA_Close) {
       a_Image_close(Image);
       a_Bw_close_client(Web->bw, Client->Key);
    } else if (Op == CA_Abort) {

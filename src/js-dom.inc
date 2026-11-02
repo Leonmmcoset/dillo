@@ -32,6 +32,7 @@ const native = globalThis.__native;
 delete globalThis.__native;
 const cache = new Map(), listeners = new WeakMap(), timers = new Map(), requests = new Map();
 const documentRoots = new Map();
+const imageState = new WeakMap(), imageDecodes = new WeakMap();
 let nextTimer = 1, nextRequest = 1, state = 'loading', activeElement = null;
 const mutationObservers = new Set();
 const cssName = name => String(name).replace(/[A-Z]/g, c => '-' + c.toLowerCase());
@@ -354,8 +355,9 @@ class Element extends Node {
     setAttribute(name, value) {
         name = String(name).toLowerCase(); const oldValue = this.getAttribute(name);
         native('setattr', this._id, name, String(value)); notify(this, 'attributes', {attributeName: name, oldValue});
+        if(name==='src'&&this.localName==='img')this._imageSourceChanged(oldValue);
     }
-    removeAttribute(name) { const oldValue = this.getAttribute(name); native('removeattr', this._id, String(name)); notify(this, 'attributes', {attributeName:name,oldValue}); }
+    removeAttribute(name) { name=String(name).toLowerCase();const oldValue = this.getAttribute(name); native('removeattr', this._id, name); notify(this, 'attributes', {attributeName:name,oldValue});if(name==='src'&&this.localName==='img')this._imageSourceChanged(oldValue); }
     getAttributeNS(_, name) { return this.getAttribute(name); }
     setAttributeNS(_, name, value) { this.setAttribute(name, value); }
     removeAttributeNS(_, name) { this.removeAttribute(name); }
@@ -514,7 +516,25 @@ class Element extends Node {
     requestSubmit(submitter=null) { const event=new Event('submit',{bubbles:true,cancelable:true});event.submitter=submitter;if(this.dispatchEvent(event))this.submit(submitter); }
     reset() { if(this.dispatchEvent(new Event('reset',{bubbles:true,cancelable:true})))for(const e of this.elements){e.value=e.defaultValue;e.checked=e.defaultChecked;if(e.localName==='select')for(const o of e.options)o.selected=o.defaultSelected;} }
     get href() { const value = this.getAttribute('href'); return value == null ? '' : new URL(value, document.baseURI).href; } set href(v) { this.setAttribute('href', v); }
+    _imageSourceChanged(oldValue) {
+        const oldSrc=oldValue==null?'':new URL(oldValue,document.baseURI).href,src=this.src;
+        if(oldSrc===src)return;
+        imageState.delete(this);
+        const pending=imageDecodes.get(this)||[];imageDecodes.delete(this);
+        for(const item of pending)item.reject(new TypeError('Image source changed before decoding'));
+        if(!src||this.isConnected)return;
+        const started=native('control',this._id,'imagePreload',src);
+        if(started!=='1')__dillo.image(this._id,'error',0,0);
+    }
     get src() { const value = this.getAttribute('src'); return value == null ? '' : new URL(value, document.baseURI).href; } set src(v) { this.setAttribute('src', v); }
+    get naturalWidth() { return imageState.get(this)?.width || 0; }
+    get naturalHeight() { return imageState.get(this)?.height || 0; }
+    get complete() { return imageState.has(this) ? true : !this.hasAttribute('src') && !this.hasAttribute('srcset'); }
+    decode() {
+        if (this.complete && this.naturalWidth) return Promise.resolve();
+        if (imageState.get(this)?.error) return Promise.reject(new TypeError('Image could not be decoded'));
+        return new Promise((resolve,reject)=>{let list=imageDecodes.get(this);if(!list)imageDecodes.set(this,list=[]);list.push({resolve,reject});});
+    }
     get action() { return new URL(this.getAttribute('action') || document.URL, document.baseURI).href; } set action(v) { this.setAttribute('action', v); }
     get text() { return this.textContent; } set text(v) { this.textContent = v; }
 }
@@ -881,6 +901,15 @@ globalThis.__dillo = {
             if(!sheet&&link._sheetStatus!=='\x03')continue;
             link._loadedHref=link.href;link.dispatchEvent(new Event(sheet?'load':'error'));
         }
+    },
+    image(id,type,width,height) {
+        const node=wrap(id);if(!node)return;
+        const src=node.src||node.getAttribute('srcset')||'';
+        if(imageState.get(node)?.src===src)return;
+        if(type==='load')imageState.set(node,{width,height,src});else imageState.set(node,{width:0,height:0,error:true,src});
+        const pending=imageDecodes.get(node)||[];imageDecodes.delete(node);
+        for(const item of pending)type==='load'?item.resolve():item.reject(new TypeError('Image could not be decoded'));
+        node.dispatchEvent(new Event(type));
     },
     event(id,type,key='',code=0,options={}) {
         const node=id?wrap(id):globalThis;

@@ -567,6 +567,9 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
          case CSS_PROPERTY_BACKGROUND_SIZE: attrs->backgroundSize = value.backgroundSize; break;
          case CSS_PROPERTY_BACKGROUND_REPEAT: attrs->backgroundRepeat = value.backgroundRepeat; break;
          case CSS_PROPERTY_BACKGROUND_ATTACHMENT: attrs->backgroundAttachment = value.backgroundAttachment; break;
+         case CSS_PROPERTY_OBJECT_FIT: attrs->objectFit = value.objectFit; break;
+         case CSS_PROPERTY_OBJECT_POSITION:
+            attrs->objectPositionX = value.objectPositionX; attrs->objectPositionY = value.objectPositionY; break;
          case CSS_PROPERTY_BACKGROUND_POSITION:
             attrs->backgroundPositionX = value.backgroundPositionX;
             attrs->backgroundPositionY = value.backgroundPositionY; break;
@@ -618,6 +621,11 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
             if (!computeTracks(p->value.strVal, attrs->container.rowTracks, &attrs->container.rows, attrs->font)) attrs->container.rows = 0;
             break;
          /* \todo missing cases */
+         case CSS_PROPERTY_OBJECT_FIT:
+            attrs->objectFit = (StyleAttrs::ObjectFit)p->value.intVal; break;
+         case CSS_PROPERTY_OBJECT_POSITION:
+            computeLength(&attrs->objectPositionX, p->value.posVal->posX, attrs->font);
+            computeLength(&attrs->objectPositionY, p->value.posVal->posY, attrs->font); break;
          case CSS_PROPERTY_BACKGROUND_ATTACHMENT:
             attrs->backgroundAttachment =
                (BackgroundAttachment) p->value.intVal;
@@ -655,7 +663,16 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
             attrs->backgroundImage = NULL;
             attrs->backgroundLayers.clear();
             if (p->type == CSS_TYPE_BACKGROUND_IMAGES) {
-               for (const CssGradient &g : p->value.imagesVal->layers) {
+               const CssBackgroundImages &images = *p->value.imagesVal;
+               for (unsigned layer = 0; layer < images.layers.size(); ++layer) {
+                  if (layer < images.isUrl.size() && images.isUrl[layer]) {
+                     // Keep the first URL as the native bitmap layer. Additional
+                     // URL layers remain unsupported, but do not discard gradients.
+                     if (layer == 0 && layer < images.urls.size())
+                        imgUrl = a_Url_new(images.urls[layer].c_str(), NULL);
+                     continue;
+                  }
+                  const CssGradient &g = images.layers[layer];
                   Gradient gradient = {};
                   gradient.count = g.count;
                   gradient.angle = g.angle;

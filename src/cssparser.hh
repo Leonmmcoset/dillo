@@ -39,7 +39,7 @@ class CssParser {
       bool parseCalcAtom(CssLength *value, unsigned depth);
       bool parseTransform(CssTransform *value);
       bool parseGradient(CssGradient *value);
-      bool parseBackgroundImage(CssGradient *value);
+      bool parseBackgroundImage(CssGradient *value, std::string *url = NULL);
       int backgroundBox();
       bool parseBackgroundSize(CssBackgroundSizes::Size *size);
       bool parseColor(unsigned *rgba);

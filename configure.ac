@@ -518,6 +518,26 @@ if test "x$enable_gif" = "xyes"; then
   AC_DEFINE([ENABLE_GIF], [1], [Enable GIF images])
 fi
 
+AC_ARG_ENABLE([rsvg],
+  [AS_HELP_STRING([--disable-rsvg], [Use the minimal NanoSVG backend instead of librsvg])],
+  [enable_rsvg=$enableval], [enable_rsvg=auto])
+SVG_CFLAGS=""
+SVG_LIBS=""
+rsvg_ok=no
+AS_IF([test "x$enable_svg" = xyes && test "x$enable_rsvg" != xno], [
+  AC_PATH_PROG([PKG_CONFIG], [pkg-config])
+  AS_IF([test -n "$PKG_CONFIG" && $PKG_CONFIG --atleast-version=2.52 librsvg-2.0], [
+    SVG_CFLAGS=`$PKG_CONFIG --cflags librsvg-2.0`
+    SVG_LIBS=`$PKG_CONFIG --libs librsvg-2.0`
+    rsvg_ok=yes
+    AC_DEFINE([HAVE_RSVG], [1], [Use librsvg for SVG rendering])
+  ])
+])
+AS_IF([test "x$enable_rsvg" = xyes && test "x$rsvg_ok" != xyes],
+  [AC_MSG_ERROR([librsvg >= 2.52 development package is required])])
+AC_SUBST([SVG_CFLAGS])
+AC_SUBST([SVG_LIBS])
+
 dnl Check if support for SVG images should be compiled in
 if test "x$enable_svg" = "xyes"; then
   AC_DEFINE([ENABLE_SVG], [1], [Enable SVG images])
@@ -1025,7 +1045,7 @@ _AS_ECHO([  XEmbed enabled : ${enable_xembed}])
 _AS_ECHO([  JPEG enabled   : ${jpeg_ok}])
 _AS_ECHO([  PNG enabled    : ${png_ok}])
 _AS_ECHO([  GIF enabled    : ${enable_gif}])
-_AS_ECHO([  SVG enabled    : ${enable_svg}])
+_AS_ECHO([  SVG enabled    : ${enable_svg} (librsvg: ${rsvg_ok})])
 _AS_ECHO([  WEBP enabled   : ${webp_ok}])
 _AS_ECHO([  Brotli enabled : ${brotli_ok}])
 _AS_ECHO([  IPv6 enabled   : ${enable_ipv6}])

@@ -36,7 +36,7 @@ static uchar_t *Imgbuf_rgb_line(const uchar_t *buf,
    case DILLO_IMG_TYPE_INDEXED:
       if (cmap) {
          for (x = 0; x < width; x++)
-            memcpy(linebuf + x * 3, cmap + buf[x] * 3, 3);
+            memcpy(linebuf + x * 4, cmap + buf[x] * 4, 4);
       } else {
          MSG_WARN("Gif:: image lacks a color map\n");
       }
@@ -58,6 +58,7 @@ static uchar_t *Imgbuf_rgb_line(const uchar_t *buf,
          linebuf[x * 3 + 2] = buf[x * 4 + 2] * white / 0x100;
       }
       break;
+   case DILLO_IMG_TYPE_RGBA:
    case DILLO_IMG_TYPE_RGB:
       /* avoid a memcpy here!  --Jcid */
       return (uchar_t *)buf;
@@ -73,6 +74,12 @@ static uchar_t *Imgbuf_rgb_line(const uchar_t *buf,
 /**
  * Increment reference count for an Imgbuf
  */
+void a_Imgbuf_set_rasterizer(void *v_imgbuf, Imgbuf::Rasterizer render,
+   void *source, Imgbuf::RasterizerFree destroy)
+{
+   ((Imgbuf *)v_imgbuf)->setRasterizer(render, source, destroy);
+}
+
 void a_Imgbuf_ref(void *v_imgbuf)
 {
    ((Imgbuf*)v_imgbuf)->ref();
@@ -98,12 +105,14 @@ void *a_Imgbuf_new(void *layout, int img_type, uint_t width, uint_t height,
       exit(1);
    }
    // Assert linebuf is wide enough.
-   if (3 * width > linebuf_size) {
-      linebuf_size = 3 * width;
+   if (4 * width > linebuf_size) {
+      linebuf_size = 4 * width;
       linebuf = (uchar_t*) dRealloc(linebuf, linebuf_size);
    }
 
-   return (void*)((Layout*)layout)->createImgbuf(Imgbuf::RGB, width, height,
+   return (void*)((Layout*)layout)->createImgbuf(
+      img_type == DILLO_IMG_TYPE_RGBA || img_type == DILLO_IMG_TYPE_INDEXED ?
+         Imgbuf::RGBA : Imgbuf::RGB, width, height,
                                                  gamma);
 }
 

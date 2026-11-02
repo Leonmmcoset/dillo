@@ -121,6 +121,7 @@ void FltkImgbuf::init (Type type, int width, int height, double gamma,
       MSG("FltkImgbuf::init: non-positive gamma %g\n", gamma);
       init (type, width, height, 1, root);
    } else {
+      rasterizer = NULL; rasterizerFree = NULL; vectorSource = NULL;
       this->root = root;
       this->type = type;
       this->width = width;
@@ -140,7 +141,7 @@ void FltkImgbuf::init (Type type, int width, int height, double gamma,
            this, width, height, bpp, gamma);
       rawdata = new uchar[bpp * width * height];
       // Set light-gray as interim background color.
-      memset(rawdata, 222, width*height*bpp);
+      memset(rawdata, type == RGBA ? 0 : 222, width*height*bpp);
 
       refCount = 1;
       deleteOnUnref = true;
@@ -175,6 +176,7 @@ FltkImgbuf::~FltkImgbuf ()
    if (!isRoot())
       root->detachScaledBuf (this);
 
+   if (rasterizerFree) rasterizerFree(vectorSource);
    delete[] rawdata;
    delete copiedRows;
 
@@ -200,6 +202,13 @@ void FltkImgbuf::detachScaledBuf (FltkImgbuf *scaledBuf)
       // buffer.
       // See also: FltkImgbuf::unref().
       delete this;
+}
+
+void FltkImgbuf::setRasterizer(Rasterizer render, void *source, RasterizerFree destroy)
+{
+   assert(isRoot());
+   if (rasterizerFree) rasterizerFree(vectorSource);
+   rasterizer = render; vectorSource = source; rasterizerFree = destroy;
 }
 
 void FltkImgbuf::setCMap (int *colors, int num_colors)
@@ -334,21 +343,36 @@ inline void FltkImgbuf::scaleBuffer (const core::byte *src, int srcWidth,
          int yo2 = lout::misc::max ((y + 1) * srcHeight / destHeight, yo1 + 1);
          int n = (xo2 - xo1) * (yo2 - yo1);
 
-         for(int i = 0; i < bpp; i++)
-            v[i] = 0;
-
-         for(int xo = xo1; xo < xo2; xo++)
-            for(int yo = yo1; yo < yo2; yo++) {
-               const core::byte *ps = src + bpp * (yo * srcWidth + xo);
-               for(int i = 0; i < bpp; i++)
-                  v[i] +=
-                     (scaleMode == BEAUTIFUL_GAMMA ? gammaMap2[ps[i]] : ps[i]);
+         if (bpp == 4) {
+            // Average premultiplied colors, but store straight RGBA. Hidden
+            // colors in transparent pixels must not bleed into visible edges.
+            unsigned long long sums[4] = {0, 0, 0, 0};
+            for (int xo = xo1; xo < xo2; ++xo)
+               for (int yo = yo1; yo < yo2; ++yo) {
+                  const core::byte *ps = src + 4 * (yo * srcWidth + xo);
+                  sums[3] += ps[3];
+                  for (int i = 0; i < 3; ++i)
+                     sums[i] += (scaleMode == BEAUTIFUL_GAMMA ?
+                        gammaMap2[ps[i]] : ps[i]) * ps[3];
+               }
+            core::byte *pd = dest + 4 * (y * destWidth + x);
+            pd[3] = sums[3] / n;
+            for (int i = 0; i < 3; ++i) {
+               unsigned value = sums[3] ? sums[i] / sums[3] : 0;
+               pd[i] = scaleMode == BEAUTIFUL_GAMMA ? gammaMap1[value] : value;
             }
-
-         core::byte *pd = dest + bpp * (y * destWidth + x);
-         for(int i = 0; i < bpp; i++)
-            pd[i] =
-               scaleMode == BEAUTIFUL_GAMMA ? gammaMap1[v[i] / n] : v[i] / n;
+         } else {
+            for(int i = 0; i < bpp; i++) v[i] = 0;
+            for(int xo = xo1; xo < xo2; xo++)
+               for(int yo = yo1; yo < yo2; yo++) {
+                  const core::byte *ps = src + bpp * (yo * srcWidth + xo);
+                  for(int i = 0; i < bpp; i++)
+                     v[i] += scaleMode == BEAUTIFUL_GAMMA ? gammaMap2[ps[i]] : ps[i];
+               }
+            core::byte *pd = dest + bpp * (y * destWidth + x);
+            for(int i = 0; i < bpp; i++)
+               pd[i] = scaleMode == BEAUTIFUL_GAMMA ? gammaMap1[v[i] / n] : v[i] / n;
+         }
       }
    }
    delete[] v;
@@ -435,6 +459,10 @@ core::Imgbuf* FltkImgbuf::getScaledBuf (int width, int height)
 
    // This size is not yet used, so a new buffer has to be created.
    FltkImgbuf *sb = new FltkImgbuf (type, width, height, gamma, this);
+   if (rasterizer && bpp == 4 &&
+       rasterizer(vectorSource, width, height, sb->rawdata, width * 4)) {
+      for (int row = 0; row < height; ++row) sb->copiedRows->set(row, true);
+   }
    scaledBuffers->append (sb);
    DBG_OBJ_ASSOC_CHILD (sb);
 

@@ -176,6 +176,8 @@ static const char *const Css_box_alignment_vals[] = {
 static const char *const Css_flex_direction_vals[] = {"row", "row-reverse", "column", "column-reverse", NULL};
 static const char *const Css_flex_wrap_vals[] = {"nowrap", "wrap", "wrap-reverse", NULL};
 
+static const char *const Css_object_fit_vals[] = {"fill", "contain", "cover", "none", "scale-down", NULL};
+
 const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
    {"align-content", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_box_alignment_vals},
    {"align-items", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_box_alignment_vals},
@@ -286,6 +288,8 @@ const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
     NULL},
    {"min-width", {CSS_TYPE_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED},
     NULL},
+   {"object-fit", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_object_fit_vals},
+   {"object-position", {CSS_TYPE_BACKGROUND_POSITION, CSS_TYPE_UNUSED}, NULL},
    {"order", {CSS_TYPE_INTEGER, CSS_TYPE_UNUSED}, NULL},
    {"outline-color", {CSS_TYPE_RGBA, CSS_TYPE_UNUSED}, NULL},
    {"outline-offset", {CSS_TYPE_SIGNED_LENGTH, CSS_TYPE_UNUSED}, NULL},
@@ -806,7 +810,8 @@ bool CssParser::tokenMatchesProperty(CssPropertyName prop, CssValueType *type)
          break;
       case CSS_TYPE_BACKGROUND_IMAGES:
          if (ttype == CSS_TK_SYMBOL && (!dStrAsciiCasecmp(tval, "linear-gradient") ||
-             !dStrAsciiCasecmp(tval, "repeating-linear-gradient") || !dStrAsciiCasecmp(tval, "none"))) return true;
+             !dStrAsciiCasecmp(tval, "repeating-linear-gradient") || !dStrAsciiCasecmp(tval, "none") ||
+             !dStrAsciiCasecmp(tval, "url"))) return true;
          break;
       case CSS_TYPE_BACKGROUND_BOXES:
          if (backgroundBox() >= 0) return true;
@@ -1181,10 +1186,16 @@ int CssParser::backgroundBox()
    return -1;
 }
 
-bool CssParser::parseBackgroundImage(CssGradient *value)
+bool CssParser::parseBackgroundImage(CssGradient *value, std::string *url)
 {
    if (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "none")) {
       nextToken(); return true;
+   }
+   if (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "url")) {
+      char *parsed = parseUrl();
+      if (!parsed) return false;
+      if (url) *url = parsed;
+      dFree(parsed); nextToken(); return true;
    }
    if (ttype != CSS_TK_SYMBOL || (dStrAsciiCasecmp(tval, "linear-gradient") &&
        dStrAsciiCasecmp(tval, "repeating-linear-gradient"))) return false;
@@ -1484,9 +1495,12 @@ bool CssParser::parseValue(CssPropertyName prop,
       CssBackgroundImages images;
       for (;;) {
          CssGradient gradient = {};
+         std::string url;
          if (images.layers.size() == CssBackgroundImages::MAX_LAYERS ||
-             !parseBackgroundImage(&gradient)) return false;
+             !parseBackgroundImage(&gradient, &url)) return false;
          images.layers.push_back(gradient);
+         images.urls.push_back(url);
+         images.isUrl.push_back(!url.empty());
          if (ttype != CSS_TK_CHAR || tval[0] != ',') break;
          nextToken();
       }
@@ -1892,7 +1906,7 @@ void CssParser::parseDeclaration(CssPropertyList *props,
                   CssBackgroundImages images;
                   CssBackgroundBoxes origins = {}, clips = {};
                   CssBackgroundSizes sizes = {};
-                  bool valid = true, any = false, uri = false, legacyPosition = false;
+                  bool valid = true, any = false, legacyPosition = false;
                   do {
                      CssGradient image = {};
                      CssBackgroundSizes::Size size = {};
@@ -1921,12 +1935,14 @@ void CssParser::parseDeclaration(CssPropertyList *props,
                            if (!seen[n] && tokenMatchesProperty(name, &type)) {
                               matched = true;
                               if (name == CSS_PROPERTY_BACKGROUND_IMAGE && type == CSS_TYPE_BACKGROUND_IMAGES) {
-                                 valid = parseBackgroundImage(&image);
+                                 std::string layerUrl;
+                                 valid = parseBackgroundImage(&image, &layerUrl);
+                                 images.urls.push_back(layerUrl);
+                                 images.isUrl.push_back(!layerUrl.empty());
                               } else {
                                  CssPropertyValue part;
                                  valid = parseValue(name, type, &part);
                                  if (valid) parsed.set(name, type, part);
-                                 if (name == CSS_PROPERTY_BACKGROUND_IMAGE) uri = true;
                                  if (n >= 2) legacyPosition = true;
                               }
                               seen[n] = layer = true;
@@ -1947,14 +1963,14 @@ void CssParser::parseDeclaration(CssPropertyList *props,
                      nextToken();
                   } while (true);
                   // URL images and their positioning retain the existing single-layer path.
-                  if (images.layers.size() > 1 && (uri || legacyPosition)) valid = false;
+                  if (images.layers.size() > 1 && legacyPosition) valid = false;
                   bool bang = ttype == CSS_TK_CHAR && tval[0] == '!';
                   weight = parseWeight();
                   if (bang && !weight) valid = false;
                   if (ttype != CSS_TK_END && !(ttype == CSS_TK_CHAR && (tval[0] == ';' || tval[0] == '}'))) valid = false;
                   if (valid && any) {
                      CssPropertyValue part;
-                     if (!uri) {
+                     if (!images.layers.empty()) {
                         part.imagesVal = new CssBackgroundImages(images);
                         parsed.set(CSS_PROPERTY_BACKGROUND_IMAGE, CSS_TYPE_BACKGROUND_IMAGES, part);
                      }

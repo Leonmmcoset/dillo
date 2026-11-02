@@ -491,6 +491,10 @@ struct JsEngine::Impl {
       if (key.size() + value.size() > MaxText - std::min(s->textTotal, MaxText))
          return JS_ThrowRangeError(ctx, "Document text limit exceeded");
       if (!s->budget()) return JS_ThrowRangeError(ctx, "Document allocation limit exceeded");
+      // Detached node updates do not affect layout until they are inserted.
+      // Avoid replacing the live view for each new Image/src assignment so
+      // its in-flight image preload remains attached to this document.
+      bool affectsDocument = s->connected(n);
       if (op == "setattr" || op == "removeattr") {
          if (n->type != LXB_DOM_NODE_TYPE_ELEMENT)
             return JS_ThrowTypeError(ctx, "Attributes require an element");
@@ -557,7 +561,7 @@ struct JsEngine::Impl {
       else return JS_ThrowTypeError(ctx, "Unknown DOM operation");
       s->textTotal += key.size() + value.size();
       ++s->revision;
-      s->host->changed();
+      if (affectsDocument) s->host->changed();
       return JS_UNDEFINED;
    }
 };
@@ -698,6 +702,41 @@ std::string JsEngine::serialize(bool rendering)
       for (lxb_dom_node_t *child = node->first_child; child; child = child->next) todo.push_back(child);
    }
    std::string html = impl->serialize(lxb_dom_interface_node(impl->document), true);
+   // The native HTML tree has no SVG widget. Preserve the live DOM for
+   // scripts, while giving the renderer an SVG resource for inline SVG. Skip
+   // raw-text and comment contents, where literal <svg strings are not tags.
+   for (size_t pos = 0; (pos = html.find("<svg", pos)) != std::string::npos;) {
+      size_t commentOpen = html.rfind("<!--", pos), commentClose = html.rfind("-->", pos);
+      size_t scriptOpen = html.rfind("<script", pos), scriptClose = html.rfind("</script", pos);
+      size_t styleOpen = html.rfind("<style", pos), styleClose = html.rfind("</style", pos);
+      if ((commentOpen != std::string::npos && (commentClose == std::string::npos || commentOpen > commentClose)) ||
+          (scriptOpen != std::string::npos && (scriptClose == std::string::npos || scriptOpen > scriptClose)) ||
+          (styleOpen != std::string::npos && (styleClose == std::string::npos || styleOpen > styleClose))) {
+         size_t end = html.find('>', pos);
+         if (end == std::string::npos) break;
+         pos = end + 1; continue;
+      }
+      size_t openEnd = html.find('>', pos);
+      if (openEnd == std::string::npos) break;
+      size_t close = html.find("</svg", openEnd + 1);
+      if (close == std::string::npos) break;
+      size_t closeEnd = html.find('>', close);
+      if (closeEnd == std::string::npos) break;
+      std::string svg = html.substr(pos, closeEnd - pos + 1);
+      std::string encoded;
+      const char hex[] = "0123456789ABCDEF";
+      for (size_t i = 0; i < svg.size(); ++i) {
+         unsigned char c = static_cast<unsigned char>(svg[i]);
+         if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+             (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' ||
+             c == '/' || c == ':' || c == '#' || c == ';' || c == ',' ||
+             c == '=' || c == ' ' || c == '\n' || c == '\r') encoded += c;
+         else { encoded += '%'; encoded += hex[c >> 4]; encoded += hex[c & 15]; }
+      }
+      std::string replacement = "<img src=\"data:image/svg+xml," + encoded + "\">";
+      html.replace(pos, closeEnd - pos + 1, replacement);
+      pos += replacement.size();
+   }
    for (size_t i = 0; i < saved.size(); ++i) {
       if (saved[i].had) lxb_dom_element_set_attribute(lxb_dom_interface_element(saved[i].node),
          bytes(saved[i].name), saved[i].name.size(), bytes(saved[i].value), saved[i].value.size());

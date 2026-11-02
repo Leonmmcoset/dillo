@@ -27,6 +27,7 @@ extern "C" {
  * Exported functions
  */
 void a_Html_load_images(void *v_html, DilloUrl *pattern);
+int a_Html_preload_image(void *v_html, const char *url, int node);
 bool_t a_Html_has_form_controls(void *v_html);
 void a_Html_form_submit(void *v_html, void *v_form);
 void a_Html_form_reset(void *v_html, void *v_form);

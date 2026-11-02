@@ -65,7 +65,6 @@ typedef struct {
    DilloImage *Image;           /**< Image meta data */
    DilloUrl *url;               /**< Primary Key for the dicache */
    int version;                 /**< Secondary Key for the dicache */
-   int bgcolor;                 /**< Parent widget background color */
 
    png_uint_32 width;           /**< png image width */
    png_uint_32 height;          /**< png image height */
@@ -94,7 +93,6 @@ typedef struct {
 
    enum prog_state state;       /**< FSM current state  */
 
-   uchar_t *linebuf;            /**< o/p raster data */
 
 } DilloPng;
 
@@ -211,12 +209,12 @@ Png_datainfo_callback(png_structp png_ptr, png_infop info_ptr)
    for (i = 0; i < png->height; i++)
       png->row_pointers[i] = png->image_data + (i * png->rowbytes);
 
-   png->linebuf = dMalloc(3 * png->width);
 
    /* Initialize the dicache-entry here */
    a_Dicache_set_parms(png->url, png->version, png->Image,
                        (uint_t)png->width, (uint_t)png->height,
-                       DILLO_IMG_TYPE_RGB, file_gamma);
+                       png->channels == 4 ? DILLO_IMG_TYPE_RGBA :
+                          DILLO_IMG_TYPE_RGB, file_gamma);
    png->Image = NULL; /* safeguard: hereafter it may be freed by its owner */
 }
 
@@ -225,7 +223,6 @@ static void
                       png_uint_32 row_num, int pass)
 {
    DilloPng *png;
-   uint_t i;
 
    if (!new_row)                /* work to do? */
       return;
@@ -244,47 +241,11 @@ static void
 
    switch (png->channels) {
    case 3:
+   case 4:
       a_Dicache_write(png->url, png->version,
                       png->image_data + (row_num * png->rowbytes),
                       (uint_t)row_num);
       break;
-   case 4:
-     {
-        /* TODO: get the background color from the parent
-         * of the image widget -- Livio.                 */
-        int a, bg_red, bg_green, bg_blue;
-        uchar_t *pl = png->linebuf;
-        uchar_t *data = png->image_data + (row_num * png->rowbytes);
-
-        /* TODO: maybe change prefs.bg_color to `a_Dw_widget_get_bg_color`,
-         * when background colors are correctly implemented */
-        bg_blue  = (png->bgcolor) & 0xFF;
-        bg_green = (png->bgcolor>>8) & 0xFF;
-        bg_red   = (png->bgcolor>>16) & 0xFF;
-
-        for (i = 0; i < png->width; i++) {
-           a = *(data+3);
-
-           if (a == 255) {
-              *(pl++) = *(data++);
-              *(pl++) = *(data++);
-              *(pl++) = *(data++);
-              data++;
-           } else if (a == 0) {
-              *(pl++) = bg_red;
-              *(pl++) = bg_green;
-              *(pl++) = bg_blue;
-              data += 4;
-           } else {
-              png_composite(*(pl++), *(data++), a, bg_red);
-              png_composite(*(pl++), *(data++), a, bg_green);
-              png_composite(*(pl++), *(data++), a, bg_blue);
-              data++;
-           }
-        }
-        a_Dicache_write(png->url, png->version, png->linebuf, (uint_t)row_num);
-        break;
-     }
    default:
       MSG("Png_datarow_callback: unexpected number of channels=%d pass=%d\n",
           png->channels, pass);
@@ -313,7 +274,6 @@ static void Png_free(DilloPng *png)
 
    dFree(png->image_data);
    dFree(png->row_pointers);
-   dFree(png->linebuf);
    if (setjmp(png->jmpbuf))
       MSG_WARN("PNG: can't destroy read structure\n");
    else if (png->png_ptr)
@@ -453,13 +413,11 @@ void *a_Png_new(DilloImage *Image, DilloUrl *url, int version)
    png->Image = Image;
    png->url = url;
    png->version = version;
-   png->bgcolor = Image->bg_color;
    png->error = 0;
    png->ipbuf = NULL;
    png->ipbufstart = 0;
    png->ipbufsize = 0;
    png->state = IS_init;
-   png->linebuf = NULL;
    png->image_data = NULL;
    png->row_pointers = NULL;
    png->previous_row = 0;

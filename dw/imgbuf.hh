@@ -177,6 +177,13 @@ public:
     * Methods called from the image decoding
     */
 
+   // A vector source can render at each requested size instead of magnifying
+   // its intrinsic bitmap. The root buffer owns the source and its destructor.
+   typedef int (*Rasterizer)(void *, int, int, unsigned char *, int);
+   typedef void (*RasterizerFree)(void *);
+   virtual void setRasterizer(Rasterizer render, void *source,
+                              RasterizerFree destroy) = 0;
+
    virtual void setCMap (int *colors, int num_colors) = 0;
    virtual void copyRow (int row, const byte *data) = 0;
    virtual void newScan () = 0;

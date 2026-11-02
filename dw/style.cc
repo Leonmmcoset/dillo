@@ -81,6 +81,8 @@ void StyleAttrs::initValues ()
    outline.width = 3;
    backgroundRepeat = BACKGROUND_REPEAT;
    backgroundAttachment = BACKGROUND_ATTACHMENT_SCROLL;
+   objectFit = OBJECT_FILL;
+   objectPositionX = objectPositionY = createPerLength(.5);
    backgroundPositionX = createPerLength (0);
    backgroundPositionY = createPerLength (0);
    width = height = lineHeight = LENGTH_AUTO;
@@ -149,6 +151,8 @@ void StyleAttrs::resetValues ()
    outline.width = 3;
    backgroundRepeat = BACKGROUND_REPEAT;
    backgroundAttachment = BACKGROUND_ATTACHMENT_SCROLL;
+   objectFit = OBJECT_FILL;
+   objectPositionX = objectPositionY = createPerLength(.5);
    backgroundPositionX = createPerLength (0);
    backgroundPositionY = createPerLength (0);
    width = LENGTH_AUTO;
@@ -214,6 +218,9 @@ bool StyleAttrs::equals (object::Object *other) {
        valign == otherAttrs->valign &&
        textAlignChar == otherAttrs->textAlignChar &&
        textTransform == otherAttrs->textTransform &&
+       objectFit == otherAttrs->objectFit &&
+       objectPositionX == otherAttrs->objectPositionX &&
+       objectPositionY == otherAttrs->objectPositionY &&
        vloat == otherAttrs->vloat &&
        clear == otherAttrs->clear &&
        overflow == otherAttrs->overflow &&
@@ -294,7 +301,7 @@ int StyleAttrs::hashValue () {
       textAlign +
       valign +
       textAlignChar +
-      textTransform +
+      textTransform + objectFit + objectPositionX + objectPositionY +
       vloat +
       clear +
       overflow +
@@ -434,6 +441,8 @@ void Style::copyAttrs (StyleAttrs *attrs)
    valign = attrs->valign;
    textAlignChar = attrs->textAlignChar;
    textTransform = attrs->textTransform;
+   objectFit = attrs->objectFit;
+   objectPositionX = attrs->objectPositionX; objectPositionY = attrs->objectPositionY;
    vloat = attrs->vloat;
    clear = attrs->clear;
    overflow = attrs->overflow;
@@ -690,7 +699,7 @@ void StyleImage::StyleImgRenderer::drawRow (int row)
       int h = image->imgbufSrc->getRootHeight ();
 
       for (int x = 0; x < image->tilesX; x++)
-         for (int y = 0; y < image->tilesX; y++)
+         for (int y = 0; y < image->tilesY; y++)
             image->imgbufSrc->copyTo (image->imgbufTiled, x * w, y * h,
                                       0, row, w, 1);
    }

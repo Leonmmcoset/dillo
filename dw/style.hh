@@ -643,6 +643,9 @@ public:
    VAlignType valign;
    char textAlignChar; /* In future, strings will be supported. */
    TextTransform textTransform;
+   enum ObjectFit { OBJECT_FILL, OBJECT_CONTAIN, OBJECT_COVER, OBJECT_NONE, OBJECT_SCALE_DOWN };
+   ObjectFit objectFit;
+   Length objectPositionX, objectPositionY;
 
    FloatType vloat; /* "float" is a keyword. */
    ClearType clear;
