@@ -24,7 +24,9 @@
 #define PREFS_NO_PROXY        "localhost 127.0.0.1"
 #define PREFS_SAVE_DIR        "/tmp/"
 #define PREFS_HTTP_REFERER    "host"
-#define PREFS_HTTP_USER_AGENT "Dillo/" VERSION
+#define PREFS_HTTP_USER_AGENT \
+   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
+   "(KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
 #define PREFS_THEME           "none"
 
 /*-----------------------------------------------------------------------------

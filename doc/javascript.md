@@ -228,12 +228,13 @@ immediate, without smooth scrolling or new scroll event notifications.
 
 ## Baidu acceptance status and remaining renderer work
 
-Live checks with Dillo's unchanged default user agent have reached rendered
-Baidu results using English Enter submission and English/Chinese button
-submission. A live Chinese button search also passed clicking Next, opening
-a result URL and using the browser Back button to return to the second result
-page. Native typing, Chinese clipboard input and the site's script-driven
-navigation are exercised. The homepage may redirect itself from HTTPS to HTTP.
+Earlier live checks with Dillo's former product-identifying user agent reached
+rendered Baidu results using English Enter submission and English/Chinese
+button submission. A live Chinese button search also passed clicking Next,
+opening a result URL and using the browser Back button to return to the second
+result page. Native typing, Chinese clipboard input and the site's
+script-driven navigation are exercised. The homepage may redirect itself from
+HTTPS to HTTP.
 Some live acceptance runs have been redirected to Baidu's CAPTCHA page; the
 full four-case search matrix has not passed in a single run. Opening a result
 checks navigation, not complete compatibility with the destination site.
@@ -266,6 +267,6 @@ compatibility goal.
 The layered-background regression includes Baidu's white padding-box gradient
 over its colored border-box gradient, avoiding the old solid blue fallback.
 An isolated live check on 2026-11-02 also completed Chinese input and button
-submission to rendered search results with the default user agent. This is one
-successful acceptance run, not a guarantee that future requests bypass CAPTCHA
-or that every page interaction is supported.
+submission to rendered search results with Dillo's former product-identifying
+user agent. This is one successful acceptance run, not a guarantee that future
+requests bypass CAPTCHA or that every page interaction is supported.
