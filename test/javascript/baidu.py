@@ -36,6 +36,11 @@ def main():
     output = output.resolve()
     print('Artifacts:', output, flush=True)
     env = os.environ.copy()
+    profile = tempfile.TemporaryDirectory(prefix='dillo-baidu-home-')
+    env['HOME'] = profile.name
+    config = Path(profile.name) / '.dillo'
+    config.mkdir()
+    (config / 'dillorc').write_text('javascript_enabled=YES\nload_images=YES\nload_background_images=YES\n')
     readfd, writefd = os.pipe()
     xlog = (output / 'xvfb.log').open('w')
     x = subprocess.Popen(['Xvfb', '-ac', '-noreset', '-nolisten', 'tcp', '-displayfd', str(writefd),
@@ -110,6 +115,9 @@ def main():
             wait_for("document.querySelector('#chat-textarea')&&document.readyState==='complete'", 'search input')
             click_element("document.querySelector('#chat-textarea')")
             wait_for("document.activeElement?.id==='chat-textarea'", 'mouse focus')
+            # Focus handlers can schedule a native control rebuild. Let the
+            # browser flush it before sending keyboard events to that control.
+            command('wait', '10')
             if query.isascii():
                 subprocess.run(['xdotool', 'type', '--clearmodifiers', query], env=env, check=True)
             else:
@@ -120,6 +128,7 @@ def main():
             if submit == 'enter':
                 subprocess.run(['xdotool', 'key', '--clearmodifiers', 'Return'], env=env, check=True)
             else:
+                command('wait', '10')
                 click_element("document.querySelector('#chat-submit-button')")
             wait_for("location.pathname==='/s'&&new URL(location.href).searchParams.get('wd')===" + json.dumps(query) +
                      "&&document.readyState==='complete'&&Array.from(document.querySelectorAll('#content_left h3 a')).some(a=>a.getBoundingClientRect().width>0)", 'search results', 90)
@@ -165,6 +174,7 @@ def main():
         x.wait(timeout=4)
         log.close()
         xlog.close()
+        profile.cleanup()
 
 
 if __name__ == '__main__':

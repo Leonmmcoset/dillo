@@ -104,6 +104,8 @@ output, use, for example, `dilloc eval 'JSON.stringify({url:location.href})'`.
   allocations. Overflow-hidden ancestors clip painting and native controls at
   the padding box; absolute/fixed descendants escape intermediate clipping
   ancestors according to their containing block.
+  CSS clips use a separate stack rather than one native FLTK clip per element,
+  so deeply nested pages do not exhaust FLTK's fixed clipping stack.
 - Viewport-fixed boxes stay anchored during horizontal/vertical scrolling and
   resizing, including documents shorter than the viewport. A transformed
   ancestor establishes the containing block for absolute/fixed descendants.
@@ -115,11 +117,28 @@ output, use, for example, `dilloc eval 'JSON.stringify({url:location.href})'`.
 - Single-layer linear-gradient() and repeating-linear-gradient() backgrounds,
   including angle/directional syntax, up to 32 color stops, double-position
   stops, length/percentage/calc() positions and alpha interpolation. Colors
-  include RGB/RGBA, named colors, currentColor and 3/4/6/8-digit hex.
+  include RGB/RGBA, HSL/HSLA, named colors, currentColor and 3/4/6/8-digit hex.
+- Alpha background colors support rgba(), modern space/slash RGB/HSL syntax,
+  transparent, currentColor and 4/8-digit hex. Nested backgrounds composite over
+  their painted parent; root backgrounds composite over the configured canvas
+  color. Opaque modern RGB/HSL colors also work for text and borders.
 - Elliptical border-radius shorthand and corner longhands, with percentages,
   calc(), overlap normalization, rounded backgrounds and solid borders. Native
   form controls leave their CSS border/background visible; styled buttons
   retain gradients and centered labels.
+- box-shadow supports up to eight shadows, inset/outset painting, offsets,
+  positive/negative spread, blur, rounded corners, alpha colors, currentColor,
+  calc() and var(). The first shadow paints above later shadows. Blur uses
+  three separable box filters and bounded tiles; blur radii are capped at 128px.
+- outline shorthand and its color/style/width/offset longhands paint without
+  changing layout or hit areas. Solid, dotted, dashed and double patterns are
+  supported, including negative offsets and rounded corners; other border-style
+  keywords use a solid outline fallback. Colors may have alpha.
+- Backgrounds, radii, transforms, shadows and outlines recognize initial,
+  inherit and unset, including their supported shorthands and var() expansion.
+  Other properties do not yet have general CSS-wide keyword support.
+  getComputedStyle() reports alpha background colors, shadow lengths and outline
+  longhands from the committed render tree.
 - Immediate window.scroll(), scrollTo() and scrollBy(), using numeric arguments
   or options with left/top.
 
@@ -159,12 +178,15 @@ notifications. Storage events and tab cloning are not implemented.
 Meta charset/refresh handling on the JavaScript path needs further integration.
 Rendering remains a subset. Transforms do not implement scale, rotation,
 perspective or general 3D; translate3d() requires a zero z component. Gradients
-do not implement radial/conic shapes, HSL colors or multiple background layers.
+do not implement radial/conic shapes or multiple background layers.
 Rounded solid borders are supported; other border styles retain the legacy
 square-border fallback. Background-image corner clipping uses row spans rather
 than an antialiased image mask. Overflow clipping is rectangular: rounded corners
 do not yet clip descendant content. Internal overflow scroll containers,
-overflow-x/y, background-size and shadows remain unsupported. Scroll APIs are
+overflow-x/y and background-size remain unsupported. Element/group opacity,
+transitions and animations are not implemented. Text and border colors do not
+yet support alpha; native controls do not provide arbitrary translucent content
+compositing over images or gradients. Scroll APIs are
 immediate, without smooth scrolling or new scroll event notifications.
 
 ## Baidu acceptance status and remaining renderer work
@@ -191,6 +213,8 @@ DILLO_TEST_BINDIR="$PWD/build/src" python3 test/javascript/baidu.py \
 
 It records the user agent, DOM snapshots, screenshots when ImageMagick is
 available, the browser log and results.json. It requires Xvfb, xdotool and xsel.
+It uses an isolated temporary profile with JavaScript and background images
+enabled, keeping the developer's preferences and storage separate.
 Use `--query 'QuickJS 引擎' --submit button` to run one case. A CAPTCHA redirect
 is reported as an external acceptance blocker rather than a successful search.
 

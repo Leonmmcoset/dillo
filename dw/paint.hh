@@ -6,6 +6,10 @@
 
 namespace dw { namespace core { namespace style {
 bool hasRoundedCorners(const Style *style);
+void drawBoxShadows(View *view, Layout *layout, Rectangle *area,
+   int x, int y, int width, int height, Style *style, bool inset, bool inverse);
+void drawOutline(View *view, Layout *layout, Rectangle *area,
+   int x, int y, int width, int height, Style *style, bool inverse);
 bool drawRoundedBorder(View *view, Layout *layout, Rectangle *area,
    int x, int y, int width, int height, Style *style, bool inverse);
 void drawBackgroundPaint(View *view, Layout *layout, Rectangle *area,

@@ -51,7 +51,7 @@ def main():
         env['HOME'] = str(work / 'home')
         config = Path(env['HOME']) / '.dillo'
         config.mkdir(parents=True)
-        (config / 'dillorc').write_text('javascript_enabled=YES\nload_images=YES\nload_background_images=YES\n')
+        (config / 'dillorc').write_text('javascript_enabled=YES\nload_images=YES\nload_background_images=YES\nbg_color=#ffffff\n')
         url = 'http://127.0.0.1:' + str(server.server_port) + '/renderer.html'
         browser = subprocess.Popen([str(bindir / 'dillo'), '-g', '950x700+0+0', url], env=env,
                                    stdout=log, stderr=log)
@@ -238,6 +238,19 @@ def main():
             color(picture, 'fixed-bottom', 20, 15, (32,64,208), 'fixed box paints beyond a short root allocation')
             color(picture, 'fixed', 20, 15, (32,64,208), 'fixed box uses the resized viewport without scrollbars')
 
+            # Real pages regularly exceed FLTK's fixed native clip-stack
+            # depth. Check a deep branch and a sibling painted afterwards.
+            markup = '<div id=origin></div><div style="position:absolute;left:20px;top:20px;width:130px;height:90px">'
+            markup += '<div style="position:relative;width:130px;height:90px">' * 64
+            markup += '<div style="position:relative;width:70px;height:40px;overflow:hidden"><div id=deep-leaf style="position:absolute;left:10px;top:10px;width:100px;height:60px;background:#e02030"></div></div>'
+            markup += '</div>' * 65
+            markup += '<div id=deep-sibling style="position:absolute;left:240px;top:20px;width:100px;height:60px;background:#008050"></div>'
+            command('eval', 'document.body.innerHTML=' + json.dumps(markup))
+            picture = screenshot('deep-clipping')
+            color(picture, 'deep-leaf', 20, 15, (224,32,48), 'deeply nested content paints inside its clip')
+            color(picture, 'deep-leaf', 80, 15, (255,255,255), 'deeply nested content keeps overflow clipping')
+            color(picture, 'deep-sibling', 50, 30, (0,128,80), 'clip restoration preserves the following sibling')
+
             # Exercise syntax, color-stop fixup and cascade independently of
             # the main page's layout. Each case uses an exact solid interior
             # or a color with a small interpolation tolerance.
@@ -304,6 +317,100 @@ def main():
 
             # Native controls are leaf widgets, so test their clipping and
             # hit-testing separately from the container/anchor cases above.
+            cases = [
+                ('rgba-background', 'background:rgba(255,0,0,.5)', [(50,25,(255,127,127))]),
+                ('hex-four', 'background:#0f08', [(50,25,(119,255,119))]),
+                ('hex-eight', 'background:#0000ff80', [(50,25,(127,127,255))]),
+                ('hsl-background', 'background:hsl(120deg 100% 50%)', [(50,25,(0,255,0))]),
+                ('hsla-background', 'background:hsl(.5turn 100% 50% / 50%)', [(50,25,(127,255,255))]),
+                ('negative-hue', 'background:hsl(-120,100%,50%)', [(50,25,(0,0,255))]),
+                ('modern-background', 'background:rgb(100% 0% 0% / 25%)', [(50,25,(255,191,191))]),
+                ('background-current-color', 'background:currentColor;color:#123456', [(50,25,(18,52,86))]),
+                ('transparent-rgba', 'background:red;background:rgba(0,255,0,0)', [(50,25,(255,255,255))]),
+                ('invalid-hsl', 'background:blue;background:hsl(0,50,50)', [(50,25,(0,0,255))]),
+                ('hsl-gradient', 'background:linear-gradient(hsl(120 100% 50%),hsl(120 100% 50%))', [(50,25,(0,255,0))]),
+                ('shadow-offset', 'background:white;box-shadow:10px 8px red', [(105,25,(255,0,0)), (50,53,(255,0,0)), (50,25,(255,255,255))]),
+                ('shadow-spread', 'background:white;box-shadow:0 0 0 6px #008050', [(-3,25,(0,128,80)), (50,-3,(0,128,80))]),
+                ('shadow-inset', 'background:white;box-shadow:inset 0 0 0 6px blue', [(2,25,(0,0,255)), (50,25,(255,255,255))]),
+                ('shadow-alpha', 'background:white;box-shadow:10px 0 rgba(255,0,0,.5)', [(105,25,(255,127,127))]),
+                ('shadow-order', 'background:white;box-shadow:10px 0 red,20px 0 blue', [(105,25,(255,0,0)), (115,25,(0,0,255))]),
+                ('shadow-current-color', 'background:white;box-shadow:10px 0;color:#008050', [(105,25,(0,128,80))]),
+                ('shadow-invalid', 'background:white;box-shadow:10px 0 red;box-shadow:0 0 -2px blue', [(105,25,(255,0,0))]),
+                ('shadow-none', 'background:white;box-shadow:10px 0 red;box-shadow:none', [(105,25,(255,255,255))]),
+                ('shadow-blur', 'background:white;box-shadow:0 0 12px black', []),
+                ('shadow-rounded', 'background:white;border-radius:20px;box-shadow:0 0 0 5px red', [(0,0,(255,255,255)), (50,-3,(255,0,0))]),
+                ('shadow-calc', 'background:white;--shadow:calc(5px + 5px) 0 0 red;box-shadow:var(--shadow)', [(105,25,(255,0,0))]),
+                ('outline-solid', 'background:white;outline:4px solid #008050;outline-offset:3px', [(-5,25,(0,128,80)), (-1,25,(255,255,255))]),
+                ('outline-current-color', 'background:white;outline:4px solid;color:#008050', [(50,-2,(0,128,80))]),
+                ('outline-negative-offset', 'background:white;outline:2px solid red;outline-offset:-4px', [(2,25,(255,0,0)), (0,25,(255,255,255))]),
+                ('outline-important', 'background:white;outline:4px solid red!important;outline:none', [(50,-2,(255,0,0))]),
+                ('outline-invalid', 'background:white;outline:4px solid red;outline:4px solid blue extra', [(50,-2,(255,0,0))]),
+                ('outline-none', 'background:white;outline:4px solid red;outline:none', [(50,-2,(255,255,255))]),
+                ('outline-variable', 'background:white;--o:4px solid red;outline:var(--o)', [(50,-2,(255,0,0))]),
+                ('outline-rounded', 'background:white;border-radius:20px;outline:4px solid red', [(-1,-1,(255,255,255)), (50,-2,(255,0,0))]),
+                ('outline-dashed', 'background:white;outline:4px dashed red', [(2,-2,(255,0,0)), (12,-2,(255,255,255))]),
+                ('outline-double', 'background:white;outline:6px double red', [(50,-5,(255,0,0)), (50,-3,(255,255,255)), (50,-1,(255,0,0))]),
+            ]
+            markup = '<div id=origin></div>'
+            for n, (id, css, samples) in enumerate(cases):
+                markup += '<div id="decor-' + id + '" style="position:absolute;box-sizing:border-box;left:' + str(20+155*(n%5)) + 'px;top:' + str(20+80*(n//5)) + 'px;width:100px;height:50px;' + css + '"></div>'
+            command('eval', 'document.body.innerHTML=' + json.dumps(markup))
+            picture = screenshot('colors-and-shadows')
+            for id, css, samples in cases:
+                for x,y,expected in samples:
+                    color(picture, 'decor-'+id, x, y, expected, 'decoration '+id+' at '+str((x,y)), 6)
+            check(evaluate('getComputedStyle(document.getElementById("decor-rgba-background")).backgroundColor').startswith('rgba(255,0,0,'),
+                  'computed background color retains alpha')
+            check(evaluate('getComputedStyle(document.getElementById("decor-outline-solid")).outlineOffset') == '3px',
+                  'computed outline offset reflects the rendered style')
+            check(evaluate('getComputedStyle(document.getElementById("decor-shadow-offset")).boxShadow').startswith('10px 8px'),
+                  'computed box shadow reflects rendered lengths')
+            box = rect('decor-shadow-blur')
+            near = pixel(picture, origin[0]+box['left']-2, origin[1]+box['top']+25)[0]
+            far = pixel(picture, origin[0]+box['left']-10, origin[1]+box['top']+25)[0]
+            check(100 < near < far < 255, 'blurred shadow fades outside the box', (near, far))
+
+            # Reset keywords must override previous decorative declarations,
+            # including deferred shorthand values and explicit inheritance.
+            cases = [
+                ('background-unset', 'background:red;background:unset', [(50,25,(255,255,255))]),
+                ('background-initial', 'background:linear-gradient(red,red);background:initial', [(50,25,(255,255,255))]),
+                ('background-color-unset', 'background:red;background-color:unset', [(50,25,(255,255,255))]),
+                ('shadow-unset', 'box-shadow:10px 0 red;box-shadow:unset', [(105,25,(255,255,255))]),
+                ('outline-unset', 'outline:4px solid red;outline:unset', [(50,-2,(255,255,255))]),
+                ('radius-initial', 'background:red;border-radius:20px;border-radius:initial', [(0,0,(255,0,0))]),
+                ('variable-reset', '--r:unset;background:red;background:var(--r,initial)', [(50,25,(255,255,255))]),
+                ('invalid-outline-width', 'outline:4px solid red;outline-width:8px garbage', [(50,-3,(255,0,0)), (50,-6,(255,255,255))]),
+                ('foreground-hsl', 'color:hsl(120 100% 50%);background:currentColor', [(50,25,(0,255,0))]),
+                ('foreground-rgb', 'color:rgb(0 0 255);background:currentColor', [(50,25,(0,0,255))]),
+                ('invalid-legacy-rgb', 'color:blue;color:rgb(255,0%,0);background:currentColor', [(50,25,(0,0,255))]),
+                ('invalid-hue', 'background:blue;background:hsl(1e308turn 100% 50%)', [(50,25,(0,0,255))]),
+            ]
+            markup = '<div id=origin></div>'
+            for n, (id, css, samples) in enumerate(cases):
+                markup += '<div id="reset-' + id + '" style="position:absolute;left:' + str(20+155*(n%5)) + 'px;top:' + str(20+96*(n//5)) + 'px;width:100px;height:50px;' + css + '"></div>'
+            markup += '<div style="position:absolute;left:20px;top:350px;width:100px;height:50px;background:#008050;border-radius:20px;box-shadow:10px 0 red;outline:4px solid blue"><div id=inherit-decoration style="width:100px;height:50px;background:inherit;border-radius:inherit;box-shadow:inherit;outline:inherit"></div></div>'
+            markup += '<div style="position:absolute;left:200px;top:350px;width:100px;height:50px;background:blue"><div id=nested-alpha style="width:100px;height:50px;background:rgba(255,0,0,.5)"></div></div>'
+            command('eval', 'document.body.innerHTML=' + json.dumps(markup))
+            picture = screenshot('decoration-resets')
+            for id, css, samples in cases:
+                for x,y,expected in samples:
+                    color(picture, 'reset-'+id, x, y, expected, 'decoration reset '+id, 6)
+            color(picture, 'inherit-decoration', 50, 25, (0,128,80), 'background inheritance preserves color')
+            color(picture, 'inherit-decoration', 0, 0, (255,255,255), 'radius inheritance preserves rounded corners')
+            color(picture, 'inherit-decoration', 105, 25, (255,0,0), 'shadow inheritance preserves offsets')
+            color(picture, 'inherit-decoration', 50, -2, (0,0,255), 'outline inheritance preserves color')
+            color(picture, 'nested-alpha', 50, 25, (128,0,127), 'transparent background composites over its painted parent')
+            command('eval', 'document.body.innerHTML="<div id=origin></div>";document.body.style.background="transparent";document.documentElement.style.background="rgba(255,0,0,.5)"')
+            picture = screenshot('root-alpha')
+            actual = pixel(picture, origin[0]+400, origin[1]+300)
+            check(actual == (255,127,127), 'transparent root background composites once over the canvas', actual)
+            command('eval', 'document.documentElement.style.background="transparent";document.body.style.background="rgba(255,0,0,.5)"')
+            picture = screenshot('body-alpha')
+            actual = pixel(picture, origin[0]+400, origin[1]+300)
+            check(actual == (255,127,127), 'body alpha background propagates to a transparent root', actual)
+            command('eval', 'document.documentElement.style.background="white";document.body.style.background="white"')
+
             markup = '''<div id=origin></div>
               <div style="position:absolute;left:20px;top:20px;width:200px;height:80px">
                 <div style="width:10px;height:10px;overflow:hidden">
@@ -311,7 +418,7 @@ def main():
                 </div>
               </div>
               <div style="position:absolute;left:300px;top:20px;width:10px;height:10px;overflow:hidden">
-                <input id=native-fixed style="position:fixed;left:350px;top:50px;width:100px;height:30px;box-sizing:border-box;padding:0;border:0;background:#208040">
+                <input id=native-fixed style="position:fixed;left:350px;top:50px;width:100px;height:30px;box-sizing:border-box;padding:0;border:0;background:#208040;outline:3px solid blue">
               </div>
               <div style="position:absolute;left:500px;top:20px;width:60px;height:60px;overflow:hidden">
                 <input id=native-clipped style="position:absolute;left:45px;top:35px;width:100px;height:30px;box-sizing:border-box;padding:0;border:0;background:#e02030">
@@ -321,6 +428,7 @@ def main():
             picture = screenshot('native-clipping')
             color(picture, 'native-absolute', 80, 15, (224,32,48), 'native absolute input escapes intermediate clipping')
             color(picture, 'native-fixed', 80, 15, (32,128,64), 'native fixed input escapes ancestor clipping')
+            color(picture, 'native-fixed', -2, 15, (0,0,255), 'native control outline paints outside its allocation')
             color(picture, 'native-clipped', 5, 15, (224,32,48), 'native clipped input paints inside padding box')
             color(picture, 'native-clipped', 40, 15, (255,255,255), 'native clipped input does not paint outside padding box')
             box = rect('native-absolute')
@@ -350,7 +458,10 @@ def main():
             command('quit')
             check(browser.wait(timeout=8) == 0, 'clean browser shutdown')
             log.flush()
-            check('ERROR: AddressSanitizer' not in (output / 'browser.log').read_text(), 'no address sanitizer errors')
+            browser_log = (output / 'browser.log').read_text()
+            check('ERROR: AddressSanitizer' not in browser_log, 'no address sanitizer errors')
+            check('clip stack overflow' not in browser_log and 'clip stack underflow' not in browser_log,
+                  'native clipping stack stays balanced at arbitrary CSS depth')
             success = True
             print('PASS: ' + str(len(results)) + ' offline renderer checks')
             return 0

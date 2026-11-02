@@ -20,6 +20,7 @@
 
 //#define DEBUG_LEVEL 1
 #include "core.hh"
+#include "paint.hh"
 
 #include "../lout/msg.h"
 #include "../lout/debug.hh"
@@ -1569,6 +1570,9 @@ void Widget::drawBox (View *view, style::Style *style, Rectangle *area,
    canvasArea.width = area->width;
    canvasArea.height = area->height;
 
+   style::drawBoxShadows(view, layout, &canvasArea, allocation.x + x,
+      allocation.y + y, width, height, style, false, inverse);
+
    style::drawBorder (view, layout, &canvasArea,
                       allocation.x + x, allocation.y + y,
                       width, height, style, inverse);
@@ -1593,6 +1597,10 @@ void Widget::drawBox (View *view, style::Style *style, Rectangle *area,
        - style->margin.bottom - style->borderWidth.bottom,
        xPad, yPad, widthPad, heightPad, style, style->backgroundColor,
        inverse, false);
+   style::drawBoxShadows(view, layout, &canvasArea, allocation.x + x,
+      allocation.y + y, width, height, style, true, inverse);
+   style::drawOutline(view, layout, &canvasArea, allocation.x + x,
+      allocation.y + y, width, height, style, inverse);
 }
 
 /**
@@ -1611,6 +1619,8 @@ void Widget::drawWidgetBox (View *view, Rectangle *area, bool inverse)
 
    int xMar, yMar, widthMar, heightMar;
    getMarginArea (&xMar, &yMar, &widthMar, &heightMar);
+   style::drawBoxShadows(view, layout, &canvasArea, xMar, yMar, widthMar,
+      heightMar, style, false, inverse);
    style::drawBorder (view, layout, &canvasArea, xMar, yMar, widthMar,
                       heightMar, style, inverse);
 
@@ -1636,6 +1646,10 @@ void Widget::drawWidgetBox (View *view, Rectangle *area, bool inverse)
                           xPad, yPad, widthPad, heightPad,
                           xPad, yPad, widthPad, heightPad,
                           style, bgColor, inverse, parent == NULL);
+   style::drawBoxShadows(view, layout, &canvasArea, xMar, yMar, widthMar,
+      heightMar, style, true, inverse);
+   style::drawOutline(view, layout, &canvasArea, xMar, yMar, widthMar,
+      heightMar, style, inverse);
 }
 
 /*

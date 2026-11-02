@@ -68,9 +68,13 @@ void StyleAttrs::initValues ()
    listStyleType = LIST_STYLE_TYPE_DISC;
    valign = VALIGN_BASELINE;
    backgroundColor = NULL;
+   backgroundAlpha = 255;
    backgroundImage = NULL;
    memset(&gradient, 0, sizeof(gradient));
    memset(&borderRadius, 0, sizeof(borderRadius));
+   memset(&boxShadows, 0, sizeof(boxShadows));
+   memset(&outline, 0, sizeof(outline));
+   outline.width = 3;
    backgroundRepeat = BACKGROUND_REPEAT;
    backgroundAttachment = BACKGROUND_ATTACHMENT_SCROLL;
    backgroundPositionX = createPerLength (0);
@@ -127,9 +131,13 @@ void StyleAttrs::resetValues ()
    top = bottom = left = right = LENGTH_AUTO; /** \todo Correct? Check
                                                   specification. */
    backgroundColor = NULL;
+   backgroundAlpha = 255;
    backgroundImage = NULL;
    memset(&gradient, 0, sizeof(gradient));
    memset(&borderRadius, 0, sizeof(borderRadius));
+   memset(&boxShadows, 0, sizeof(boxShadows));
+   memset(&outline, 0, sizeof(outline));
+   outline.width = 3;
    backgroundRepeat = BACKGROUND_REPEAT;
    backgroundAttachment = BACKGROUND_ATTACHMENT_SCROLL;
    backgroundPositionX = createPerLength (0);
@@ -179,9 +187,12 @@ bool StyleAttrs::equals (object::Object *other) {
        textDecoration == otherAttrs->textDecoration &&
        color == otherAttrs->color &&
        backgroundColor == otherAttrs->backgroundColor &&
+       backgroundAlpha == otherAttrs->backgroundAlpha &&
        backgroundImage == otherAttrs->backgroundImage &&
        !memcmp(&gradient, &otherAttrs->gradient, sizeof(gradient)) &&
        !memcmp(&borderRadius, &otherAttrs->borderRadius, sizeof(borderRadius)) &&
+       !memcmp(&boxShadows, &otherAttrs->boxShadows, sizeof(boxShadows)) &&
+       !memcmp(&outline, &otherAttrs->outline, sizeof(outline)) &&
        backgroundRepeat == otherAttrs->backgroundRepeat &&
        backgroundAttachment == otherAttrs->backgroundAttachment &&
        backgroundPositionX == otherAttrs->backgroundPositionX &&
@@ -249,10 +260,13 @@ int StyleAttrs::hashValue () {
    };
    hashBytes(&gradient, sizeof(gradient));
    hashBytes(&borderRadius, sizeof(borderRadius));
+   hashBytes(&boxShadows, sizeof(boxShadows));
+   hashBytes(&outline, sizeof(outline));
    return (uintptr_t) font +
       textDecoration +
       (intptr_t) color +
       (intptr_t) backgroundColor +
+      backgroundAlpha +
       (intptr_t) backgroundImage +
       decorations +
       hasTransform + translateX + translateY +
@@ -385,9 +399,12 @@ void Style::copyAttrs (StyleAttrs *attrs)
    textDecoration = attrs->textDecoration;
    color = attrs->color;
    backgroundColor = attrs->backgroundColor;
+   backgroundAlpha = attrs->backgroundAlpha;
    backgroundImage = attrs->backgroundImage;
    gradient = attrs->gradient;
    borderRadius = attrs->borderRadius;
+   boxShadows = attrs->boxShadows;
+   outline = attrs->outline;
    backgroundRepeat = attrs->backgroundRepeat;
    backgroundAttachment = attrs->backgroundAttachment;
    backgroundPositionX = attrs->backgroundPositionX;
@@ -1289,7 +1306,7 @@ void drawBackground (View *view, Layout *layout, Rectangle *area,
    bool hasBgColor = bgColor != NULL &&
       // The test for background colors is rather simple, since only the color
       // has to be compared, ...
-      (!atTop || layout->getBgColor () != bgColor);
+      (!atTop || (style->backgroundAlpha == 255 && layout->getBgColor () != bgColor));
    bool hasBgImage = (style->backgroundImage != NULL &&
                       style->backgroundImage->getImgbufSrc() != NULL) &&
       // ... but for backgrounds, it would be rather complicated. To handle the
@@ -1314,7 +1331,7 @@ void drawBackground (View *view, Layout *layout, Rectangle *area,
 
       if (area->intersectsWith (&bgArea, &intersection)) {
          if ((hasBgColor || style->gradient.count) &&
-             (hasRoundedCorners(style) || style->gradient.count))
+             (hasRoundedCorners(style) || style->gradient.count || style->backgroundAlpha != 255))
             drawBackgroundPaint(view, layout, &intersection, x, y, width, height, style, bgColor, inverse);
          else if (hasBgColor)
             view->drawRectangle (bgColor,

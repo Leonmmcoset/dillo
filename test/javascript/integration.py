@@ -316,6 +316,10 @@ with tempfile.TemporaryDirectory(prefix='dillo-js-') as work:
     with os.fdopen(r) as ready:
         display = ready.readline().strip()
     env = os.environ.copy()
+    env['HOME'] = str(pathlib.Path(work) / 'home')
+    config = pathlib.Path(env['HOME']) / '.dillo'
+    config.mkdir(parents=True)
+    (config / 'dillorc').write_text('javascript_enabled=YES\nload_images=YES\nload_background_images=YES\n')
     # Match the existing HTML suite: Fontconfig keeps process-global caches.
     env['LSAN_OPTIONS'] = 'suppressions=' + str(pathlib.Path(__file__).with_name('lsan.supp').resolve())
     env['DISPLAY'] = ':' + display

@@ -260,8 +260,14 @@ dw::core::style::Color *StyleEngine::backgroundColor () {
    for (int i = 1; i < stack->size (); i++) {
       Node *n = stack->getRef (i);
 
-      if (n->style && n->style->backgroundColor)
-         return n->style->backgroundColor;
+      if (n->style && n->style->backgroundColor) {
+         if (n->style->backgroundAlpha == 255) return n->style->backgroundColor;
+         unsigned rgb = n->style->backgroundColor->getColor(), alpha = n->style->backgroundAlpha;
+         unsigned base = stack->getRef(0)->style->backgroundColor->getColor(), composed = 0;
+         for (int shift = 0; shift < 24; shift += 8)
+            composed |= ((((rgb >> shift) & 255) * alpha + ((base >> shift) & 255) * (255 - alpha) + 127) / 255) << shift;
+         return Color::create(layout, composed);
+      }
    }
 
    return NULL;
@@ -531,9 +537,44 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
    for (int j = 0; j < props->size(); ++j)
       if (props->getRef(j)->name == CSS_PROPERTY_COLOR)
          attrs->color = Color::create(layout, props->getRef(j)->value.intVal);
+   attrs->outline.rgba = ((unsigned)attrs->color->getColor() << 8) | 255;
 
    for (int j = 0; j < props->size (); j++) {
       CssProperty *p = props->getRef (j);
+
+      if (p->type == CSS_TYPE_WIDE_KEYWORD) {
+         StyleAttrs initial;
+         initial.initValues();
+         const StyleAttrs &value = p->value.intVal == 1 ? *stack->getRef(i - 1)->style : initial;
+         switch (p->name) {
+         case CSS_PROPERTY_BACKGROUND_COLOR:
+            attrs->backgroundColor = value.backgroundColor; attrs->backgroundAlpha = value.backgroundAlpha; break;
+         case CSS_PROPERTY_BACKGROUND_IMAGE:
+            attrs->backgroundImage = value.backgroundImage; attrs->gradient = value.gradient; break;
+         case CSS_PROPERTY_BACKGROUND_REPEAT: attrs->backgroundRepeat = value.backgroundRepeat; break;
+         case CSS_PROPERTY_BACKGROUND_ATTACHMENT: attrs->backgroundAttachment = value.backgroundAttachment; break;
+         case CSS_PROPERTY_BACKGROUND_POSITION:
+            attrs->backgroundPositionX = value.backgroundPositionX;
+            attrs->backgroundPositionY = value.backgroundPositionY; break;
+         case CSS_PROPERTY_BOX_SHADOW: attrs->boxShadows = value.boxShadows; break;
+         case CSS_PROPERTY_OUTLINE_COLOR:
+            attrs->outline.rgba = p->value.intVal == 1 ? value.outline.rgba :
+               ((unsigned)attrs->color->getColor() << 8) | 255; break;
+         case CSS_PROPERTY_OUTLINE_STYLE: attrs->outline.style = value.outline.style; break;
+         case CSS_PROPERTY_OUTLINE_WIDTH: attrs->outline.width = value.outline.width; break;
+         case CSS_PROPERTY_OUTLINE_OFFSET: attrs->outline.offset = value.outline.offset; break;
+         case CSS_PROPERTY_TRANSFORM:
+            attrs->hasTransform = value.hasTransform;
+            attrs->translateX = value.translateX; attrs->translateY = value.translateY; break;
+         default:
+            unsigned corner = p->name == CSS_PROPERTY_BORDER_TOP_LEFT_RADIUS ? 0 :
+               p->name == CSS_PROPERTY_BORDER_TOP_RIGHT_RADIUS ? 1 :
+               p->name == CSS_PROPERTY_BORDER_BOTTOM_RIGHT_RADIUS ? 2 : 3;
+            attrs->borderRadius.x[corner] = value.borderRadius.x[corner];
+            attrs->borderRadius.y[corner] = value.borderRadius.y[corner]; break;
+         }
+         continue;
+      }
 
       switch (p->name) {
          case CSS_PROPERTY_ALIGN_CONTENT: attrs->container.alignContent = p->value.intVal; break;
@@ -566,12 +607,15 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
                (BackgroundAttachment) p->value.intVal;
             break;
          case CSS_PROPERTY_BACKGROUND_COLOR:
-            if (p->value.intVal == -1) attrs->backgroundColor = NULL;
-            else if (prefs.allow_white_bg || p->value.intVal != 0xffffff)
-               attrs->backgroundColor = Color::create(layout, p->value.intVal);
-            else
-               attrs->backgroundColor =
-                  Color::create(layout, prefs.white_bg_replacement);
+            {
+               unsigned color = p->type == CSS_TYPE_RGBA ? p->value.colorVal.rgba :
+                  p->value.intVal == -1 ? 0 : ((unsigned)p->value.intVal << 8) | 255;
+               if (p->type == CSS_TYPE_RGBA && p->value.colorVal.currentColor)
+                  color = ((unsigned)attrs->color->getColor() << 8) | 255;
+               attrs->backgroundAlpha = color & 255;
+               attrs->backgroundColor = attrs->backgroundAlpha ? Color::create(layout,
+                  !prefs.allow_white_bg && (color >> 8) == 0xffffff ? prefs.white_bg_replacement : color >> 8) : NULL;
+            }
             break;
          case CSS_PROPERTY_BACKGROUND_IMAGE:
             attrs->backgroundImage = NULL;
@@ -674,6 +718,43 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
             attrs->boxSizing = p->value.intVal == 2 ?
                stack->getRef(i - 1)->style->boxSizing :
                p->value.intVal == 1 ? StyleAttrs::BORDER_BOX : StyleAttrs::CONTENT_BOX;
+            break;
+         case CSS_PROPERTY_BOX_SHADOW: {
+            const CssShadows &shadows = *p->value.shadowsVal;
+            attrs->boxShadows.count = shadows.count;
+            for (unsigned n = 0; n < shadows.count; ++n) {
+               const CssShadows::Shadow &source = shadows.shadows[n];
+               BoxShadows::Shadow &shadow = attrs->boxShadows.shadows[n];
+               computeValue(&shadow.x, source.lengths[0], attrs->font);
+               computeValue(&shadow.y, source.lengths[1], attrs->font);
+               computeValue(&shadow.blur, source.lengths[2], attrs->font);
+               computeValue(&shadow.spread, source.lengths[3], attrs->font);
+               // Keep blur masks and coordinate arithmetic bounded even for
+               // unreasonably large CSS values.
+               shadow.x = lout::misc::max(-1000000, lout::misc::min(1000000, shadow.x));
+               shadow.y = lout::misc::max(-1000000, lout::misc::min(1000000, shadow.y));
+               shadow.spread = lout::misc::max(-1000000, lout::misc::min(1000000, shadow.spread));
+               shadow.blur = lout::misc::max(0, lout::misc::min(128, shadow.blur));
+               shadow.inset = source.inset;
+               shadow.rgba = source.color.currentColor ?
+                  ((unsigned)attrs->color->getColor() << 8) | 255 : source.color.rgba;
+            }
+            break;
+         }
+         case CSS_PROPERTY_OUTLINE_COLOR:
+            attrs->outline.rgba = p->value.colorVal.currentColor ?
+               ((unsigned)attrs->color->getColor() << 8) | 255 : p->value.colorVal.rgba;
+            break;
+         case CSS_PROPERTY_OUTLINE_STYLE:
+            attrs->outline.style = (BorderStyle)p->value.intVal;
+            break;
+         case CSS_PROPERTY_OUTLINE_WIDTH:
+            computeBorderWidth(&attrs->outline.width, p, attrs->font);
+            attrs->outline.width = lout::misc::max(0, lout::misc::min(1000000, attrs->outline.width));
+            break;
+         case CSS_PROPERTY_OUTLINE_OFFSET:
+            computeValue(&attrs->outline.offset, p->value.lenVal, attrs->font);
+            attrs->outline.offset = lout::misc::max(-1000000, lout::misc::min(1000000, attrs->outline.offset));
             break;
          case CSS_PROPERTY_CLEAR:
             attrs->clear = (ClearType) p->value.intVal;
@@ -1138,6 +1219,7 @@ Style * StyleEngine::wordStyle0 (BrowserWindow *bw) {
 
    if (stack->getRef (stack->size() - 1)->inheritBackgroundColor) {
       attrs.backgroundColor = style (bw)->backgroundColor;
+      attrs.backgroundAlpha = style(bw)->backgroundAlpha;
       attrs.backgroundImage = style (bw)->backgroundImage;
       attrs.backgroundRepeat = style (bw)->backgroundRepeat;
       attrs.backgroundAttachment = style (bw)->backgroundAttachment;

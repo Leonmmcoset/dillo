@@ -180,7 +180,7 @@ const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
    {"align-self", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_box_alignment_vals},
    {"background-attachment", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED},
     Css_background_attachment_enum_vals},
-   {"background-color", {CSS_TYPE_COLOR, CSS_TYPE_UNUSED}, NULL},
+   {"background-color", {CSS_TYPE_RGBA, CSS_TYPE_UNUSED}, NULL},
    {"background-image", {CSS_TYPE_GRADIENT, CSS_TYPE_URI, CSS_TYPE_UNUSED}, NULL},
    {"background-position", {CSS_TYPE_BACKGROUND_POSITION, CSS_TYPE_UNUSED},
     NULL},
@@ -218,6 +218,7 @@ const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
    {"border-top-width", {CSS_TYPE_ENUM, CSS_TYPE_LENGTH, CSS_TYPE_UNUSED},
     Css_border_width_enum_vals},
    {"bottom", {CSS_TYPE_SIGNED_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
+   {"box-shadow", {CSS_TYPE_SHADOW, CSS_TYPE_UNUSED}, NULL},
    {"box-sizing", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_box_sizing_enum_vals},
    {"caption-side", {CSS_TYPE_UNUSED}, NULL},
    {"clear", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_clear_enum_vals},
@@ -281,9 +282,10 @@ const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
    {"min-width", {CSS_TYPE_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED},
     NULL},
    {"order", {CSS_TYPE_INTEGER, CSS_TYPE_UNUSED}, NULL},
-   {"outline-color", {CSS_TYPE_UNUSED}, NULL},
-   {"outline-style", {CSS_TYPE_UNUSED}, NULL},
-   {"outline-width", {CSS_TYPE_UNUSED}, NULL},
+   {"outline-color", {CSS_TYPE_RGBA, CSS_TYPE_UNUSED}, NULL},
+   {"outline-offset", {CSS_TYPE_SIGNED_LENGTH, CSS_TYPE_UNUSED}, NULL},
+   {"outline-style", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_border_style_enum_vals},
+   {"outline-width", {CSS_TYPE_ENUM, CSS_TYPE_LENGTH, CSS_TYPE_UNUSED}, Css_border_width_enum_vals},
    {"overflow", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_overflow_enum_vals},
    {"padding-bottom", {CSS_TYPE_LENGTH, CSS_TYPE_UNUSED}, NULL},
    {"padding-left", {CSS_TYPE_LENGTH, CSS_TYPE_UNUSED}, NULL},
@@ -322,6 +324,7 @@ typedef struct {
    const char *symbol;
    enum {
       CSS_SHORTHAND_BACKGROUND,
+      CSS_SHORTHAND_OUTLINE,
       CSS_SHORTHAND_RADIUS,
       CSS_SHORTHAND_FLEX,
       CSS_SHORTHAND_FLOW,
@@ -495,7 +498,7 @@ static const CssShorthandInfo Css_shorthand_info[] = {
     Css_list_style_properties},
    {"margin", CssShorthandInfo::CSS_SHORTHAND_DIRECTIONS,
     Css_margin_properties},
-   {"outline", CssShorthandInfo::CSS_SHORTHAND_MULTIPLE,
+   {"outline", CssShorthandInfo::CSS_SHORTHAND_OUTLINE,
     Css_outline_properties},
    {"padding", CssShorthandInfo::CSS_SHORTHAND_DIRECTIONS,
     Css_padding_properties},
@@ -830,14 +833,24 @@ bool CssParser::tokenMatchesProperty(CssPropertyName prop, CssValueType *type)
             return true;
          break;
 
+      case CSS_TYPE_RGBA:
+         if (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "currentColor")) return true;
+         // fall through
       case CSS_TYPE_COLOR:
          if ((ttype == CSS_TK_COLOR ||
               ttype == CSS_TK_SYMBOL) &&
-            ((prop == CSS_PROPERTY_BACKGROUND_COLOR && !dStrAsciiCasecmp(tval, "transparent")) ||
+            (ttype == CSS_TK_COLOR || !dStrAsciiCasecmp(tval, "transparent") ||
              dStrAsciiCasecmp(tval, "rgb") == 0 ||
+             dStrAsciiCasecmp(tval, "rgba") == 0 ||
+             dStrAsciiCasecmp(tval, "hsl") == 0 ||
+             dStrAsciiCasecmp(tval, "hsla") == 0 ||
              a_Color_parse(tval, -1, &err) != -1))
             return true;
          break;
+
+      case CSS_TYPE_SHADOW:
+         return ttype == CSS_TK_SYMBOL || ttype == CSS_TK_COLOR ||
+            ttype == CSS_TK_DECINT || ttype == CSS_TK_FLOAT;
 
       case CSS_TYPE_STRING:
          if (ttype == CSS_TK_STRING)
@@ -879,83 +892,6 @@ bool CssParser::tokenMatchesProperty(CssPropertyName prop, CssValueType *type)
 
    *type = savedType;
    return false;
-}
-
-bool CssParser::parseRgbColorComponent(int32_t *cc, int *percentage) {
-   if (ttype != CSS_TK_DECINT) {
-      MSG_CSS("expected integer not found in %s color\n", "rgb");
-      return false;
-   }
-
-   *cc = strtol(tval, NULL, 10);
-
-   nextToken();
-   if (ttype == CSS_TK_CHAR && tval[0] == '%') {
-      if (*percentage == 0) {
-         MSG_CSS("'%s' unexpected in rgb color\n", "%");
-         return false;
-      }
-      *percentage = 1;
-      *cc = *cc * 255 / 100;
-      nextToken();
-   } else {
-      if (*percentage == 1) {
-         MSG_CSS("expected '%s' not found in rgb color\n", "%");
-         return false;
-      }
-      *percentage = 0;
-   }
-
-   if (*cc > 255)
-      *cc = 255;
-   if (*cc < 0)
-      *cc = 0;
-
-   return true;
-}
-
-bool CssParser::parseRgbColor(int32_t *c) {
-   int32_t cc;
-   int percentage = -1;
-
-   *c = 0;
-
-   if (ttype != CSS_TK_CHAR || tval[0] != '(') {
-      MSG_CSS("expected '%s' not found in rgb color\n", "(");
-      return false;
-   }
-   nextToken();
-
-   if (!parseRgbColorComponent(&cc, &percentage))
-      return false;
-   *c |= cc << 16;
-
-   if (ttype != CSS_TK_CHAR || tval[0] != ',') {
-      MSG_CSS("expected '%s' not found in rgb color\n", ",");
-      return false;
-   }
-   nextToken();
-
-   if (!parseRgbColorComponent(&cc, &percentage))
-      return false;
-   *c |= cc << 8;
-
-   if (ttype != CSS_TK_CHAR || tval[0] != ',') {
-      MSG_CSS("expected '%s' not found in rgb color\n", ",");
-      return false;
-   }
-   nextToken();
-
-   if (!parseRgbColorComponent(&cc, &percentage))
-      return false;
-   *c |= cc;
-
-   if (ttype != CSS_TK_CHAR || tval[0] != ')') {
-      MSG_CSS("expected '%s' not found in rgb color\n", ")");
-      return false;
-   }
-
-   return true;
 }
 
 static void Css_calc_terms(CssLength *value)
@@ -1078,7 +1014,7 @@ bool CssParser::parseTransform(CssTransform *value)
       (tval[0] == ';' || tval[0] == '}' || tval[0] == '!'));
 }
 
-bool CssParser::parseGradientColor(unsigned *rgba)
+bool CssParser::parseColor(unsigned *rgba)
 {
    if (ttype == CSS_TK_COLOR) {
       const char *hex = tval + (tval[0] == '#');
@@ -1098,7 +1034,8 @@ bool CssParser::parseGradientColor(unsigned *rgba)
    if (!dStrAsciiCasecmp(tval, "transparent")) {
       *rgba = 0; nextToken(); return true;
    }
-   if (dStrAsciiCasecmp(tval, "rgb") && dStrAsciiCasecmp(tval, "rgba")) {
+   bool hsl = !dStrAsciiCasecmp(tval, "hsl") || !dStrAsciiCasecmp(tval, "hsla");
+   if (!hsl && dStrAsciiCasecmp(tval, "rgb") && dStrAsciiCasecmp(tval, "rgba")) {
       int error;
       int color = a_Color_parse(tval, -1, &error);
       if (error) return false;
@@ -1108,7 +1045,7 @@ bool CssParser::parseGradientColor(unsigned *rgba)
    if (ttype != CSS_TK_CHAR || tval[0] != '(') return false;
    nextToken();
    double components[4] = {0, 0, 0, 1};
-   bool comma = false;
+   bool comma = false, percentage = false;
    for (int n = 0; n < 4; ++n) {
       if (n == 3 && ttype == CSS_TK_CHAR && tval[0] == ')') break;
       if (n) {
@@ -1122,15 +1059,78 @@ bool CssParser::parseGradientColor(unsigned *rgba)
       double component = strtod(tval, NULL);
       if (!std::isfinite(component)) return false;
       nextToken();
-      if (ttype == CSS_TK_CHAR && tval[0] == '%') {
+      if (hsl && n == 0) {
+         if (ttype == CSS_TK_SYMBOL && !spaceSeparated) {
+            if (!dStrAsciiCasecmp(tval, "turn")) component *= 360;
+            else if (!dStrAsciiCasecmp(tval, "rad")) component *= 180 / std::acos(-1.0);
+            else if (!dStrAsciiCasecmp(tval, "grad")) component *= .9;
+            else if (dStrAsciiCasecmp(tval, "deg")) return false;
+            nextToken();
+         }
+         if (!std::isfinite(component)) return false;
+         components[n] = std::fmod(std::fmod(component, 360) + 360, 360) / 60;
+         continue;
+      }
+      bool percent = ttype == CSS_TK_CHAR && tval[0] == '%';
+      if (n == 0) percentage = percent;
+      else if (!hsl && comma && n < 3 && percentage != percent) return false;
+      if (percent) {
          component /= 100; nextToken();
-      } else if (n < 3) component /= 255;
+      } else if (hsl && n < 3) return false;
+      else if (n < 3) component /= 255;
       components[n] = lout::misc::min(1.0, lout::misc::max(0.0, component));
    }
    if (ttype != CSS_TK_CHAR || tval[0] != ')') return false;
+   if (hsl) {
+      double hue = components[0], light = components[2];
+      double chroma = (1 - std::fabs(2 * light - 1)) * components[1];
+      double secondary = chroma * (1 - std::fabs(std::fmod(hue, 2) - 1));
+      double channels[6][3] = {{chroma,secondary,0},{secondary,chroma,0},
+         {0,chroma,secondary},{0,secondary,chroma},{secondary,0,chroma},{chroma,0,secondary}};
+      for (int n = 0; n < 3; ++n) components[n] = channels[(int)hue][n] + light - chroma / 2;
+   }
    *rgba = 0;
    for (int n = 0; n < 4; ++n) *rgba = (*rgba << 8) | (unsigned)(components[n] * 255 + .5);
    nextToken(); return true;
+}
+
+bool CssParser::parseShadows(CssShadows *value)
+{
+   if (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "none")) {
+      nextToken(); return true;
+   }
+   do {
+      if (value->count == CssShadows::MAX_SHADOWS) return false;
+      CssShadows::Shadow &shadow = value->shadows[value->count++];
+      shadow.color.currentColor = true;
+      unsigned lengths = 0;
+      bool color = false, inset = false;
+      for (;;) {
+         if (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "inset")) {
+            if (inset) return false;
+            inset = shadow.inset = true; nextToken();
+         } else if (ttype == CSS_TK_DECINT || ttype == CSS_TK_FLOAT ||
+                    (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "calc"))) {
+            if (lengths) return false;
+            do {
+               CssPropertyValue length;
+               if (!parseValue(CSS_PROPERTY_BOX_SHADOW, CSS_TYPE_SIGNED_LENGTH, &length)) return false;
+               if (lengths == 2 && length.lenVal.type != CSS_LENGTH_TYPE_CALC &&
+                   CSS_LENGTH_VALUE(length.lenVal) < 0) return false;
+               shadow.lengths[lengths++] = length.lenVal;
+            } while (lengths < 4 && (ttype == CSS_TK_DECINT || ttype == CSS_TK_FLOAT ||
+                     (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "calc"))));
+         } else if (!color && (ttype == CSS_TK_COLOR || ttype == CSS_TK_SYMBOL)) {
+            color = true;
+            CssPropertyValue shade;
+            if (!parseValue(CSS_PROPERTY_BACKGROUND_COLOR, CSS_TYPE_RGBA, &shade)) return false;
+            shadow.color = shade.colorVal;
+         } else break;
+      }
+      if (lengths < 2) return false;
+      if (ttype != CSS_TK_CHAR || tval[0] != ',') return true;
+      nextToken();
+   } while (true);
 }
 
 bool CssParser::parseGradient(CssGradient *value)
@@ -1177,7 +1177,7 @@ bool CssParser::parseGradient(CssGradient *value)
       CssGradient::Stop stop = {};
       if (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "currentColor")) {
          stop.currentColor = true; nextToken();
-      } else if (!parseGradientColor(&stop.rgba)) return false;
+      } else if (!parseColor(&stop.rgba)) return false;
       for (int position = 0; position < 2; ++position) {
          bool hasPosition = ttype == CSS_TK_DECINT || ttype == CSS_TK_FLOAT ||
             (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "calc"));
@@ -1207,7 +1207,7 @@ bool CssParser::parseValue(CssPropertyName prop,
    CssLengthType lentype;
    bool found, ret = false;
    float fval;
-   int i, ival, err = 1;
+   int i, ival;
    Dstr *dstr;
 
    switch (type) {
@@ -1342,34 +1342,19 @@ bool CssParser::parseValue(CssPropertyName prop,
       nextToken();
       break;
 
-   case CSS_TYPE_COLOR:
-      if (prop == CSS_PROPERTY_BACKGROUND_COLOR && ttype == CSS_TK_SYMBOL &&
-          !dStrAsciiCasecmp(tval, "transparent")) {
-         val->intVal = -1; ret = true; nextToken();
-      } else if (ttype == CSS_TK_COLOR) {
-         val->intVal = a_Color_parse(tval, -1, &err);
-         if (err)
-            MSG_CSS("color is not in \"%s\" format\n", "#RRGGBB");
-         else
-            ret = true;
-         nextToken();
-      } else if (ttype == CSS_TK_SYMBOL) {
-         if (dStrAsciiCasecmp(tval, "rgb") == 0) {
-            nextToken();
-            if (parseRgbColor(&val->intVal))
-               ret = true;
-            else
-               MSG_CSS("Failed to parse %s color\n", "rgb(r,g,b)");
-         } else {
-            val->intVal = a_Color_parse(tval, -1, &err);
-            if (err)
-               MSG_CSS("color is not in \"%s\" format\n", "#RRGGBB");
-            else
-               ret = true;
-         }
-         nextToken();
+   case CSS_TYPE_RGBA:
+      val->colorVal.currentColor = ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "currentColor");
+      val->colorVal.rgba = 0;
+      if (val->colorVal.currentColor) { nextToken(); ret = true; }
+      else ret = parseColor(&val->colorVal.rgba);
+      break;
+   case CSS_TYPE_COLOR: {
+      unsigned color;
+      if (parseColor(&color) && (color & 255) == 255) {
+         val->intVal = color >> 8; ret = true;
       }
       break;
+   }
 
    case CSS_TYPE_STRING:
       if (ttype == CSS_TK_STRING) {
@@ -1442,6 +1427,14 @@ bool CssParser::parseValue(CssPropertyName prop,
       if (parseGradient(&gradient)) {
          val->gradientVal = (CssGradient *)dMalloc(sizeof(gradient));
          *val->gradientVal = gradient; ret = true;
+      }
+      break;
+   }
+   case CSS_TYPE_SHADOW: {
+      CssShadows shadows = {};
+      if (parseShadows(&shadows)) {
+         val->shadowsVal = (CssShadows *)dMalloc(sizeof(shadows));
+         *val->shadowsVal = shadows; ret = true;
       }
       break;
    }
@@ -1607,6 +1600,15 @@ static int Css_shorthand_info_cmp(const void *a, const void *b)
                       ((CssShorthandInfo *) b)->symbol);
 }
 
+static bool Css_decoration_property(CssPropertyName prop)
+{
+   return (prop >= CSS_PROPERTY_BACKGROUND_ATTACHMENT && prop <= CSS_PROPERTY_BACKGROUND_REPEAT) ||
+      (prop >= CSS_PROPERTY_OUTLINE_COLOR && prop <= CSS_PROPERTY_OUTLINE_WIDTH) ||
+      prop == CSS_PROPERTY_BOX_SHADOW || prop == CSS_PROPERTY_TRANSFORM ||
+      prop == CSS_PROPERTY_BORDER_TOP_LEFT_RADIUS || prop == CSS_PROPERTY_BORDER_TOP_RIGHT_RADIUS ||
+      prop == CSS_PROPERTY_BORDER_BOTTOM_LEFT_RADIUS || prop == CSS_PROPERTY_BORDER_BOTTOM_RIGHT_RADIUS;
+}
+
 void CssParser::parseDeclaration(CssPropertyList *props,
                                  CssPropertyList *importantProps)
 {
@@ -1698,9 +1700,20 @@ void CssParser::parseDeclaration(CssPropertyList *props,
          nextToken();
          if (ttype == CSS_TK_CHAR && tval[0] == ':') {
             nextToken();
+            if (Css_decoration_property(prop) && ttype == CSS_TK_SYMBOL &&
+                (!dStrAsciiCasecmp(tval, "initial") || !dStrAsciiCasecmp(tval, "inherit") ||
+                 !dStrAsciiCasecmp(tval, "unset"))) {
+               val.intVal = !dStrAsciiCasecmp(tval, "inherit") ? 1 : !dStrAsciiCasecmp(tval, "unset") ? 2 : 0;
+               nextToken();
+               if (ttype != CSS_TK_END && !(ttype == CSS_TK_CHAR &&
+                   (tval[0] == ';' || tval[0] == '}' || tval[0] == '!'))) return;
+               weight = parseWeight();
+               (weight && importantProps ? importantProps : props)->set(prop, CSS_TYPE_WIDE_KEYWORD, val);
+               return;
+            }
             if (tokenMatchesProperty (prop, &type) &&
                 parseValue(prop, type, &val)) {
-               if ((type == CSS_TYPE_GRADIENT || type == CSS_TYPE_CORNER_RADIUS) &&
+               if (Css_decoration_property(prop) &&
                    ttype != CSS_TK_END && !(ttype == CSS_TK_CHAR &&
                    (tval[0] == ';' || tval[0] == '}' || tval[0] == '!'))) {
                   CssProperty invalid; invalid.type = type; invalid.value = val;
@@ -1727,7 +1740,54 @@ void CssParser::parseDeclaration(CssPropertyList *props,
             if (ttype == CSS_TK_CHAR && tval[0] == ':') {
                nextToken();
 
+               if ((sip->type == CssShorthandInfo::CSS_SHORTHAND_BACKGROUND ||
+                    sip->type == CssShorthandInfo::CSS_SHORTHAND_OUTLINE ||
+                    sip->type == CssShorthandInfo::CSS_SHORTHAND_RADIUS) && ttype == CSS_TK_SYMBOL &&
+                   (!dStrAsciiCasecmp(tval, "initial") || !dStrAsciiCasecmp(tval, "inherit") ||
+                    !dStrAsciiCasecmp(tval, "unset"))) {
+                  val.intVal = !dStrAsciiCasecmp(tval, "inherit") ? 1 : !dStrAsciiCasecmp(tval, "unset") ? 2 : 0;
+                  nextToken();
+                  if (ttype != CSS_TK_END && !(ttype == CSS_TK_CHAR &&
+                      (tval[0] == ';' || tval[0] == '}' || tval[0] == '!'))) return;
+                  weight = parseWeight();
+                  for (int n = 0; sip->properties[n] != CSS_PROPERTY_END; ++n)
+                     (weight && importantProps ? importantProps : props)->set(sip->properties[n], CSS_TYPE_WIDE_KEYWORD, val);
+                  return;
+               }
+
                switch (Css_shorthand_info[sh_index].type) {
+
+               case CssShorthandInfo::CSS_SHORTHAND_OUTLINE: {
+                  CssPropertyList parsed(true);
+                  CssPropertyValue initial;
+                  initial.colorVal.rgba = 0; initial.colorVal.currentColor = true;
+                  parsed.set(CSS_PROPERTY_OUTLINE_COLOR, CSS_TYPE_RGBA, initial);
+                  initial.intVal = 0;
+                  parsed.set(CSS_PROPERTY_OUTLINE_STYLE, CSS_TYPE_ENUM, initial);
+                  initial.intVal = 1;
+                  parsed.set(CSS_PROPERTY_OUTLINE_WIDTH, CSS_TYPE_ENUM, initial);
+                  bool seen[3] = {}, valid = true, any = false;
+                  while (ttype != CSS_TK_END && !(ttype == CSS_TK_CHAR &&
+                         (tval[0] == ';' || tval[0] == '}' || tval[0] == '!'))) {
+                     bool matched = false;
+                     for (unsigned n = 0; n < 3 && !matched; ++n) {
+                        CssPropertyName name = Css_outline_properties[n];
+                        if (!seen[n] && tokenMatchesProperty(name, &type)) {
+                           matched = true;
+                           CssPropertyValue part;
+                           if (!parseValue(name, type, &part)) { valid = false; break; }
+                           parsed.set(name, type, part); seen[n] = any = true;
+                        }
+                     }
+                     if (!valid || !matched) { valid = false; break; }
+                  }
+                  if (valid && any) {
+                     weight = parseWeight();
+                     CssPropertyList *dest = weight && importantProps ? importantProps : props;
+                     parsed.apply(dest);
+                  }
+                  break;
+               }
 
                case CssShorthandInfo::CSS_SHORTHAND_BACKGROUND: {
                   CssPropertyList parsed(true);

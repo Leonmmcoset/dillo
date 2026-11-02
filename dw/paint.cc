@@ -64,6 +64,19 @@ struct RoundedBox {
       }
       return true;
    }
+
+   RoundedBox outset(double amount) const
+   {
+      RoundedBox result = *this;
+      result.width = std::max(0.0, width + 2 * amount);
+      result.height = std::max(0.0, height + 2 * amount);
+      for (unsigned n = 0; n < 4; ++n) {
+         result.rx[n] = rx[n] ? std::max(0.0, rx[n] + amount) : 0;
+         result.ry[n] = ry[n] ? std::max(0.0, ry[n] + amount) : 0;
+      }
+      result.normalize();
+      return result;
+   }
 };
 
 // Premultiplied channels make transparent color stops interpolate without
@@ -188,7 +201,102 @@ unsigned rgba(Color *color, bool inverse)
    if (inverse) rgb ^= 0xffffff;
    return (rgb << 8) | (color ? 255 : 0);
 }
+
+void blurMask(std::vector<float> &mask, std::vector<float> &scratch,
+              int width, int height, int radius, bool horizontal)
+{
+   if (!radius) return;
+   int count = horizontal ? width : height, lines = horizontal ? height : width;
+   int stride = horizontal ? 1 : width;
+   for (int line = 0; line < lines; ++line) {
+      int base = horizontal ? line * width : line;
+      auto at = [&](int p) { return mask[base + std::max(0, std::min(count - 1, p)) * stride]; };
+      double sum = 0;
+      for (int p = -radius; p <= radius; ++p) sum += at(p);
+      for (int p = 0; p < count; ++p) {
+         scratch[base + p * stride] = sum / (2 * radius + 1);
+         sum += at(p + radius + 1) - at(p - radius);
+      }
+   }
+   mask.swap(scratch);
+}
 } // namespace
+
+void drawBoxShadows(View *view, Layout *layout, Rectangle *area,
+   int x, int y, int width, int height, Style *style, bool inset, bool inverse)
+{
+   Rectangle border(x + style->margin.left, y + style->margin.top,
+      width - style->margin.left - style->margin.right,
+      height - style->margin.top - style->margin.bottom);
+   if (border.isEmpty()) return;
+   RoundedBox outer(style, border.width, border.height);
+   const Box &b = style->borderWidth;
+   RoundedBox clip = inset ? outer.inset(b.left, b.top, b.right, b.bottom) : outer;
+   int clipX = border.x + (inset ? b.left : 0), clipY = border.y + (inset ? b.top : 0);
+   for (unsigned n = style->boxShadows.count; n > 0; --n) {
+      const BoxShadows::Shadow &shadow = style->boxShadows.shadows[n - 1];
+      if (shadow.inset != inset || !(shadow.rgba & 255)) continue;
+      double spread = inset ? -shadow.spread : shadow.spread;
+      RoundedBox shape = clip.outset(spread);
+      int shapeX = clipX + shadow.x - spread, shapeY = clipY + shadow.y - spread;
+      int radii[3] = {}, halo = 0;
+      if (shadow.blur) {
+         double variance = shadow.blur * shadow.blur / 4.0;
+         int low = (int)std::floor(std::sqrt(4 * variance + 1));
+         if (!(low & 1)) --low;
+         int small = (int)std::round((12 * variance - 3 * low * low - 12 * low - 9) / (-4 * low - 4));
+         for (int p = 0; p < 3; ++p) {
+            radii[p] = (low + (p < small ? 0 : 2)) / 2;
+            halo += radii[p];
+         }
+      }
+      Rectangle bounds = inset ? Rectangle(clipX, clipY, clip.width, clip.height) :
+         Rectangle(shapeX - halo, shapeY - halo, shape.width + 2 * halo, shape.height + 2 * halo);
+      Rectangle visible;
+      if (!area->intersectsWith(&bounds, &visible)) continue;
+      Pixel color(inverse ? shadow.rgba ^ 0xffffff00u : shadow.rgba);
+      auto allowed = [&](double px, double py) {
+         bool inside = clip.contains(px - clipX, py - clipY);
+         return inset ? inside : !inside;
+      };
+      if (!halo) {
+         raster(view, layout, visible, [&](double px, double py) {
+            bool inside = shape.contains(px - shapeX, py - shapeY);
+            return allowed(px, py) && (inset ? !inside : inside) ? color : Pixel();
+         });
+         continue;
+      }
+      // Three separable box filters approximate the Gaussian CSS blur.
+      // Include the filter halo per tile, never allocate a box-sized mask.
+      const int tile = 128;
+      for (int ty = visible.y; ty < visible.y + visible.height; ty += tile)
+         for (int tx = visible.x; tx < visible.x + visible.width; tx += tile) {
+            int tw = std::min(tile, visible.x + visible.width - tx);
+            int th = std::min(tile, visible.y + visible.height - ty);
+            int mw = tw + 2 * halo, mh = th + 2 * halo;
+            std::vector<float> mask(mw * mh), scratch(mw * mh);
+            for (int row = 0; row < mh; ++row) for (int col = 0; col < mw; ++col) {
+               bool inside = shape.contains(tx + col - halo + .5 - shapeX,
+                                             ty + row - halo + .5 - shapeY);
+               mask[row * mw + col] = inset ? !inside : inside;
+            }
+            for (int p = 0; p < 3; ++p) {
+               blurMask(mask, scratch, mw, mh, radii[p], true);
+               blurMask(mask, scratch, mw, mh, radii[p], false);
+            }
+            Rectangle tileArea(tx, ty, tw, th);
+            raster(view, layout, tileArea, [&](double px, double py) {
+               if (!allowed(px, py)) return Pixel();
+               double coverage = std::max(0.0f, std::min(1.0f,
+                  mask[((int)py - ty + halo) * mw + (int)px - tx + halo]));
+               Pixel result = color;
+               result.r *= coverage; result.g *= coverage;
+               result.b *= coverage; result.a *= coverage;
+               return result;
+            });
+         }
+   }
+}
 
 bool hasRoundedCorners(const Style *style)
 {
@@ -200,6 +308,45 @@ bool hasRoundedCorners(const Style *style)
    for (unsigned n = 0; n < 4; ++n)
       if (nonzero(style->borderRadius.x[n]) && nonzero(style->borderRadius.y[n])) return true;
    return false;
+}
+
+void drawOutline(View *view, Layout *layout, Rectangle *area,
+   int x, int y, int width, int height, Style *style, bool inverse)
+{
+   const Outline &o = style->outline;
+   if (o.width <= 0 || o.style == BORDER_NONE || o.style == BORDER_HIDDEN || !(o.rgba & 255)) return;
+   int bx = x + style->margin.left, by = y + style->margin.top;
+   RoundedBox border(style, width - style->margin.left - style->margin.right,
+      height - style->margin.top - style->margin.bottom);
+   RoundedBox outer = border.outset(o.offset + o.width), inner = border.outset(o.offset);
+   int ox = bx - o.offset - o.width, oy = by - o.offset - o.width;
+   Rectangle bounds(ox, oy, outer.width, outer.height), visible;
+   if (!area->intersectsWith(&bounds, &visible)) return;
+   RoundedBox stripeOuter = border.outset(o.offset + 2 * o.width / 3.0);
+   RoundedBox stripeInner = border.outset(o.offset + o.width / 3.0);
+   Pixel color(inverse ? o.rgba ^ 0xffffff00u : o.rgba);
+   raster(view, layout, visible, [&](double px, double py) {
+      if (!outer.contains(px - ox, py - oy) || inner.contains(px - bx + o.offset, py - by + o.offset)) return Pixel();
+      if (o.style == BORDER_DOUBLE && o.width >= 3 &&
+          stripeOuter.contains(px - bx + o.offset + 2 * o.width / 3.0,
+                               py - by + o.offset + 2 * o.width / 3.0) &&
+          !stripeInner.contains(px - bx + o.offset + o.width / 3.0,
+                                py - by + o.offset + o.width / 3.0)) return Pixel();
+      if (o.style == BORDER_DASHED || o.style == BORDER_DOTTED) {
+         double lx = px - ox, ly = py - oy;
+         double distances[4] = {ly, outer.width - lx, outer.height - ly, lx};
+         unsigned side = std::min_element(distances, distances + 4) - distances;
+         double along = side == 0 ? lx : side == 1 ? ly : side == 2 ? outer.width - lx : outer.height - ly;
+         if (o.style == BORDER_DASHED) {
+            if (std::fmod(along, 6 * o.width) >= 3 * o.width) return Pixel();
+         } else {
+            double dx = std::fmod(along, 2 * o.width) - o.width / 2.0;
+            double dy = distances[side] - o.width / 2.0;
+            if (dx * dx + dy * dy > o.width * (double)o.width / 4) return Pixel();
+         }
+      }
+      return color;
+   });
 }
 
 bool drawRoundedBorder(View *view, Layout *layout, Rectangle *area,
@@ -247,7 +394,7 @@ void drawBackgroundPaint(View *view, Layout *layout, Rectangle *area,
    RoundedBox outer(style, width + border.left + border.right, height + border.top + border.bottom);
    RoundedBox inner = outer.inset(border.left, border.top, border.right, border.bottom);
    LinearGradient gradient(style->gradient, width, height);
-   Pixel background(rgba(color, inverse));
+   Pixel background((rgba(color, inverse) & ~255u) | (color ? style->backgroundAlpha : 0));
    raster(view, layout, visible, [&](double px, double py) {
       double xLocal = px - x, yLocal = py - y;
       return inner.contains(xLocal, yLocal) ? gradient.sample(xLocal, yLocal).over(background) : Pixel();

@@ -611,14 +611,30 @@ void FltkViewBase::drawPolygon (core::style::Color *color,
 
 core::View *FltkViewBase::getClippingView (int x, int y, int width, int height)
 {
-   fl_push_clip (translateCanvasXToViewX (x), translateCanvasYToViewY (y),
-                 width, height);
+   core::Rectangle clip(translateCanvasXToViewX(x), translateCanvasYToViewY(y),
+                        width, height);
+   if (!clippingAreas.empty()) {
+      core::Rectangle intersection;
+      clippingAreas.back().intersectsWith(&clip, &intersection);
+      clip = intersection;
+      fl_pop_clip();
+   }
+   // FLTK has a small, fixed clip stack. Keep CSS nesting in our own stack
+   // and replace its one native slot, preserving the surrounding GUI clip.
+   clippingAreas.push_back(clip);
+   fl_push_clip(clip.x, clip.y, clip.width, clip.height);
    return this;
 }
 
 void FltkViewBase::mergeClippingView (core::View *clippingView)
 {
+   assert(clippingView == this && !clippingAreas.empty());
    fl_pop_clip ();
+   clippingAreas.pop_back();
+   if (!clippingAreas.empty()) {
+      const core::Rectangle &clip = clippingAreas.back();
+      fl_push_clip(clip.x, clip.y, clip.width, clip.height);
+   }
 }
 
 // ----------------------------------------------------------------------

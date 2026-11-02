@@ -3,6 +3,7 @@
 
 #include <time.h>         // for time_t
 #include <sys/time.h>     // for time_t in FreeBSD
+#include <vector>
 
 #include <FL/Fl_Group.H>
 #include <FL/x.H>
@@ -36,6 +37,7 @@ private:
    void paintBackground(core::Rectangle *area);
    core::Region drawRegion;
    core::Rectangle *exposeArea;
+   std::vector<core::Rectangle> clippingAreas;
    static BackBuffer *backBuffer;
    static bool backBufferInUse;
 

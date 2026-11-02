@@ -586,6 +586,21 @@ struct BorderRadius {
    Length x[4], y[4];
 };
 
+struct BoxShadows {
+   unsigned count;
+   struct Shadow {
+      int x, y, blur, spread;
+      unsigned rgba;
+      bool inset;
+   } shadows[8];
+};
+
+struct Outline {
+   int width, offset;
+   BorderStyle style;
+   unsigned rgba;
+};
+
 class StyleAttrs : public lout::object::Object
 {
 public:
@@ -593,9 +608,12 @@ public:
    int textDecoration; /* No TextDecoration because of problems converting
                         * TextDecoration <-> int */
    Color *color, *backgroundColor;
+   unsigned backgroundAlpha;
    StyleImage *backgroundImage;
    Gradient gradient;
    BorderRadius borderRadius;
+   BoxShadows boxShadows;
+   Outline outline;
    BackgroundRepeat backgroundRepeat;
    BackgroundAttachment backgroundAttachment;
    Length backgroundPositionX; // "left" defined by "0%" etc. (see CSS spec)

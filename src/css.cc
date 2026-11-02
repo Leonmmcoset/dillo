@@ -59,6 +59,12 @@ CssPropertyList::CssPropertyList (const CssPropertyList &p, bool deep) :
                   *gradient = *p->value.gradientVal; p->value.gradientVal = gradient;
                }
                break;
+            case CSS_TYPE_SHADOW:
+               {
+                  CssShadows *shadows = (CssShadows *)dMalloc(sizeof(CssShadows));
+                  *shadows = *p->value.shadowsVal; p->value.shadowsVal = shadows;
+               }
+               break;
             default:
                break;
          }
@@ -130,6 +136,10 @@ void CssPropertyList::apply (CssPropertyList *props) {
       if (props->ownerOfStrings && getRef(i)->type == CSS_TYPE_GRADIENT) {
          value.gradientVal = (CssGradient *)dMalloc(sizeof(CssGradient));
          *value.gradientVal = *getRef(i)->value.gradientVal;
+      }
+      if (props->ownerOfStrings && getRef(i)->type == CSS_TYPE_SHADOW) {
+         value.shadowsVal = (CssShadows *)dMalloc(sizeof(CssShadows));
+         *value.shadowsVal = *getRef(i)->value.shadowsVal;
       }
 
       props->set ((CssPropertyName) getRef (i)->name,

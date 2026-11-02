@@ -499,7 +499,10 @@ public:
          y <= allocation.y + getHeight ();
    }
    bool isPointVisible(int x, int y);
-   virtual bool drawsOutsideAllocation() { return false; }
+   virtual bool drawsOutsideAllocation() {
+      return style && (style->boxShadows.count ||
+         (style->outline.style != style::BORDER_NONE && style->outline.width > 0));
+   }
 
    inline int boxOffsetX ()
    { return extraSpace.left + getStyle()->boxOffsetX (); }

@@ -57,6 +57,7 @@ typedef enum {
    CSS_TYPE_AUTO,               /**< Represented as CssLength of type
                                    CSS_LENGTH_TYPE_AUTO */
    CSS_TYPE_COLOR,              /**< Represented as integer. */
+   CSS_TYPE_RGBA,               /**< Alpha color, with deferred currentColor. */
    CSS_TYPE_FONT_WEIGHT,        /**< this very special and only used by
                                    'font-weight' */
    CSS_TYPE_STRING,             /**< <string> */
@@ -69,6 +70,8 @@ typedef enum {
    CSS_TYPE_TRANSFORM,
    CSS_TYPE_CORNER_RADIUS,
    CSS_TYPE_GRADIENT,
+   CSS_TYPE_SHADOW,
+   CSS_TYPE_WIDE_KEYWORD,       /**< initial=0, inherit=1, unset=2. */
    CSS_TYPE_COMPONENTS,         /**< Raw component values for track lists. */
    CSS_TYPE_DEFERRED,           /**< A declaration containing var(), parsed after cascade. */
    CSS_TYPE_UNUSED              /**< Not yet used. Will itself get unused some
@@ -202,6 +205,7 @@ typedef enum {
    CSS_PROPERTY_BORDER_TOP_STYLE,
    CSS_PROPERTY_BORDER_TOP_WIDTH,
    CSS_PROPERTY_BOTTOM,
+   CSS_PROPERTY_BOX_SHADOW,
    CSS_PROPERTY_BOX_SIZING,
    CSS_PROPERTY_CAPTION_SIDE,
    CSS_PROPERTY_CLEAR,
@@ -250,6 +254,7 @@ typedef enum {
    CSS_PROPERTY_MIN_WIDTH,
    CSS_PROPERTY_ORDER,
    CSS_PROPERTY_OUTLINE_COLOR,
+   CSS_PROPERTY_OUTLINE_OFFSET,
    CSS_PROPERTY_OUTLINE_STYLE,
    CSS_PROPERTY_OUTLINE_WIDTH,
    CSS_PROPERTY_OVERFLOW,
@@ -308,13 +313,30 @@ struct CssGradient {
    } stops[MAX_STOPS];
 };
 
+struct CssColor {
+   unsigned rgba;
+   bool currentColor;
+};
+
+struct CssShadows {
+   enum { MAX_SHADOWS = 8 };
+   unsigned count;
+   struct Shadow {
+      CssLength lengths[4];
+      CssColor color;
+      bool inset;
+   } shadows[MAX_SHADOWS];
+};
+
 typedef union {
    int32_t intVal;
+   CssColor colorVal;
    CssLength lenVal;
    char *strVal;
    CssBackgroundPosition *posVal;
    CssTransform *transformVal;
    CssGradient *gradientVal;
+   CssShadows *shadowsVal;
 } CssPropertyValue;
 
 typedef enum {
@@ -380,6 +402,9 @@ class CssProperty {
                break;
             case CSS_TYPE_GRADIENT:
                dFree (value.gradientVal);
+               break;
+            case CSS_TYPE_SHADOW:
+               dFree(value.shadowsVal);
                break;
             default:
                break;

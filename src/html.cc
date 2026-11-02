@@ -4245,8 +4245,27 @@ static void Html_process_tag(DilloHtml *html, char *tag, int tagsize)
             s->position == dw::core::style::POSITION_FIXED ? "fixed" :
             s->position == dw::core::style::POSITION_RELATIVE ? "relative" : "static",
             s->color ? s->color->getColor() : 0);
-         if (s->backgroundColor) dStr_sprintfa(css, "background-color:#%06x;", s->backgroundColor->getColor());
+         if (s->backgroundColor && s->backgroundAlpha != 255) {
+            unsigned rgb = s->backgroundColor->getColor();
+            dStr_sprintfa(css, "background-color:rgba(%u,%u,%u,%.6f);", rgb >> 16, (rgb >> 8) & 255, rgb & 255, s->backgroundAlpha / 255.0);
+         } else if (s->backgroundColor) dStr_sprintfa(css, "background-color:#%06x;", s->backgroundColor->getColor());
          else dStr_append(css, "background-color:transparent;");
+         static const char *borderStyles[] = {"none", "hidden", "dotted", "dashed", "solid", "double", "groove", "ridge", "inset", "outset"};
+         unsigned outlineColor = s->outline.rgba;
+         dStr_sprintfa(css, "outline-color:rgba(%u,%u,%u,%.6f);outline-style:%s;outline-width:%dpx;outline-offset:%dpx;",
+            outlineColor >> 24, (outlineColor >> 16) & 255, (outlineColor >> 8) & 255,
+            (outlineColor & 255) / 255.0, borderStyles[s->outline.style],
+            s->outline.style == dw::core::style::BORDER_NONE || s->outline.style == dw::core::style::BORDER_HIDDEN ? 0 : s->outline.width,
+            s->outline.offset);
+         dStr_append(css, "box-shadow:");
+         if (!s->boxShadows.count) dStr_append(css, "none");
+         for (unsigned n = 0; n < s->boxShadows.count; ++n) {
+            const dw::core::style::BoxShadows::Shadow &shadow = s->boxShadows.shadows[n];
+            dStr_sprintfa(css, "%s%s%dpx %dpx %dpx %dpx rgba(%u,%u,%u,%.6f)",
+               n ? "," : "", shadow.inset ? "inset " : "", shadow.x, shadow.y, shadow.blur, shadow.spread,
+               shadow.rgba >> 24, (shadow.rgba >> 16) & 255, (shadow.rgba >> 8) & 255, (shadow.rgba & 255) / 255.0);
+         }
+         dStr_append(css, ";");
          if (s->zIndex == dw::core::style::Z_INDEX_AUTO) dStr_append(css, "z-index:auto;");
          else dStr_sprintfa(css, "z-index:%d;", s->zIndex);
          static const char *overflows[] = {"visible", "hidden", "scroll", "auto"};

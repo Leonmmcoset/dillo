@@ -39,10 +39,9 @@ class CssParser {
       bool parseCalcAtom(CssLength *value, unsigned depth);
       bool parseTransform(CssTransform *value);
       bool parseGradient(CssGradient *value);
-      bool parseGradientColor(unsigned *rgba);
+      bool parseColor(unsigned *rgba);
+      bool parseShadows(CssShadows *value);
       bool parseWeight();
-      bool parseRgbColorComponent(int32_t *cc, int *percentage);
-      bool parseRgbColor(int32_t *c);
       void parseDeclaration(CssPropertyList * props,
                             CssPropertyList * importantProps);
       bool parseSimpleSelector(CssSimpleSelector *selector, bool negation = false);
