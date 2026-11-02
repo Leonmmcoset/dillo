@@ -72,6 +72,7 @@ typedef enum {
    CSS_TYPE_CORNER_RADIUS,
    CSS_TYPE_BACKGROUND_IMAGES,
    CSS_TYPE_BACKGROUND_BOXES,
+   CSS_TYPE_BACKGROUND_SIZES,
    CSS_TYPE_SHADOW,
    CSS_TYPE_WIDE_KEYWORD,       /**< initial=0, inherit=1, unset=2. */
    CSS_TYPE_COMPONENTS,         /**< Raw component values for track lists. */
@@ -190,6 +191,7 @@ typedef enum {
    CSS_PROPERTY_BACKGROUND_ORIGIN,
    CSS_PROPERTY_BACKGROUND_POSITION,
    CSS_PROPERTY_BACKGROUND_REPEAT,
+   CSS_PROPERTY_BACKGROUND_SIZE,
    CSS_PROPERTY_BORDER_BOTTOM_COLOR,
    CSS_PROPERTY_BORDER_BOTTOM_LEFT_RADIUS,
    CSS_PROPERTY_BORDER_BOTTOM_RIGHT_RADIUS,
@@ -328,6 +330,14 @@ struct CssBackgroundBoxes {
    int values[CssBackgroundImages::MAX_LAYERS];
 };
 
+struct CssBackgroundSizes {
+   struct Size {
+      int mode; // explicit=0, cover=1, contain=2
+      CssLength x, y;
+   } values[CssBackgroundImages::MAX_LAYERS];
+   unsigned count;
+};
+
 struct CssColor {
    unsigned rgba;
    bool currentColor;
@@ -352,6 +362,7 @@ typedef union {
    CssTransform *transformVal;
    CssBackgroundImages *imagesVal;
    CssBackgroundBoxes *boxesVal;
+   CssBackgroundSizes *sizesVal;
    CssShadows *shadowsVal;
 } CssPropertyValue;
 
@@ -421,6 +432,9 @@ class CssProperty {
                break;
             case CSS_TYPE_BACKGROUND_BOXES:
                dFree(value.boxesVal);
+               break;
+            case CSS_TYPE_BACKGROUND_SIZES:
+               dFree(value.sizesVal);
                break;
             case CSS_TYPE_SHADOW:
                dFree(value.shadowsVal);

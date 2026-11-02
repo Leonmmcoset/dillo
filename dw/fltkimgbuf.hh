@@ -73,6 +73,8 @@ public:
    void getRowArea (int row, dw::core::Rectangle *area);
    int  getRootWidth ();
    int  getRootHeight ();
+   int getWidth () { return width; }
+   int getHeight () { return height; }
    core::Imgbuf *createSimilarBuf (int width, int height);
    void copyTo (Imgbuf *dest, int xDestRoot, int yDestRoot,
                 int xSrc, int ySrc, int widthSrc, int heightSrc);

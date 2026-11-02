@@ -74,6 +74,7 @@ void StyleAttrs::initValues ()
    memset(&backgroundClip, 0, sizeof(backgroundClip)); backgroundClip.count = 1;
    memset(&backgroundOrigin, 0, sizeof(backgroundOrigin));
    backgroundOrigin.count = 1; backgroundOrigin.values[0] = BACKGROUND_PADDING_BOX;
+   memset(&backgroundSize, 0, sizeof(backgroundSize)); backgroundSize.count = 1;
    memset(&borderRadius, 0, sizeof(borderRadius));
    memset(&boxShadows, 0, sizeof(boxShadows));
    memset(&outline, 0, sizeof(outline));
@@ -141,6 +142,7 @@ void StyleAttrs::resetValues ()
    memset(&backgroundClip, 0, sizeof(backgroundClip)); backgroundClip.count = 1;
    memset(&backgroundOrigin, 0, sizeof(backgroundOrigin));
    backgroundOrigin.count = 1; backgroundOrigin.values[0] = BACKGROUND_PADDING_BOX;
+   memset(&backgroundSize, 0, sizeof(backgroundSize)); backgroundSize.count = 1;
    memset(&borderRadius, 0, sizeof(borderRadius));
    memset(&boxShadows, 0, sizeof(boxShadows));
    memset(&outline, 0, sizeof(outline));
@@ -200,6 +202,7 @@ bool StyleAttrs::equals (object::Object *other) {
        (backgroundLayers.empty() || !memcmp(backgroundLayers.data(), otherAttrs->backgroundLayers.data(), backgroundLayers.size() * sizeof(Gradient))) &&
        !memcmp(&backgroundClip, &otherAttrs->backgroundClip, sizeof(backgroundClip)) &&
        !memcmp(&backgroundOrigin, &otherAttrs->backgroundOrigin, sizeof(backgroundOrigin)) &&
+       !memcmp(&backgroundSize, &otherAttrs->backgroundSize, sizeof(backgroundSize)) &&
        !memcmp(&borderRadius, &otherAttrs->borderRadius, sizeof(borderRadius)) &&
        !memcmp(&boxShadows, &otherAttrs->boxShadows, sizeof(boxShadows)) &&
        !memcmp(&outline, &otherAttrs->outline, sizeof(outline)) &&
@@ -272,6 +275,7 @@ int StyleAttrs::hashValue () {
    if (!backgroundLayers.empty()) hashBytes(backgroundLayers.data(), backgroundLayers.size() * sizeof(Gradient));
    hashBytes(&backgroundClip, sizeof(backgroundClip));
    hashBytes(&backgroundOrigin, sizeof(backgroundOrigin));
+   hashBytes(&backgroundSize, sizeof(backgroundSize));
    hashBytes(&borderRadius, sizeof(borderRadius));
    hashBytes(&boxShadows, sizeof(boxShadows));
    hashBytes(&outline, sizeof(outline));
@@ -418,6 +422,7 @@ void Style::copyAttrs (StyleAttrs *attrs)
    backgroundLayers = attrs->backgroundLayers;
    backgroundClip = attrs->backgroundClip;
    backgroundOrigin = attrs->backgroundOrigin;
+   backgroundSize = attrs->backgroundSize;
    borderRadius = attrs->borderRadius;
    boxShadows = attrs->boxShadows;
    outline = attrs->outline;
@@ -625,6 +630,8 @@ Tooltip *Tooltip::create (Layout *layout, const char *text)
 
 void StyleImage::StyleImgRenderer::setBuffer (core::Imgbuf *buffer, bool resize)
 {
+   if (image->imgbufScaled) image->imgbufScaled->unref();
+   image->imgbufScaled = NULL;
    if (image->imgbufSrc)
       image->imgbufSrc->unref ();
    if (image->imgbufTiled)
@@ -706,6 +713,7 @@ StyleImage::StyleImage ()
    refCount = 0;
    imgbufSrc = NULL;
    imgbufTiled = NULL;
+   imgbufScaled = NULL;
 
    imgRendererDist = new ImgRendererDist ();
    styleImgRenderer = new StyleImgRenderer (this);
@@ -714,6 +722,7 @@ StyleImage::StyleImage ()
 
 StyleImage::~StyleImage ()
 {
+   if (imgbufScaled) imgbufScaled->unref();
    if (imgbufSrc)
       imgbufSrc->unref ();
    if (imgbufTiled)
@@ -723,6 +732,19 @@ StyleImage::~StyleImage ()
    delete styleImgRenderer;
 
    DBG_OBJ_DELETE ();
+}
+
+Imgbuf *StyleImage::getScaledBackground (int width, int height)
+{
+   // A single retained size per decoded image bounds cache memory. Streaming
+   // row updates propagate through Imgbuf's existing scaled-buffer mechanism.
+   if (!imgbufSrc || width <= 0 || height <= 0 || width > 32767 || height > 32767 ||
+       (int64_t)width * height > 16 * 1024 * 1024) return NULL;
+   if (imgbufScaled && imgbufScaled->getWidth() == width && imgbufScaled->getHeight() == height)
+      return imgbufScaled;
+   if (imgbufScaled) imgbufScaled->unref();
+   imgbufScaled = imgbufSrc->getScaledBuf(width, height);
+   return imgbufScaled && imgbufScaled->getWidth() == width && imgbufScaled->getHeight() == height ? imgbufScaled : NULL;
 }
 
 void StyleImage::ExternalImgRenderer::setBuffer (core::Imgbuf *buffer,

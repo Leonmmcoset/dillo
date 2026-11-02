@@ -68,6 +68,11 @@ output, use, for example, `dilloc eval 'JSON.stringify({url:location.href})'`.
   text input/textarea keyboard, input/focus events, buttons outside forms,
   form submission and link clicks. UTF-16 selection offsets map to native
   UTF-8 controls. Clipboard replies survive DOM changes made in key handlers.
+- Native click events carry viewport, page and screen coordinates, released
+  button state, click count and Ctrl/Shift/Alt/Meta modifiers. Text targets and
+  native inputs, textareas and buttons share the viewport conversion, including
+  after scrolling. MouseEvent exposes x/y/which aliases and getModifierState().
+  Keyboard button activation has zero mouse coordinates and click count.
 - Timers, Promise jobs, requestAnimationFrame, console and navigation.
 - Same-document history.pushState/replaceState, history.state/length and
   back/forward/go share Dillo's navigation stack. Traversing these entries
@@ -125,6 +130,15 @@ output, use, for example, `dilloc eval 'JSON.stringify({url:location.href})'`.
   final layer, resetting omitted longhands. Rounded clipping also applies to
   single URL backgrounds. Backgrounds paint below solid borders, including
   transparent borders used for layered gradient outlines.
+- background-size supports auto, nonnegative lengths/percentages, calc(),
+  cover/contain and lists that repeat across gradient layers. Single URL images
+  preserve their intrinsic aspect ratio with an auto dimension or cover/contain;
+  gradients fill auto dimensions using their background origin box. Single-layer
+  background shorthand accepts position / size. Scaled images obey repetition,
+  positioning and rounded clipping; root/body URL sizes propagate to the canvas.
+  Decoded image scaling uses a bounded cache and follows streaming row updates.
+  Removing root/body images clears their canvas paint, and requests canceled
+  during restyling no longer leave the document's loading state pending.
 - Alpha background colors support rgba(), modern space/slash RGB/HSL syntax,
   transparent, currentColor and 4/8-digit hex. Nested backgrounds composite over
   their painted parent; root backgrounds composite over the configured canvas
@@ -154,7 +168,7 @@ output, use, for example, `dilloc eval 'JSON.stringify({url:location.href})'`.
   inherit and unset, including their supported shorthands and var() expansion.
   Other properties do not yet have general CSS-wide keyword support.
   getComputedStyle() reports alpha background colors, shadow lengths, outline
-  longhands, pointer-events and background origin/clip lists from the committed
+  longhands, pointer-events and background origin/clip/size lists from the committed
   render tree.
 - Immediate window.scroll(), scrollTo() and scrollBy(), using numeric arguments
   or options with left/top.
@@ -198,12 +212,15 @@ perspective or general 3D; translate3d() requires a zero z component. Gradients
 do not implement radial/conic shapes. Layered URL images and per-layer lists of
 background-position/repeat/attachment remain unsupported; the existing
 single-URL path is retained. A shorthand requiring these unsupported lists is
-ignored atomically, preserving a previous fallback declaration.
+ignored atomically, preserving a previous fallback declaration. Scaled URL image
+buffers are limited to 32767px per side and 16 million pixels; larger scaled
+images are omitted. Canvas URL backgrounds retain the existing canvas reference
+area, the larger of the document and viewport, for percentage sizes and position.
 Rounded solid borders are supported; other border styles retain the legacy
 square-border fallback. Background-image corner clipping uses row spans rather
 than an antialiased image mask. Overflow clipping is rectangular: rounded corners
 do not yet clip descendant content. Internal overflow scroll containers,
-overflow-x/y and background-size remain unsupported. Element/group opacity,
+overflow-x/y remain unsupported. Element/group opacity,
 transitions and animations are not implemented. Text and border colors do not
 yet support alpha; native controls do not provide arbitrary translucent content
 compositing over images or gradients. Scroll APIs are

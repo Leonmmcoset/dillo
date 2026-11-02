@@ -21,6 +21,7 @@
 
 
 #include "core.hh"
+#include "paint.hh"
 
 #include "dlib/dlib.h"
 #include "../lout/msg.h"
@@ -284,6 +285,7 @@ Layout::Layout (Platform *platform, bool limit)
 
    bgColor = NULL;
    bgImage = NULL;
+   memset(&bgSize, 0, sizeof(bgSize)); bgSize.count = 1;
    cursor = style::CURSOR_DEFAULT;
 
    canvasWidth = canvasAscent = canvasDescent = 0;
@@ -693,20 +695,26 @@ void Layout::draw (View *view, Rectangle *area)
 
    // First of all, draw background image. (Unlike background *color*,
    // this is not a feature of the views.)
-   if (bgImage != NULL && bgImage->getImgbufSrc() != NULL)
-      style::drawBackgroundImage (view, bgImage, bgRepeat, bgAttachment,
+   if (bgImage != NULL && bgImage->getImgbufSrc() != NULL) {
+      int width = misc::max(viewportWidth - (canvasHeightGreater ? vScrollbarThickness : 0), canvasWidth);
+      int height = misc::max(viewportHeight - hScrollbarThickness, canvasAscent + canvasDescent);
+      const style::BackgroundSizes::Size &size = bgSize.at(0);
+      if (size.mode != style::BackgroundSizes::Size::EXPLICIT ||
+          size.x != style::LENGTH_AUTO || size.y != style::LENGTH_AUTO) {
+         // Root/body URL backgrounds propagate their sizing to the canvas.
+         // Canvas painting has no border, padding or rounded clipping.
+         style::StyleAttrs attrs;
+         attrs.initValues();
+         attrs.backgroundImage = bgImage; attrs.backgroundSize = bgSize;
+         attrs.backgroundRepeat = bgRepeat; attrs.backgroundAttachment = bgAttachment;
+         attrs.backgroundPositionX = bgPositionX; attrs.backgroundPositionY = bgPositionY;
+         style::drawRoundedBackgroundImage(view, this, area, 0, 0, width, height,
+            0, 0, width, height, &attrs);
+      } else style::drawBackgroundImage (view, bgImage, bgRepeat, bgAttachment,
                                   bgPositionX, bgPositionY,
                                   area->x, area->y, area->width,
-                                  area->height, 0, 0,
-                                  // Reference area: maximum of canvas size and
-                                  // viewport size.
-                                  misc::max (viewportWidth
-                                             - (canvasHeightGreater ?
-                                                vScrollbarThickness : 0),
-                                             canvasWidth),
-                                  misc::max (viewportHeight
-                                             - hScrollbarThickness,
-                                             canvasAscent + canvasDescent));
+                                  area->height, 0, 0, width, height);
+   }
 
    if (scrollIdleId != -1) {
       /* scroll is pending, defer draw until after scrollIdle() */
@@ -858,7 +866,8 @@ void Layout::setBgColor (style::Color *color)
 void Layout::setBgImage (style::StyleImage *bgImage,
                          style::BackgroundRepeat bgRepeat,
                          style::BackgroundAttachment bgAttachment,
-                         style::Length bgPositionX, style::Length bgPositionY)
+                         style::Length bgPositionX, style::Length bgPositionY,
+                         const style::BackgroundSizes *bgSize)
 {
    if (layoutImgRenderer && this->bgImage)
       this->bgImage->removeExternalImgRenderer (layoutImgRenderer);
@@ -874,6 +883,8 @@ void Layout::setBgImage (style::StyleImage *bgImage,
    this->bgAttachment = bgAttachment;
    this->bgPositionX = bgPositionX;
    this->bgPositionY = bgPositionY;
+   if (bgSize) this->bgSize = *bgSize;
+   else { memset(&this->bgSize, 0, sizeof(this->bgSize)); this->bgSize.count = 1; }
 
    if (bgImage) {
       // Create instance of LayoutImgRenderer when needed. Until this

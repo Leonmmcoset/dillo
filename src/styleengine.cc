@@ -37,17 +37,19 @@ class StyleImageDeletionReceiver:
    public lout::signal::ObservedObject::DeletionReceiver
 {
    int clientKey;
+   BrowserWindow *bw;
 
 public:
-   StyleImageDeletionReceiver (int clientKey);
+   StyleImageDeletionReceiver (int clientKey, BrowserWindow *bw);
    ~StyleImageDeletionReceiver ();
 
    void deleted (lout::signal::ObservedObject *object);
 };
 
-StyleImageDeletionReceiver::StyleImageDeletionReceiver (int clientKey)
+StyleImageDeletionReceiver::StyleImageDeletionReceiver (int clientKey, BrowserWindow *bw)
 {
    this->clientKey = clientKey;
+   this->bw = bw;
 }
 
 StyleImageDeletionReceiver::~StyleImageDeletionReceiver ()
@@ -56,6 +58,10 @@ StyleImageDeletionReceiver::~StyleImageDeletionReceiver ()
 
 void StyleImageDeletionReceiver::deleted (lout::signal::ObservedObject *object)
 {
+   // Restyling the root can discard an image before its request completes.
+   // A stopped cache client never sends CA_Close, so retire its loading key.
+   // Widget/layout styles are destroyed before their BrowserWindow is freed.
+   a_Bw_remove_client(bw, clientKey);
    a_Capi_stop_client (clientKey, 0);
    delete this;
 }
@@ -277,7 +283,8 @@ dw::core::style::StyleImage *StyleEngine::backgroundImage
    (dw::core::style::BackgroundRepeat *bgRepeat,
     dw::core::style::BackgroundAttachment *bgAttachment,
     dw::core::style::Length *bgPositionX,
-    dw::core::style::Length *bgPositionY) {
+    dw::core::style::Length *bgPositionY,
+    dw::core::style::BackgroundSizes *bgSize) {
    for (int i = 1; i < stack->size (); i++) {
       Node *n = stack->getRef (i);
 
@@ -286,6 +293,7 @@ dw::core::style::StyleImage *StyleEngine::backgroundImage
          *bgAttachment = n->style->backgroundAttachment;
          *bgPositionX = n->style->backgroundPositionX;
          *bgPositionY = n->style->backgroundPositionY;
+         *bgSize = n->style->backgroundSize;
          return n->style->backgroundImage;
       }
    }
@@ -556,6 +564,7 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
             attrs->backgroundImage = value.backgroundImage; attrs->backgroundLayers = value.backgroundLayers; break;
          case CSS_PROPERTY_BACKGROUND_CLIP: attrs->backgroundClip = value.backgroundClip; break;
          case CSS_PROPERTY_BACKGROUND_ORIGIN: attrs->backgroundOrigin = value.backgroundOrigin; break;
+         case CSS_PROPERTY_BACKGROUND_SIZE: attrs->backgroundSize = value.backgroundSize; break;
          case CSS_PROPERTY_BACKGROUND_REPEAT: attrs->backgroundRepeat = value.backgroundRepeat; break;
          case CSS_PROPERTY_BACKGROUND_ATTACHMENT: attrs->backgroundAttachment = value.backgroundAttachment; break;
          case CSS_PROPERTY_BACKGROUND_POSITION:
@@ -619,6 +628,16 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
             memset(&boxes, 0, sizeof(boxes));
             boxes.count = p->value.boxesVal->count;
             for (unsigned n = 0; n < boxes.count; ++n) boxes.values[n] = (BackgroundBox)p->value.boxesVal->values[n];
+            break;
+         }
+         case CSS_PROPERTY_BACKGROUND_SIZE: {
+            BackgroundSizes &sizes = attrs->backgroundSize;
+            memset(&sizes, 0, sizeof(sizes)); sizes.count = p->value.sizesVal->count;
+            for (unsigned n = 0; n < sizes.count; ++n) {
+               sizes.values[n].mode = (BackgroundSizes::Size::Mode)p->value.sizesVal->values[n].mode;
+               computeLength(&sizes.values[n].x, p->value.sizesVal->values[n].x, attrs->font);
+               computeLength(&sizes.values[n].y, p->value.sizesVal->values[n].y, attrs->font);
+            }
             break;
          }
          case CSS_PROPERTY_BACKGROUND_COLOR:
@@ -960,7 +979,7 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
                   a_Bw_add_client(bw, clientKey, 0);
                   a_Bw_add_url(bw, imgUrl);
                   attrs->backgroundImage->connectDeletion
-                     (new StyleImageDeletionReceiver (clientKey));
+                     (new StyleImageDeletionReceiver (clientKey, bw));
       }
    }
    a_Url_free (imgUrl);

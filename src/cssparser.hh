@@ -41,6 +41,7 @@ class CssParser {
       bool parseGradient(CssGradient *value);
       bool parseBackgroundImage(CssGradient *value);
       int backgroundBox();
+      bool parseBackgroundSize(CssBackgroundSizes::Size *size);
       bool parseColor(unsigned *rgba);
       bool parseShadows(CssShadows *value);
       bool parseWeight();

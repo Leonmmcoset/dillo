@@ -308,6 +308,29 @@ int FltkViewBase::manageTabToFocus()
    return ret;
 }
 
+bool FltkViewBase::getDomMouseEvent (core::DomMouseEvent *event)
+{
+   // A button activated by Enter/Space has no mouse coordinates or click count.
+   if (Fl::event() != FL_PUSH && Fl::event() != FL_RELEASE &&
+       Fl::event() != FL_MOVE && Fl::event() != FL_DRAG) return false;
+   event->clientX = Fl::event_x() - x();
+   event->clientY = Fl::event_y() - y();
+   event->pageX = translateViewXToCanvasX(Fl::event_x());
+   event->pageY = translateViewYToCanvasY(Fl::event_y());
+   event->screenX = Fl::event_x_root(); event->screenY = Fl::event_y_root();
+   event->button = Fl::event_button() - 1;
+   event->buttons = (Fl::event_state(FL_BUTTON1) ? 1 : 0) |
+      (Fl::event_state(FL_BUTTON2) ? 4 : 0) | (Fl::event_state(FL_BUTTON3) ? 2 : 0);
+   if (Fl::event() == FL_RELEASE && event->button >= 0 && event->button < 3)
+      event->buttons &= ~(event->button == 1 ? 4 : event->button == 2 ? 2 : 1);
+   event->detail = Fl::event_clicks() + 1;
+   event->ctrlKey = Fl::event_state(FL_CTRL) != 0;
+   event->shiftKey = Fl::event_state(FL_SHIFT) != 0;
+   event->altKey = Fl::event_state(FL_ALT) != 0;
+   event->metaKey = Fl::event_state(FL_META) != 0;
+   return true;
+}
+
 int FltkViewBase::handleNativeMouseEvent (int event)
 {
    core::Widget *target = theLayout->getWidgetAtPoint(

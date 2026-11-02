@@ -29,6 +29,11 @@ public:
       std::string source, url;
       bool async, defer, parserInserted;
    };
+   struct MouseEvent {
+      int clientX = 0, clientY = 0, pageX = 0, pageY = 0, screenX = 0, screenY = 0;
+      int button = 0, buttons = 0, detail = 0;
+      bool ctrlKey = false, shiftKey = false, altKey = false, metaKey = false;
+   };
 
 private:
    struct Impl;
@@ -52,7 +57,8 @@ public:
    void timeout(int id);
    void response(int id, int status, const std::string &body,
                  const std::string &headers, const std::string &url);
-   bool event(int node, const std::string &type, const std::string &key = "", int keyCode = 0);
+   bool event(int node, const std::string &type, const std::string &key = "", int keyCode = 0,
+               const MouseEvent *mouse = NULL);
    std::string serialize(bool rendering = false);
    std::string stringValue(const std::string &expression);
    int find(const std::string &selector);

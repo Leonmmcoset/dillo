@@ -17,7 +17,7 @@ double length(Length value, double reference)
 struct RoundedBox {
    double width, height, rx[4], ry[4];
 
-   RoundedBox(Style *style, double width, double height) :
+   RoundedBox(const StyleAttrs *style, double width, double height) :
       width(std::max(0.0, width)), height(std::max(0.0, height))
    {
       for (unsigned n = 0; n < 4; ++n) {
@@ -84,7 +84,7 @@ struct RoundedBox {
 struct BackgroundArea {
    Rectangle bounds;
    RoundedBox rounded;
-   BackgroundArea(Style *style, int x, int y, int width, int height, BackgroundBox box) :
+   BackgroundArea(const StyleAttrs *style, int x, int y, int width, int height, BackgroundBox box) :
       bounds(x - style->borderWidth.left, y - style->borderWidth.top,
          width + style->borderWidth.left + style->borderWidth.right,
          height + style->borderWidth.top + style->borderWidth.bottom),
@@ -101,6 +101,32 @@ struct BackgroundArea {
    }
    bool contains(double x, double y) const {
       return rounded.contains(x - bounds.x, y - bounds.y);
+   }
+};
+
+struct BackgroundTile {
+   double x, y, width, height;
+   BackgroundTile(const StyleAttrs *style, const Rectangle &origin, unsigned layer,
+                  int intrinsicWidth = 0, int intrinsicHeight = 0)
+   {
+      const BackgroundSizes::Size &size = style->backgroundSize.at(layer);
+      bool intrinsic = intrinsicWidth > 0 && intrinsicHeight > 0;
+      width = origin.width; height = origin.height;
+      if (size.mode != BackgroundSizes::Size::EXPLICIT && intrinsic) {
+         double sx = width / intrinsicWidth, sy = height / intrinsicHeight;
+         double scale = size.mode == BackgroundSizes::Size::COVER ? std::max(sx, sy) : std::min(sx, sy);
+         width = scale * intrinsicWidth; height = scale * intrinsicHeight;
+      } else if (size.mode == BackgroundSizes::Size::EXPLICIT) {
+         bool autoX = size.x == LENGTH_AUTO, autoY = size.y == LENGTH_AUTO;
+         if (!autoX) width = std::max(0.0, length(size.x, origin.width));
+         else if (intrinsic) width = intrinsicWidth;
+         if (!autoY) height = std::max(0.0, length(size.y, origin.height));
+         else if (intrinsic) height = intrinsicHeight;
+         if (intrinsic && autoX && !autoY) width = height * intrinsicWidth / intrinsicHeight;
+         if (intrinsic && autoY && !autoX) height = width * intrinsicHeight / intrinsicWidth;
+      }
+      x = origin.x + length(style->backgroundPositionX, origin.width - width);
+      y = origin.y + length(style->backgroundPositionY, origin.height - height);
    }
 };
 
@@ -323,7 +349,7 @@ void drawBoxShadows(View *view, Layout *layout, Rectangle *area,
    }
 }
 
-bool hasRoundedCorners(const Style *style)
+bool hasRoundedCorners(const StyleAttrs *style)
 {
    auto nonzero = [](Length radius) {
       return isAbsLength(radius) ? absLengthVal(radius) > 0 :
@@ -427,11 +453,13 @@ void drawBackgroundPaint(View *view, Layout *layout, Rectangle *area,
    if (!area->intersectsWith(&borderArea.bounds, &visible)) return;
    struct Layer {
       BackgroundArea clip, origin;
+      BackgroundTile tile;
       LinearGradient gradient;
       Layer(Style *style, int x, int y, int width, int height, unsigned n) :
          clip(style, x, y, width, height, style->backgroundClip.at(n)),
          origin(style, x, y, width, height, style->backgroundOrigin.at(n)),
-         gradient(style->backgroundLayers[n], origin.bounds.width, origin.bounds.height) { }
+         tile(style, origin.bounds, n),
+         gradient(style->backgroundLayers[n], tile.width, tile.height) { }
    };
    std::vector<Layer> layers;
    for (unsigned n = 0; n < style->backgroundLayers.size(); ++n)
@@ -441,16 +469,15 @@ void drawBackgroundPaint(View *view, Layout *layout, Rectangle *area,
       Pixel result = colorArea.contains(px, py) ? background : Pixel();
       for (size_t n = layers.size(); n > 0; --n) {
          const Layer &layer = layers[n - 1];
-         const Rectangle &origin = layer.origin.bounds;
-         if (!layer.gradient.gradient.count || !origin.width || !origin.height || !layer.clip.contains(px, py)) continue;
-         double gx = px - origin.x - length(style->backgroundPositionX, 0);
-         double gy = py - origin.y - length(style->backgroundPositionY, 0);
+         const BackgroundTile &tile = layer.tile;
+         if (!layer.gradient.gradient.count || tile.width <= 0 || tile.height <= 0 || !layer.clip.contains(px, py)) continue;
+         double gx = px - tile.x, gy = py - tile.y;
          bool repeatX = style->backgroundRepeat == BACKGROUND_REPEAT || style->backgroundRepeat == BACKGROUND_REPEAT_X;
          bool repeatY = style->backgroundRepeat == BACKGROUND_REPEAT || style->backgroundRepeat == BACKGROUND_REPEAT_Y;
-         if (!repeatX && (gx < 0 || gx >= origin.width)) continue;
-         if (!repeatY && (gy < 0 || gy >= origin.height)) continue;
-         if (repeatX) gx -= std::floor(gx / origin.width) * origin.width;
-         if (repeatY) gy -= std::floor(gy / origin.height) * origin.height;
+         if (!repeatX && (gx < 0 || gx >= tile.width)) continue;
+         if (!repeatY && (gy < 0 || gy >= tile.height)) continue;
+         if (repeatX) gx -= std::floor(gx / tile.width) * tile.width;
+         if (repeatY) gy -= std::floor(gy / tile.height) * tile.height;
          result = layer.gradient.sample(gx, gy).over(result);
       }
       return result;
@@ -459,13 +486,63 @@ void drawBackgroundPaint(View *view, Layout *layout, Rectangle *area,
 
 void drawRoundedBackgroundImage(View *view, Layout *layout, Rectangle *area,
    int x, int y, int width, int height, int xRef, int yRef, int widthRef,
-   int heightRef, Style *style)
+   int heightRef, const StyleAttrs *style)
 {
    (void)layout;
    BackgroundArea clip(style, x, y, width, height, style->backgroundClip.at(0));
    BackgroundArea origin(style, xRef, yRef, widthRef, heightRef, style->backgroundOrigin.at(0));
    Rectangle visible;
    if (!area->intersectsWith(&clip.bounds, &visible)) return;
+   const BackgroundSizes::Size &size = style->backgroundSize.at(0);
+   if (size.mode != BackgroundSizes::Size::EXPLICIT || size.x != LENGTH_AUTO || size.y != LENGTH_AUTO) {
+      Imgbuf *source = style->backgroundImage->getImgbufSrc();
+      BackgroundTile tile(style, origin.bounds, 0, source->getRootWidth(), source->getRootHeight());
+      if (tile.width < .5 || tile.height < .5 || tile.width > 32767 || tile.height > 32767) return;
+      int iw = (int)std::floor(tile.width + .5), ih = (int)std::floor(tile.height + .5);
+      Imgbuf *image = style->backgroundImage->getScaledBackground(iw, ih);
+      if (!image) return;
+      bool repeatX = style->backgroundRepeat == BACKGROUND_REPEAT || style->backgroundRepeat == BACKGROUND_REPEAT_X;
+      bool repeatY = style->backgroundRepeat == BACKGROUND_REPEAT || style->backgroundRepeat == BACKGROUND_REPEAT_Y;
+      // Group tiny repeated images into a small tile rather than issuing one
+      // draw call for every pixel. Rebuild from the streaming scaled buffer.
+      int tw = iw, th = ih;
+      Imgbuf *group = NULL;
+      if ((int64_t)iw * ih < 1024 && (repeatX || repeatY)) {
+         if (repeatX) tw = iw * std::max(1, (32 + iw - 1) / iw);
+         if (repeatY) th = ih * std::max(1, (32 + ih - 1) / ih);
+         group = image->createSimilarBuf(tw, th);
+         for (int tx = 0; tx < tw; tx += iw) for (int ty = 0; ty < th; ty += ih)
+            image->copyTo(group, tx, ty, 0, 0, iw, ih);
+         image = group;
+      }
+      double ox = origin.bounds.x + length(style->backgroundPositionX, origin.bounds.width - iw);
+      double oy = origin.bounds.y + length(style->backgroundPositionY, origin.bounds.height - ih);
+      auto drawSpan = [&](int left, int top, int right, int bottom) {
+         double x0 = repeatX ? ox + std::floor((left - ox) / tw) * tw : ox;
+         double y0 = repeatY ? oy + std::floor((top - oy) / th) * th : oy;
+         for (double tx = x0; tx < right; tx += tw) {
+            if (tx + tw > left) for (double ty = y0; ty < bottom; ty += th) {
+               if (ty + th > top) {
+                  int x = (int)std::floor(tx + .5), y = (int)std::floor(ty + .5);
+                  int l = std::max(left, x), t = std::max(top, y);
+                  int r = std::min(right, x + tw), b = std::min(bottom, y + th);
+                  if (r > l && b > t) view->drawImage(image, x, y, l - x, t - y, r - l, b - t);
+               }
+               if (!repeatY) break;
+            }
+            if (!repeatX) break;
+         }
+      };
+      if (!hasRoundedCorners(style)) drawSpan(visible.x, visible.y, visible.x + visible.width, visible.y + visible.height);
+      else for (int row = visible.y; row < visible.y + visible.height; ++row) {
+         int left = visible.x, right = visible.x + visible.width;
+         while (left < right && !clip.contains(left + .5, row + .5)) ++left;
+         while (right > left && !clip.contains(right - .5, row + .5)) --right;
+         if (left < right) drawSpan(left, row, right, row + 1);
+      }
+      if (group) group->unref();
+      return;
+   }
    if (!hasRoundedCorners(style)) {
       drawBackgroundImage(view, style->backgroundImage, style->backgroundRepeat,
          style->backgroundAttachment, style->backgroundPositionX, style->backgroundPositionY,

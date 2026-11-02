@@ -101,6 +101,10 @@ class MouseEvent extends Event {
         for (const key of ['ctrlKey','shiftKey','altKey','metaKey']) this[key] = !!options[key];
         this.relatedTarget = options.relatedTarget || null;
     }
+    get x() { return this.clientX; }
+    get y() { return this.clientY; }
+    get which() { return this.button + 1; }
+    getModifierState(key) { return !!this[{Control:'ctrlKey',Shift:'shiftKey',Alt:'altKey',Meta:'metaKey'}[key]]; }
 }
 class KeyboardEvent extends Event {
     constructor(type, options = {}) { super(type, options); Object.assign(this, {key: '', code: '', keyCode: 0, which: 0}, options); }
@@ -878,12 +882,12 @@ globalThis.__dillo = {
             link._loadedHref=link.href;link.dispatchEvent(new Event(sheet?'load':'error'));
         }
     },
-    event(id,type,key='',code=0) {
+    event(id,type,key='',code=0,options={}) {
         const node=id?wrap(id):globalThis;
         if(!node)return true;
         if(type==='focus')activeElement=node;
         if(type==='blur'&&activeElement===node)activeElement=null;
-        const event=type.startsWith('key')?new KeyboardEvent(type,{key,code:key,keyCode:code,which:code,bubbles:true,cancelable:true}):type==='click'?new MouseEvent(type,{bubbles:true,cancelable:true}):new Event(type,{bubbles:!['focus','blur','load','error'].includes(type),cancelable:!['load','error','input','change'].includes(type)});
+        const event=type.startsWith('key')?new KeyboardEvent(type,{key,code:key,keyCode:code,which:code,bubbles:true,cancelable:true}):type==='click'?new MouseEvent(type,{...options,bubbles:true,cancelable:true}):new Event(type,{bubbles:!['focus','blur','load','error'].includes(type),cancelable:!['load','error','input','change'].includes(type)});
         event.isTrusted=true;
         const allowed=node.dispatchEvent(event);
         if(type==='focus'||type==='blur')node.dispatchEvent(new Event(type==='focus'?'focusin':'focusout',{bubbles:true}));

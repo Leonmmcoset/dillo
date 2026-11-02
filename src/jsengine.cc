@@ -636,15 +636,29 @@ void JsEngine::response(int id, int status, const std::string &body,
    JS_FreeValue(impl->context, global);
    impl->eval("__dillo.response(...__response); delete globalThis.__response", "dillo:network");
 }
-bool JsEngine::event(int node, const std::string &type, const std::string &key, int keyCode)
+bool JsEngine::event(int node, const std::string &type, const std::string &key, int keyCode,
+                     const MouseEvent *mouse)
 {
    if (!valid()) return true;
    JSValue global = JS_GetGlobalObject(impl->context);
    JS_SetPropertyStr(impl->context, global, "__eventType", JS_NewString(impl->context, type.c_str()));
    JS_SetPropertyStr(impl->context, global, "__eventKey", JS_NewString(impl->context, key.c_str()));
    JS_SetPropertyStr(impl->context, global, "__eventCode", JS_NewInt32(impl->context, keyCode));
+   JSValue options = JS_NewObject(impl->context);
+   if (mouse) {
+      const char *names[] = {"clientX", "clientY", "pageX", "pageY", "screenX", "screenY", "button", "buttons", "detail"};
+      const int values[] = {mouse->clientX, mouse->clientY, mouse->pageX, mouse->pageY, mouse->screenX,
+         mouse->screenY, mouse->button, mouse->buttons, mouse->detail};
+      for (unsigned i = 0; i < sizeof(values)/sizeof(values[0]); ++i)
+         JS_SetPropertyStr(impl->context, options, names[i], JS_NewInt32(impl->context, values[i]));
+      JS_SetPropertyStr(impl->context, options, "ctrlKey", JS_NewBool(impl->context, mouse->ctrlKey));
+      JS_SetPropertyStr(impl->context, options, "shiftKey", JS_NewBool(impl->context, mouse->shiftKey));
+      JS_SetPropertyStr(impl->context, options, "altKey", JS_NewBool(impl->context, mouse->altKey));
+      JS_SetPropertyStr(impl->context, options, "metaKey", JS_NewBool(impl->context, mouse->metaKey));
+   }
+   JS_SetPropertyStr(impl->context, global, "__eventOptions", options);
    JS_FreeValue(impl->context, global);
-   impl->eval("globalThis.__eventResult=__dillo.event(" + std::to_string(node) + ", __eventType,__eventKey,__eventCode)", "dillo:event");
+   impl->eval("globalThis.__eventResult=__dillo.event(" + std::to_string(node) + ", __eventType,__eventKey,__eventCode,__eventOptions)", "dillo:event");
    JSValue result = JS_GetPropertyStr(impl->context, global = JS_GetGlobalObject(impl->context), "__eventResult");
    bool allowed = JS_ToBool(impl->context, result) != 0;
    JS_FreeValue(impl->context, result); JS_FreeValue(impl->context, global);
@@ -758,7 +772,7 @@ void JsEngine::interactive() {}
 void JsEngine::loaded() {}
 void JsEngine::timeout(int) {}
 void JsEngine::response(int, int, const std::string &, const std::string &, const std::string &) {}
-bool JsEngine::event(int, const std::string &, const std::string &, int) { return true; }
+bool JsEngine::event(int, const std::string &, const std::string &, int, const MouseEvent *) { return true; }
 std::string JsEngine::serialize(bool) { return ""; }
 std::string JsEngine::stringValue(const std::string &) { return ""; }
 int JsEngine::find(const std::string &) { return 0; }

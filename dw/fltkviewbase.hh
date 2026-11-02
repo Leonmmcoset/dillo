@@ -78,6 +78,7 @@ public:
    int handle (int event);
 
    void setLayout (core::Layout *layout);
+   bool getDomMouseEvent (core::DomMouseEvent *event);
    void setCanvasSize (int width, int ascent, int descent);
    void setCursor (core::style::Cursor cursor);
    void setBgColor (core::style::Color *color);

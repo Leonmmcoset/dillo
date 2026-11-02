@@ -28,6 +28,8 @@ public:
     */
    virtual void setLayout (Layout *layout) = 0;
 
+   virtual bool getDomMouseEvent (DomMouseEvent *) { return false; }
+
    /**
     * \brief Set the canvas size.
     */

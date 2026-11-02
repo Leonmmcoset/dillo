@@ -80,6 +80,19 @@ int main()
    check(engine.evaluate("globalThis.events=[];document.addEventListener('click',()=>events.push('capture'),true);document.getElementById('made').addEventListener('click',e=>{events.push('target');e.preventDefault()});document.addEventListener('click',()=>events.push('bubble'));", "event-test"), "event handlers attach");
    check(!engine.event(engine.find("#made"), "click"), "preventDefault reaches browser host");
    check(engine.stringValue("events.join(',')") == "capture,target,bubble", "capture and bubbling order");
+   check(engine.evaluate("p.addEventListener('click',e=>{globalThis.mouse=e;});", "mouse-handler"), "mouse event handler attaches");
+   JsEngine::MouseEvent mouse;
+   mouse.clientX = 31; mouse.clientY = 47; mouse.pageX = 131; mouse.pageY = 247;
+   mouse.screenX = 431; mouse.screenY = 547; mouse.detail = 2;
+   mouse.ctrlKey = mouse.shiftKey = true;
+   check(!engine.event(engine.find("#made"), "click", "", 0, &mouse), "native mouse metadata preserves cancellation");
+   check(engine.stringValue("[mouse instanceof MouseEvent,mouse.isTrusted,mouse.clientX,mouse.clientY,mouse.pageX,mouse.pageY,mouse.screenX,mouse.screenY,mouse.button,mouse.buttons,mouse.detail,mouse.ctrlKey,mouse.shiftKey,mouse.altKey,mouse.metaKey].join(',')") ==
+      "true,true,31,47,131,247,431,547,0,0,2,true,true,false,false", "native mouse coordinates and state reach JavaScript");
+   check(engine.stringValue("[mouse.x,mouse.y,mouse.which,mouse.getModifierState('Control'),mouse.getModifierState('Alt')].join(',')") ==
+      "31,47,1,true,false", "mouse coordinate aliases and modifier queries");
+   engine.event(engine.find("#made"), "click");
+   check(engine.stringValue("[mouse.clientX,mouse.pageY,mouse.detail,mouse.ctrlKey].join(',')") == "0,0,0,false",
+      "keyboard activation does not reuse previous mouse metadata");
    check(engine.evaluate("globalThis.jobs=[];setTimeout(()=>jobs.push('timer'),1);Promise.resolve().then(()=>jobs.push('microtask'));", "timer-test"), "timers and promises initialize");
    check(engine.stringValue("jobs.join(',')") == "microtask", "microtasks run before timers");
    check(!host.timers.empty(), "timer reaches browser scheduler");

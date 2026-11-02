@@ -746,7 +746,19 @@ bool a_Javascript_ui_event(void *data, int node, const char *type, const char *k
    if (!d || d->stopped || d->rendering || !node) return true;
    a_Html_sync_controls(d->view);
    ++d->eventDepth;
-   bool result = d->engine.event(node, type, key, code); --d->eventDepth;
+   dw::core::DomMouseEvent nativeMouse;
+   JsEngine::MouseEvent mouse;
+   bool hasMouse = !strcmp(type, "click") &&
+      static_cast<dw::core::Layout *>(d->bw->render_layout)->getDomMouseEvent(&nativeMouse);
+   if (hasMouse) {
+      mouse.clientX = nativeMouse.clientX; mouse.clientY = nativeMouse.clientY;
+      mouse.pageX = nativeMouse.pageX; mouse.pageY = nativeMouse.pageY;
+      mouse.screenX = nativeMouse.screenX; mouse.screenY = nativeMouse.screenY;
+      mouse.button = nativeMouse.button; mouse.buttons = nativeMouse.buttons; mouse.detail = nativeMouse.detail;
+      mouse.ctrlKey = nativeMouse.ctrlKey; mouse.shiftKey = nativeMouse.shiftKey;
+      mouse.altKey = nativeMouse.altKey; mouse.metaKey = nativeMouse.metaKey;
+   }
+   bool result = d->engine.event(node, type, key, code, hasMouse ? &mouse : NULL); --d->eventDepth;
    if (d->engine.hasPendingJobs()) d->wake(.001);
    return result;
 }

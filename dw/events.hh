@@ -11,6 +11,14 @@ namespace core {
 typedef bool (*DomEventCallback)(void *data, int node, const char *type,
                                  const char *key, int keyCode);
 
+// Coordinates and state of the native event currently being dispatched.
+// Keep window/screen conversion in the view, shared by text and native controls.
+struct DomMouseEvent {
+   int clientX, clientY, pageX, pageY, screenX, screenY;
+   int button, buttons, detail;
+   bool ctrlKey, shiftKey, altKey, metaKey;
+};
+
 /**
  * \brief Platform independent representation.
  */

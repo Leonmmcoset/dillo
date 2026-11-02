@@ -388,6 +388,138 @@ def main():
             color(picture, 'layer-inherited', 1, 25, (0,0,255), 'background inherit preserves layer clips')
             check(evaluate('getComputedStyle(document.getElementById("layer-inherited")).backgroundOrigin') == 'content-box,border-box', 'background inherit preserves origin list')
 
+            cases = [
+                ('gradient-repeat', 'background:linear-gradient(90deg,red 50%,blue 50%);background-size:40px 20px',
+                 [(5,5,(255,0,0)), (25,5,(0,0,255)), (45,25,(255,0,0))]),
+                ('gradient-no-repeat', 'background:linear-gradient(red,red) no-repeat;background-size:40px 20px',
+                 [(5,5,(255,0,0)), (45,5,(255,255,255)), (5,25,(255,255,255))]),
+                ('gradient-percent', 'background:linear-gradient(red,red) no-repeat;background-size:50% 50%',
+                 [(45,20,(255,0,0)), (55,20,(255,255,255)), (10,30,(255,255,255))]),
+                ('gradient-centered', 'background:linear-gradient(red,red) center / 40px 20px no-repeat',
+                 [(35,20,(255,0,0)), (25,20,(255,255,255)), (35,10,(255,255,255))]),
+                ('gradient-calc', 'background:linear-gradient(red,red) no-repeat;background-size:calc(50% - 10px) calc(50% + 5px)',
+                 [(35,25,(255,0,0)), (45,25,(255,255,255)), (5,35,(255,255,255))]),
+                ('gradient-auto-height', 'background:linear-gradient(red,red) no-repeat;background-size:40px',
+                 [(35,45,(255,0,0)), (45,45,(255,255,255))]),
+                ('gradient-zero', 'background:linear-gradient(red,red);background-size:0 20px',
+                 [(5,5,(255,255,255))]),
+                ('gradient-negative-calc', 'background:linear-gradient(red,red);background-size:calc(-10px) 20px',
+                 [(5,5,(255,255,255))]),
+                ('gradient-cover', 'background:linear-gradient(red,red);background-size:cover',
+                 [(5,5,(255,0,0)), (95,45,(255,0,0))]),
+                ('gradient-contain', 'background:linear-gradient(red,red);background-size:contain',
+                 [(5,5,(255,0,0)), (95,45,(255,0,0))]),
+                ('size-layers', 'background-image:linear-gradient(red,red),linear-gradient(blue,blue);background-size:40px 20px,80px 40px;background-repeat:no-repeat',
+                 [(5,5,(255,0,0)), (55,5,(0,0,255)), (5,30,(0,0,255)), (85,5,(255,255,255))]),
+                ('size-list-repeat', 'background-image:none,linear-gradient(blue,blue),linear-gradient(red,red);background-size:40px 20px,20px 40px;background-repeat:no-repeat',
+                 [(5,30,(0,0,255)), (30,5,(255,0,0)), (30,30,(255,255,255))]),
+                ('size-origin', 'border:5px solid transparent;padding:10px;background:linear-gradient(red,red) content-box no-repeat;background-size:50% 100%',
+                 [(20,25,(255,0,0)), (55,25,(255,255,255)), (5,25,(255,255,255))]),
+                ('size-rounded', 'background:linear-gradient(red,red);background-size:40px 20px;border-radius:20px',
+                 [(0,0,(255,255,255)), (50,25,(255,0,0))]),
+            ]
+            markup = '<div id=origin></div>'
+            for n, (id, css, samples) in enumerate(cases):
+                markup += '<div id="size-' + id + '" style="position:absolute;box-sizing:border-box;left:' + str(20+155*(n%5)) + 'px;top:' + str(20+85*(n//5)) + 'px;width:100px;height:50px;' + css + '"></div>'
+            command('eval', 'document.body.innerHTML=' + json.dumps(markup))
+            picture = screenshot('gradient-sizes')
+            for id, css, samples in cases:
+                for x,y,expected in samples:
+                    color(picture, 'size-'+id, x, y, expected, 'background size '+id+' at '+str((x,y)), 6)
+            check(evaluate('getComputedStyle(document.getElementById("size-size-list-repeat")).backgroundSize') == '40px 20px,20px 40px,40px 20px',
+                  'computed background sizes repeat across image layers')
+            check(evaluate('getComputedStyle(document.getElementById("size-gradient-cover")).backgroundSize') == 'cover',
+                  'computed background size preserves cover')
+            # Rejected declarations must preserve the previous size atomically.
+            invalid_sizes = ['-10px', '20px -10%', 'cover auto', '20px 10px 5px',
+                             '20px,', ',20px', 'contain,garbage', ','.join(['10px'] * 9),
+                             '20px garbage', 'inherit 20px']
+            for invalid in invalid_sizes:
+                command('eval', 'document.getElementById("size-gradient-zero").style.cssText=' + json.dumps('background-size:30px 20px;background-size:'+invalid))
+                check(evaluate('getComputedStyle(document.getElementById("size-gradient-zero")).backgroundSize') == '30px 20px',
+                      'invalid background size is ignored: '+invalid)
+            for css, expected in [
+                ('background-size:30px 20px;background:red', 'auto auto'),
+                ('background-size:30px 20px;background-size:initial', 'auto auto'),
+                ('background-size:30px 20px;background-size:unset', 'auto auto'),
+                ('background-size:30px 20px!important;background-size:cover', '30px 20px'),
+                ('--s:50% 10px;background-size:var(--s)', '50% 10px'),
+                ('--s:center / 40px 20px;background:linear-gradient(red,red) var(--s) no-repeat', '40px 20px'),
+                ('background-size:30px 20px;background:linear-gradient(red,red) / cover', '30px 20px'),
+                ('background-size:30px 20px;background:linear-gradient(red,red) center / cover / contain', '30px 20px'),
+            ]:
+                command('eval', 'document.getElementById("size-gradient-zero").style.cssText=' + json.dumps(css))
+                actual = evaluate('getComputedStyle(document.getElementById("size-gradient-zero")).backgroundSize')
+                check(actual == expected, 'background size cascade '+css, actual)
+            command('eval', '''document.getElementById('size-size-layers').innerHTML='<div id=size-inherit style="width:100%;height:100%;background:inherit"></div>' ''')
+            check(evaluate('getComputedStyle(document.getElementById("size-inherit")).backgroundSize') == '40px 20px,80px 40px',
+                  'background inheritance preserves size lists')
+
+            cases = [
+                ('image-default', 'background:url(background-size.svg) no-repeat',
+                 [(5,5,(255,0,0)), (25,5,(0,255,0)), (45,5,(0,0,255)), (65,5,(255,255,0)), (85,5,(255,255,255))]),
+                ('image-explicit', 'background:url(background-size.svg) no-repeat;background-size:40px 20px',
+                 [(5,5,(255,0,0)), (15,5,(0,255,0)), (25,5,(0,0,255)), (35,5,(255,255,0)), (45,5,(255,255,255)), (5,25,(255,255,255))]),
+                ('image-auto-height', 'background:url(background-size.svg) no-repeat;background-size:40px',
+                 [(15,15,(0,255,0)), (5,25,(255,255,255))]),
+                ('image-auto-width', 'background:url(background-size.svg) no-repeat;background-size:auto 20px',
+                 [(35,15,(255,255,0)), (45,15,(255,255,255))]),
+                ('image-percent', 'background:url(background-size.svg) no-repeat;background-size:50% 50%',
+                 [(30,25,(0,0,255)), (55,25,(255,255,255)), (5,35,(255,255,255))]),
+                ('image-cover', 'background:url(background-size.svg) center / cover no-repeat',
+                 [(5,5,(255,0,0)), (22,5,(0,255,0)), (55,5,(0,0,255)), (95,55,(255,255,0))]),
+                ('image-contain', 'background:url(background-size.svg) center / contain no-repeat',
+                 [(5,1,(255,255,255)), (22,10,(255,0,0)), (30,10,(0,255,0)), (95,55,(255,255,255))]),
+                ('image-center', 'background:url(background-size.svg) center / 40px 20px no-repeat',
+                 [(25,25,(255,255,255)), (35,25,(255,0,0)), (45,25,(0,255,0)), (65,25,(255,255,0)), (75,25,(255,255,255))]),
+                ('image-right-bottom', 'background:url(background-size.svg) right bottom / 40px 20px no-repeat',
+                 [(55,45,(255,255,255)), (65,45,(255,0,0)), (95,55,(255,255,0)), (65,35,(255,255,255))]),
+                ('image-repeat', 'background:url(background-size.svg);background-size:40px 20px',
+                 [(5,5,(255,0,0)), (45,25,(255,0,0)), (95,55,(0,255,0))]),
+                ('image-repeat-x', 'background:url(background-size.svg) repeat-x;background-size:40px 20px',
+                 [(45,5,(255,0,0)), (45,25,(255,255,255))]),
+                ('image-repeat-y', 'background:url(background-size.svg) repeat-y;background-size:40px 20px',
+                 [(5,25,(255,0,0)), (45,25,(255,255,255))]),
+                ('image-tiny-repeat', 'background:url(background-size.svg);background-size:4px 2px',
+                 [(44,24,(255,0,0)), (45,25,(0,255,0)), (46,26,(0,0,255))]),
+                ('image-zero', 'background:url(background-size.svg);background-size:0 20px',
+                 [(5,5,(255,255,255))]),
+                ('image-rounded', 'background:url(background-size.svg);background-size:100% 100%;border-radius:20px',
+                 [(0,0,(255,255,255)), (35,30,(0,255,0)), (95,30,(255,255,0))]),
+            ]
+            markup = '<div id=origin></div>'
+            for n, (id, css, samples) in enumerate(cases):
+                markup += '<div id="size-' + id + '" style="position:absolute;box-sizing:border-box;left:' + str(20+155*(n%5)) + 'px;top:' + str(20+90*(n//5)) + 'px;width:100px;height:60px;' + css + '"></div>'
+            command('eval', 'document.body.innerHTML=' + json.dumps(markup))
+            picture = screenshot('image-sizes')
+            for id, css, samples in cases:
+                for x,y,expected in samples:
+                    color(picture, 'size-'+id, x, y, expected, 'background size '+id+' at '+str((x,y)), 6)
+
+            command('eval', 'document.getElementById("size-image-explicit").style.backgroundSize="80px 40px"')
+            picture = screenshot('image-size-updated')
+            color(picture, 'size-image-explicit', 35, 25, (0,255,0), 'background size mutation updates decoded image scaling')
+            command('eval', 'document.getElementById("size-image-explicit").style.backgroundSize="0 0"')
+            picture = screenshot('image-size-removed')
+            color(picture, 'size-image-explicit', 35, 25, (255,255,255), 'zero background size removes previously painted image')
+
+            command('eval', 'document.body.innerHTML="<div id=origin></div>";document.body.style.background="transparent";document.documentElement.style.background="url(background-size.svg) 0 0 / 40px 20px"')
+            picture = screenshot('root-image-size')
+            actual = pixel(picture, origin[0]+45, origin[1]+25)
+            check(actual == (255,0,0), 'root URL background propagates its size to the canvas', actual)
+            command('eval', 'document.documentElement.style.background="transparent";document.body.style.background="url(background-size.svg) 0 0 / 40px 20px"')
+            picture = screenshot('body-image-size')
+            actual = pixel(picture, origin[0]+55, origin[1]+25)
+            check(actual == (0,255,0), 'body URL background propagates its size to the canvas', actual)
+            command('eval', 'document.body.innerHTML+="<div style=width:1200px;height:1200px></div>";scrollTo(80,200)')
+            picture = screenshot('body-image-size-scrolled')
+            actual = pixel(picture, origin[0]+55, origin[1]+25)
+            check(actual == (0,255,0), 'scaled canvas background stays aligned after scrolling', actual)
+            command('eval', 'scrollTo(0,0);document.documentElement.style.background="white";document.body.style.background="white"')
+            picture = screenshot('canvas-image-removed')
+            actual = pixel(picture, origin[0]+55, origin[1]+25)
+            check(actual == (255,255,255), 'removing root and body backgrounds clears the previous canvas image', actual)
+
             # Native controls are leaf widgets, so test their clipping and
             # hit-testing separately from the container/anchor cases above.
             cases = [
@@ -592,6 +724,79 @@ def main():
                             'click', '1', 'type', '--clearmodifiers', 'fixed'], env=env, check=True)
             check(evaluate('document.getElementById("native-fixed").value') == 'fixed',
                   'scrolled native fixed input accepts real mouse and keyboard input')
+
+            command('eval', 'scrollTo(0,0)')
+            markup = '''<div id=origin></div>
+              <div id=mouse-box style="position:absolute;left:40px;top:40px;width:160px;height:70px;background:#ddd"><span id=mouse-inline>Inline target</span></div>
+              <input id=mouse-input style="position:fixed;left:300px;top:50px;width:150px;height:30px">
+              <button id=mouse-button type=button style="position:fixed;left:500px;top:50px;width:120px;height:35px">Mouse button</button>
+              <textarea id=mouse-editor style="position:fixed;left:300px;top:120px;width:150px;height:60px"></textarea>
+              <div id=mouse-scrolled style="position:absolute;left:150px;top:450px;width:160px;height:70px;background:#ddd"></div>
+              <div style="width:1200px;height:1200px"></div>'''
+            command('eval', 'document.body.innerHTML=' + json.dumps(markup))
+            command('eval', '''globalThis.mouseEvents=[];
+              document.addEventListener('click',e=>{
+                mouseEvents.push({target:e.target.id,hit:document.elementFromPoint(e.clientX,e.clientY)?.id,
+                  clientX:e.clientX,clientY:e.clientY,pageX:e.pageX,pageY:e.pageY,screenX:e.screenX,screenY:e.screenY,
+                  button:e.button,buttons:e.buttons,detail:e.detail,
+                  ctrlKey:e.ctrlKey,shiftKey:e.shiftKey,altKey:e.altKey,metaKey:e.metaKey,
+                  trusted:e.isTrusted,mouse:e instanceof MouseEvent});
+              });'''.replace('\n', ' '))
+            command('wait', '5')
+            # Move the browser so screen coordinates cannot accidentally pass
+            # by copying client coordinates or window-relative positions.
+            subprocess.run(['xdotool', 'windowmove', win, '35', '25'], env=env, check=True)
+
+            def native_mouse(id, dx=10, dy=10, modifiers=(), repeat=1):
+                command('eval', 'mouseEvents=[]')
+                box = rect(id)
+                cx, cy = int(box['left']+dx), int(box['top']+dy)
+                subprocess.run(['xdotool', 'mousemove', '--window', win,
+                                str(origin[0]+cx), str(origin[1]+cy)], env=env, check=True)
+                try:
+                    if modifiers:
+                        subprocess.run(['xdotool', 'keydown', *modifiers], env=env, check=True)
+                    subprocess.run(['xdotool', 'click', '--repeat', str(repeat), '--delay', '100', '1'], env=env, check=True)
+                finally:
+                    if modifiers:
+                        subprocess.run(['xdotool', 'keyup', *reversed(modifiers)], env=env, check=True)
+                events = evaluate('mouseEvents')
+                check(len(events) == repeat, 'one native mouse event per click on '+id, events)
+                event = events[-1]
+                check(event['target'] == id and event['hit'] == id,
+                      'mouse coordinates agree with renderer hit testing on '+id, event)
+                sx, sy = evaluate('[scrollX,scrollY]')
+                check((event['clientX'],event['clientY'],event['pageX'],event['pageY']) == (cx,cy,cx+sx,cy+sy),
+                      'native client and page coordinates on '+id, event)
+                position = subprocess.check_output(['xdotool', 'getmouselocation', '--shell'], env=env, text=True)
+                actual = dict(line.split('=',1) for line in position.splitlines())
+                check((event['screenX'],event['screenY']) == (int(actual['X']),int(actual['Y'])),
+                      'native screen coordinates on '+id, event)
+                check(event['mouse'] and event['trusted'] and event['button'] == 0 and event['buttons'] == 0,
+                      'native click class, trust and released button state on '+id, event)
+                return event
+
+            native_mouse('mouse-box',100,40)
+            native_mouse('mouse-inline',5,8)
+            native_mouse('mouse-input',30,15)
+            native_mouse('mouse-button',60,18)
+            native_mouse('mouse-editor',30,20)
+            event = native_mouse('mouse-box',100,40,('ctrl','shift','alt','Super_L'))
+            check(all(event[key] for key in ['ctrlKey','shiftKey','altKey','metaKey']),
+                  'native click preserves all four modifier keys', event)
+            event = native_mouse('mouse-box',100,40,repeat=2)
+            check(event['detail'] >= 2, 'native double click exposes the click count', event)
+            command('eval', 'scrollTo(80,200)')
+            command('wait', '5')
+            native_mouse('mouse-scrolled',100,40)
+            native_mouse('mouse-input',30,15)
+            native_mouse('mouse-button',60,18)
+            command('eval', 'mouseEvents=[];document.getElementById("mouse-button").focus()')
+            subprocess.run(['xdotool', 'key', 'space'], env=env, check=True)
+            events = evaluate('mouseEvents')
+            check(len(events) == 1 and events[0]['target'] == 'mouse-button' and
+                  all(events[0][key] == 0 for key in ['clientX','clientY','pageX','pageY','screenX','screenY','detail']),
+                  'native keyboard activation does not inherit the last mouse coordinates', events)
             command('quit')
             check(browser.wait(timeout=8) == 0, 'clean browser shutdown')
             log.flush()

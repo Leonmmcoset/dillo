@@ -5,7 +5,7 @@
 #include "core.hh"
 
 namespace dw { namespace core { namespace style {
-bool hasRoundedCorners(const Style *style);
+bool hasRoundedCorners(const StyleAttrs *style);
 void drawBoxShadows(View *view, Layout *layout, Rectangle *area,
    int x, int y, int width, int height, Style *style, bool inset, bool inverse);
 void drawOutline(View *view, Layout *layout, Rectangle *area,
@@ -16,6 +16,6 @@ void drawBackgroundPaint(View *view, Layout *layout, Rectangle *area,
    int x, int y, int width, int height, Style *style, Color *color, bool inverse);
 void drawRoundedBackgroundImage(View *view, Layout *layout, Rectangle *area,
    int x, int y, int width, int height, int xRef, int yRef, int widthRef,
-   int heightRef, Style *style);
+   int heightRef, const StyleAttrs *style);
 } } }
 #endif

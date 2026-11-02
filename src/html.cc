@@ -1820,6 +1820,7 @@ static void Html_tag_open_body(DilloHtml *html, const char *tag, int tagsize)
    style::BackgroundRepeat bgRepeat;
    style::BackgroundAttachment bgAttachment;
    style::Length bgPositionX, bgPositionY;
+   style::BackgroundSizes bgSize;
 
    _MSG("Html_tag_open_body Num_BODY=%d\n", html->Num_BODY);
    if (!(html->InFlags & IN_BODY))
@@ -1882,10 +1883,13 @@ static void Html_tag_open_body(DilloHtml *html, const char *tag, int tagsize)
       HT2LT(html)->setBgColor(bgColor);
 
    bgImage = html->styleEngine->backgroundImage (&bgRepeat, &bgAttachment,
-                                                 &bgPositionX, &bgPositionY);
+                                                 &bgPositionX, &bgPositionY, &bgSize);
    if (bgImage)
       HT2LT(html)->setBgImage(bgImage, bgRepeat, bgAttachment, bgPositionX,
-                              bgPositionY);
+                              bgPositionY, &bgSize);
+   else
+      HT2LT(html)->setBgImage(NULL, style::BACKGROUND_REPEAT,
+         style::BACKGROUND_ATTACHMENT_SCROLL, style::createPerLength(0), style::createPerLength(0));
 
    /* Determine a color for visited links.
     * This color is computed once per page and used for immediate feedback
@@ -4250,6 +4254,22 @@ static void Html_process_tag(DilloHtml *html, char *tag, int tagsize)
             dStr_sprintfa(css, "background-color:rgba(%u,%u,%u,%.6f);", rgb >> 16, (rgb >> 8) & 255, rgb & 255, s->backgroundAlpha / 255.0);
          } else if (s->backgroundColor) dStr_sprintfa(css, "background-color:#%06x;", s->backgroundColor->getColor());
          else dStr_append(css, "background-color:transparent;");
+         auto cssLength = [&](Length value) {
+            if (value == LENGTH_AUTO) dStr_append(css, "auto");
+            else if (isAbsLength(value)) dStr_sprintfa(css, "%dpx", absLengthVal(value));
+            else if (isCalcLength(value)) dStr_sprintfa(css, "calc(%.6g%% + %dpx)",
+               perLengthVal_useThisOnlyForDebugging(value) * 100, calcLengthPixels(value));
+            else dStr_sprintfa(css, "%.6g%%", perLengthVal_useThisOnlyForDebugging(value) * 100);
+         };
+         dStr_append(css, "background-size:");
+         for (unsigned n = 0; n < std::max((size_t)1, s->backgroundLayers.size()); ++n) {
+            if (n) dStr_append(css, ",");
+            const BackgroundSizes::Size &size = s->backgroundSize.at(n);
+            if (size.mode == BackgroundSizes::Size::COVER) dStr_append(css, "cover");
+            else if (size.mode == BackgroundSizes::Size::CONTAIN) dStr_append(css, "contain");
+            else { cssLength(size.x); dStr_append(css, " "); cssLength(size.y); }
+         }
+         dStr_append(css, ";");
          static const char *backgroundBoxes[] = {"border-box", "padding-box", "content-box"};
          const dw::core::style::BackgroundBoxes *boxes[] = {&s->backgroundClip, &s->backgroundOrigin};
          for (unsigned property = 0; property < 2; ++property) {

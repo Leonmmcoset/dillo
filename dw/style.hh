@@ -590,6 +590,15 @@ struct BackgroundBoxes {
    BackgroundBox at(unsigned layer) const { return values[layer % count]; }
 };
 
+struct BackgroundSizes {
+   struct Size {
+      enum Mode { EXPLICIT, COVER, CONTAIN } mode;
+      Length x, y;
+   } values[8];
+   unsigned count;
+   const Size &at(unsigned layer) const { return values[layer % count]; }
+};
+
 struct BorderRadius {
    // Clockwise: top-left, top-right, bottom-right, bottom-left.
    Length x[4], y[4];
@@ -621,6 +630,7 @@ public:
    StyleImage *backgroundImage;
    std::vector<Gradient> backgroundLayers;
    BackgroundBoxes backgroundClip, backgroundOrigin;
+   BackgroundSizes backgroundSize;
    BorderRadius borderRadius;
    BoxShadows boxShadows;
    Outline outline;
@@ -908,7 +918,7 @@ private:
    };
 
    int refCount, tilesX, tilesY;
-   Imgbuf *imgbufSrc, *imgbufTiled;
+   Imgbuf *imgbufSrc, *imgbufTiled, *imgbufScaled;
    ImgRendererDist *imgRendererDist;
    StyleImgRenderer *styleImgRenderer;
 
@@ -986,6 +996,7 @@ public:
    { if (--refCount == 0) delete this; }
 
    inline Imgbuf *getImgbufSrc () { return imgbufSrc; }
+   Imgbuf *getScaledBackground (int width, int height);
    inline Imgbuf *getImgbufTiled (bool repeatX, bool repeatY)
    { return (imgbufTiled && repeatX && repeatY) ? imgbufTiled : imgbufSrc; }
    inline int getTilesX (bool repeatX, bool repeatY)

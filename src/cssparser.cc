@@ -190,6 +190,7 @@ const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
     NULL},
    {"background-repeat", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED},
     Css_background_repeat_enum_vals},
+   {"background-size", {CSS_TYPE_BACKGROUND_SIZES, CSS_TYPE_UNUSED}, NULL},
    {"border-bottom-color", {CSS_TYPE_ENUM, CSS_TYPE_COLOR, CSS_TYPE_UNUSED},
     Css_border_color_enum_vals},
    {"border-bottom-left-radius", {CSS_TYPE_CORNER_RADIUS, CSS_TYPE_UNUSED}, NULL},
@@ -359,6 +360,7 @@ const CssPropertyName Css_background_properties[] = {
    CSS_PROPERTY_BACKGROUND_POSITION,
    CSS_PROPERTY_BACKGROUND_ORIGIN,
    CSS_PROPERTY_BACKGROUND_CLIP,
+   CSS_PROPERTY_BACKGROUND_SIZE,
    CSS_PROPERTY_END
 };
 
@@ -809,6 +811,12 @@ bool CssParser::tokenMatchesProperty(CssPropertyName prop, CssValueType *type)
       case CSS_TYPE_BACKGROUND_BOXES:
          if (backgroundBox() >= 0) return true;
          break;
+      case CSS_TYPE_BACKGROUND_SIZES:
+         if (ttype == CSS_TK_DECINT || ttype == CSS_TK_FLOAT ||
+             (ttype == CSS_TK_SYMBOL && (!dStrAsciiCasecmp(tval, "cover") ||
+              !dStrAsciiCasecmp(tval, "contain") || !dStrAsciiCasecmp(tval, "auto") ||
+              !dStrAsciiCasecmp(tval, "calc")))) return true;
+         break;
       case CSS_TYPE_CORNER_RADIUS:
          if (ttype == CSS_TK_DECINT || ttype == CSS_TK_FLOAT ||
              (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "calc"))) return true;
@@ -1141,6 +1149,27 @@ bool CssParser::parseShadows(CssShadows *value)
       if (ttype != CSS_TK_CHAR || tval[0] != ',') return true;
       nextToken();
    } while (true);
+}
+
+bool CssParser::parseBackgroundSize(CssBackgroundSizes::Size *size)
+{
+   memset(size, 0, sizeof(*size));
+   size->x = size->y = CSS_CREATE_LENGTH(0, CSS_LENGTH_TYPE_AUTO);
+   if (ttype == CSS_TK_SYMBOL && (!dStrAsciiCasecmp(tval, "cover") || !dStrAsciiCasecmp(tval, "contain"))) {
+      size->mode = !dStrAsciiCasecmp(tval, "cover") ? 1 : 2;
+      nextToken(); return true;
+   }
+   for (unsigned n = 0; n < 2; ++n) {
+      CssValueType type = CSS_TYPE_UNUSED;
+      if (!tokenMatchesProperty(CSS_PROPERTY_WIDTH, &type)) return n != 0;
+      CssPropertyValue length;
+      bool calculated = ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "calc");
+      if (!parseValue(CSS_PROPERTY_WIDTH, type, &length) ||
+          (!calculated && length.lenVal.type != CSS_LENGTH_TYPE_AUTO &&
+           CSS_LENGTH_VALUE(length.lenVal) < 0)) return false;
+      (n ? size->y : size->x) = length.lenVal;
+   }
+   return true;
 }
 
 int CssParser::backgroundBox()
@@ -1477,6 +1506,18 @@ bool CssParser::parseValue(CssPropertyName prop,
       *val->boxesVal = boxes; ret = true;
       break;
    }
+   case CSS_TYPE_BACKGROUND_SIZES: {
+      CssBackgroundSizes sizes = {};
+      do {
+         if (sizes.count == CssBackgroundImages::MAX_LAYERS ||
+             !parseBackgroundSize(&sizes.values[sizes.count++])) return false;
+         if (ttype != CSS_TK_CHAR || tval[0] != ',') break;
+         nextToken();
+      } while (true);
+      val->sizesVal = (CssBackgroundSizes *)dMalloc(sizeof(sizes));
+      *val->sizesVal = sizes; ret = true;
+      break;
+   }
    case CSS_TYPE_SHADOW: {
       CssShadows shadows = {};
       if (parseShadows(&shadows)) {
@@ -1649,7 +1690,7 @@ static int Css_shorthand_info_cmp(const void *a, const void *b)
 
 static bool Css_decoration_property(CssPropertyName prop)
 {
-   return (prop >= CSS_PROPERTY_BACKGROUND_ATTACHMENT && prop <= CSS_PROPERTY_BACKGROUND_REPEAT) ||
+   return (prop >= CSS_PROPERTY_BACKGROUND_ATTACHMENT && prop <= CSS_PROPERTY_BACKGROUND_SIZE) ||
       (prop >= CSS_PROPERTY_OUTLINE_COLOR && prop <= CSS_PROPERTY_OUTLINE_WIDTH) ||
       prop == CSS_PROPERTY_BOX_SHADOW || prop == CSS_PROPERTY_TRANSFORM ||
       prop == CSS_PROPERTY_POINTER_EVENTS ||
@@ -1850,13 +1891,23 @@ void CssParser::parseDeclaration(CssPropertyList *props,
                   parsed.set(CSS_PROPERTY_BACKGROUND_POSITION, CSS_TYPE_BACKGROUND_POSITION, initial);
                   CssBackgroundImages images;
                   CssBackgroundBoxes origins = {}, clips = {};
+                  CssBackgroundSizes sizes = {};
                   bool valid = true, any = false, uri = false, legacyPosition = false;
                   do {
                      CssGradient image = {};
+                     CssBackgroundSizes::Size size = {};
+                     size.x = size.y = CSS_CREATE_LENGTH(0, CSS_LENGTH_TYPE_AUTO);
                      bool seen[5] = {}, layer = false;
+                     bool sizeSeen = false;
                      int origin = 1, clip = 0, boxes = 0;
                      while (ttype != CSS_TK_END && !(ttype == CSS_TK_CHAR &&
                             (tval[0] == ';' || tval[0] == '}' || tval[0] == '!' || tval[0] == ','))) {
+                        if (ttype == CSS_TK_CHAR && tval[0] == '/') {
+                           if (!seen[4] || sizeSeen) { valid = false; break; }
+                           nextToken();
+                           if (!parseBackgroundSize(&size)) { valid = false; break; }
+                           sizeSeen = true; continue;
+                        }
                         int box = backgroundBox();
                         if (box >= 0) {
                            if (++boxes > 2) { valid = false; break; }
@@ -1890,6 +1941,7 @@ void CssParser::parseDeclaration(CssPropertyList *props,
                      images.layers.push_back(image);
                      origins.values[origins.count++] = origin;
                      clips.values[clips.count++] = clip;
+                     sizes.values[sizes.count++] = size;
                      if (ttype != CSS_TK_CHAR || tval[0] != ',') break;
                      if (seen[0]) { valid = false; break; } // color is allowed only in the last layer
                      nextToken();
@@ -1912,6 +1964,9 @@ void CssParser::parseDeclaration(CssPropertyList *props,
                      part.boxesVal = (CssBackgroundBoxes *)dMalloc(sizeof(clips));
                      *part.boxesVal = clips;
                      parsed.set(CSS_PROPERTY_BACKGROUND_CLIP, CSS_TYPE_BACKGROUND_BOXES, part);
+                     part.sizesVal = (CssBackgroundSizes *)dMalloc(sizeof(sizes));
+                     *part.sizesVal = sizes;
+                     parsed.set(CSS_PROPERTY_BACKGROUND_SIZE, CSS_TYPE_BACKGROUND_SIZES, part);
                      CssPropertyList *dest = weight && importantProps ? importantProps : props;
                      parsed.apply(dest);
                   }

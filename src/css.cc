@@ -61,6 +61,11 @@ CssPropertyList::CssPropertyList (const CssPropertyList &p, bool deep) :
                *boxes = *p->value.boxesVal; p->value.boxesVal = boxes;
                break;
             }
+            case CSS_TYPE_BACKGROUND_SIZES: {
+               CssBackgroundSizes *sizes = (CssBackgroundSizes *)dMalloc(sizeof(CssBackgroundSizes));
+               *sizes = *p->value.sizesVal; p->value.sizesVal = sizes;
+               break;
+            }
             case CSS_TYPE_SHADOW:
                {
                   CssShadows *shadows = (CssShadows *)dMalloc(sizeof(CssShadows));
@@ -140,6 +145,10 @@ void CssPropertyList::apply (CssPropertyList *props) {
       if (props->ownerOfStrings && getRef(i)->type == CSS_TYPE_BACKGROUND_BOXES) {
          value.boxesVal = (CssBackgroundBoxes *)dMalloc(sizeof(CssBackgroundBoxes));
          *value.boxesVal = *getRef(i)->value.boxesVal;
+      }
+      if (props->ownerOfStrings && getRef(i)->type == CSS_TYPE_BACKGROUND_SIZES) {
+         value.sizesVal = (CssBackgroundSizes *)dMalloc(sizeof(CssBackgroundSizes));
+         *value.sizesVal = *getRef(i)->value.sizesVal;
       }
       if (props->ownerOfStrings && getRef(i)->type == CSS_TYPE_SHADOW) {
          value.shadowsVal = (CssShadows *)dMalloc(sizeof(CssShadows));

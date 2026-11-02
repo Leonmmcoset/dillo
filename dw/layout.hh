@@ -185,6 +185,7 @@ private:
    style::BackgroundRepeat bgRepeat;
    style::BackgroundAttachment bgAttachment;
    style::Length bgPositionX, bgPositionY;
+   style::BackgroundSizes bgSize;
 
    style::Cursor cursor;
    int canvasWidth, canvasAscent, canvasDescent;
@@ -310,6 +311,8 @@ public:
    inline int getContentHeightViewport() { return viewportHeight - currHScrollbarThickness(); }
    inline int getScrollPosX ()  { return scrollX; }
    inline int getScrollPosY ()  { return scrollY; }
+   bool getDomMouseEvent (DomMouseEvent *event)
+   { return view && view->getDomMouseEvent(event); }
    void flushLayout () { if (resizeIdleId != -1) resizeIdle(); }
    Widget *getWidgetAtPoint (int x, int y);
    int getDomNodeAtPoint (int x, int y);
@@ -472,7 +475,8 @@ public:
    void setBgImage (style::StyleImage *bgImage,
                     style::BackgroundRepeat bgRepeat,
                     style::BackgroundAttachment bgAttachment,
-                    style::Length bgPositionX, style::Length bgPositionY);
+                    style::Length bgPositionX, style::Length bgPositionY,
+                    const style::BackgroundSizes *bgSize = NULL);
 
    inline style::Color* getBgColor () { return bgColor; }
    inline style::StyleImage* getBgImage () { return bgImage; }
