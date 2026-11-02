@@ -200,6 +200,7 @@ protected:
    FltkResource (FltkPlatform *platform);
    void init (FltkPlatform *platform);
    virtual Fl_Widget *createNewWidget (core::Allocation *allocation) = 0;
+   virtual core::ui::Resource *getEventResource () = 0;
 
    virtual void setWidgetStyle (Fl_Widget *widget, core::style::Style *style);
    void setDisplayed (bool displayed);
@@ -223,6 +224,8 @@ public:
 
 template <class I> class FltkSpecificResource: public I, public FltkResource
 {
+protected:
+   core::ui::Resource *getEventResource () { return this; }
 public:
    FltkSpecificResource (FltkPlatform *platform);
    ~FltkSpecificResource ();

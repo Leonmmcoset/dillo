@@ -308,6 +308,28 @@ int FltkViewBase::manageTabToFocus()
    return ret;
 }
 
+int FltkViewBase::handleNativeMouseEvent (int event)
+{
+   core::Widget *target = theLayout->getWidgetAtPoint(
+      translateViewXToCanvasX(Fl::event_x()), translateViewYToCanvasY(Fl::event_y()));
+   // FLTK's child order does not include CSS stacking contexts or clipping.
+   // Dispatch only to the native control selected by the renderer.
+   for (const auto &entry : nativeOwners) {
+      Fl_Widget *native = entry.first;
+      if (entry.second->getEmbed() == target && native->visible() && native->active()) {
+         if (event == FL_MOVE && !native->contains(Fl::belowmouse())) {
+            native->handle(FL_ENTER);
+            Fl::belowmouse(native);
+         }
+         int handled = native->handle(event);
+         if (event == FL_PUSH && handled && !native->contains(Fl::pushed()))
+            Fl::pushed(native);
+         return handled;
+      }
+   }
+   return 0;
+}
+
 int FltkViewBase::handle (int event)
 {
    bool processed;
@@ -334,7 +356,7 @@ int FltkViewBase::handle (int event)
             Fl::focus(this);
          return true;
       }
-      break;
+      return handleNativeMouseEvent(event);
    case FL_RELEASE:
       processed =
          theLayout->buttonRelease (this, Fl::event_clicks () + 1,
@@ -344,7 +366,7 @@ int FltkViewBase::handle (int event)
       _MSG("RELEASE => %s\n", processed ? "true" : "false");
       if (processed)
          return true;
-      break;
+      return handleNativeMouseEvent(event);
    case FL_MOVE:
       mouse_x = Fl::event_x();
       mouse_y = Fl::event_y();
@@ -356,7 +378,7 @@ int FltkViewBase::handle (int event)
       _MSG("MOVE => %s\n", processed ? "true" : "false");
       if (processed)
          return true;
-      break;
+      return handleNativeMouseEvent(event);
    case FL_DRAG:
       processed =
          theLayout->motionNotify (this,
@@ -752,14 +774,16 @@ bool FltkWidgetView::usesFltkWidgets ()
 }
 
 void FltkWidgetView::addFltkWidget (Fl_Widget *widget,
-                                    core::Allocation *allocation)
+                                    core::Allocation *allocation, core::ui::Resource *owner)
 {
+   nativeOwners[widget] = owner;
    allocateFltkWidget (widget, allocation);
    add (widget);
 }
 
 void FltkWidgetView::removeFltkWidget (Fl_Widget *widget)
 {
+   nativeOwners.erase(widget);
    remove (widget);
 }
 

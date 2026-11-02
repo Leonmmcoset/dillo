@@ -142,6 +142,8 @@ static const char *const Css_position_enum_vals[] = {
    "static", "relative", "absolute", "fixed", NULL
 };
 
+static const char *const Css_pointer_events_vals[] = {"auto", "none", NULL};
+
 static const char *const Css_text_align_enum_vals[] = {
    "left", "right", "center", "justify", "string", NULL
 };
@@ -180,8 +182,10 @@ const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
    {"align-self", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_box_alignment_vals},
    {"background-attachment", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED},
     Css_background_attachment_enum_vals},
+   {"background-clip", {CSS_TYPE_BACKGROUND_BOXES, CSS_TYPE_UNUSED}, NULL},
    {"background-color", {CSS_TYPE_RGBA, CSS_TYPE_UNUSED}, NULL},
-   {"background-image", {CSS_TYPE_GRADIENT, CSS_TYPE_URI, CSS_TYPE_UNUSED}, NULL},
+   {"background-image", {CSS_TYPE_BACKGROUND_IMAGES, CSS_TYPE_URI, CSS_TYPE_UNUSED}, NULL},
+   {"background-origin", {CSS_TYPE_BACKGROUND_BOXES, CSS_TYPE_UNUSED}, NULL},
    {"background-position", {CSS_TYPE_BACKGROUND_POSITION, CSS_TYPE_UNUSED},
     NULL},
    {"background-repeat", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED},
@@ -291,6 +295,7 @@ const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
    {"padding-left", {CSS_TYPE_LENGTH, CSS_TYPE_UNUSED}, NULL},
    {"padding-right", {CSS_TYPE_LENGTH, CSS_TYPE_UNUSED}, NULL},
    {"padding-top", {CSS_TYPE_LENGTH, CSS_TYPE_UNUSED}, NULL},
+   {"pointer-events", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_pointer_events_vals},
    {"position", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_position_enum_vals},
    {"quotes", {CSS_TYPE_UNUSED}, NULL},
    {"right", {CSS_TYPE_SIGNED_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
@@ -352,6 +357,8 @@ const CssPropertyName Css_background_properties[] = {
    CSS_PROPERTY_BACKGROUND_REPEAT,
    CSS_PROPERTY_BACKGROUND_ATTACHMENT,
    CSS_PROPERTY_BACKGROUND_POSITION,
+   CSS_PROPERTY_BACKGROUND_ORIGIN,
+   CSS_PROPERTY_BACKGROUND_CLIP,
    CSS_PROPERTY_END
 };
 
@@ -795,9 +802,12 @@ bool CssParser::tokenMatchesProperty(CssPropertyName prop, CssValueType *type)
              !dStrAsciiCasecmp(tval, "translateY") || !dStrAsciiCasecmp(tval, "translate3d")))
             return true;
          break;
-      case CSS_TYPE_GRADIENT:
+      case CSS_TYPE_BACKGROUND_IMAGES:
          if (ttype == CSS_TK_SYMBOL && (!dStrAsciiCasecmp(tval, "linear-gradient") ||
-             !dStrAsciiCasecmp(tval, "repeating-linear-gradient"))) return true;
+             !dStrAsciiCasecmp(tval, "repeating-linear-gradient") || !dStrAsciiCasecmp(tval, "none"))) return true;
+         break;
+      case CSS_TYPE_BACKGROUND_BOXES:
+         if (backgroundBox() >= 0) return true;
          break;
       case CSS_TYPE_CORNER_RADIUS:
          if (ttype == CSS_TK_DECINT || ttype == CSS_TK_FLOAT ||
@@ -1133,6 +1143,25 @@ bool CssParser::parseShadows(CssShadows *value)
    } while (true);
 }
 
+int CssParser::backgroundBox()
+{
+   if (ttype != CSS_TK_SYMBOL) return -1;
+   if (!dStrAsciiCasecmp(tval, "border-box")) return 0;
+   if (!dStrAsciiCasecmp(tval, "padding-box")) return 1;
+   if (!dStrAsciiCasecmp(tval, "content-box")) return 2;
+   return -1;
+}
+
+bool CssParser::parseBackgroundImage(CssGradient *value)
+{
+   if (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "none")) {
+      nextToken(); return true;
+   }
+   if (ttype != CSS_TK_SYMBOL || (dStrAsciiCasecmp(tval, "linear-gradient") &&
+       dStrAsciiCasecmp(tval, "repeating-linear-gradient"))) return false;
+   return parseGradient(value);
+}
+
 bool CssParser::parseGradient(CssGradient *value)
 {
    value->repeating = !dStrAsciiCasecmp(tval, "repeating-linear-gradient");
@@ -1422,12 +1451,30 @@ bool CssParser::parseValue(CssPropertyName prop,
       }
       break;
    }
-   case CSS_TYPE_GRADIENT: {
-      CssGradient gradient = {};
-      if (parseGradient(&gradient)) {
-         val->gradientVal = (CssGradient *)dMalloc(sizeof(gradient));
-         *val->gradientVal = gradient; ret = true;
+   case CSS_TYPE_BACKGROUND_IMAGES: {
+      CssBackgroundImages images;
+      for (;;) {
+         CssGradient gradient = {};
+         if (images.layers.size() == CssBackgroundImages::MAX_LAYERS ||
+             !parseBackgroundImage(&gradient)) return false;
+         images.layers.push_back(gradient);
+         if (ttype != CSS_TK_CHAR || tval[0] != ',') break;
+         nextToken();
       }
+      val->imagesVal = new CssBackgroundImages(images); ret = true;
+      break;
+   }
+   case CSS_TYPE_BACKGROUND_BOXES: {
+      CssBackgroundBoxes boxes = {};
+      for (;;) {
+         int box = backgroundBox();
+         if (box < 0 || boxes.count == CssBackgroundImages::MAX_LAYERS) return false;
+         boxes.values[boxes.count++] = box; nextToken();
+         if (ttype != CSS_TK_CHAR || tval[0] != ',') break;
+         nextToken();
+      }
+      val->boxesVal = (CssBackgroundBoxes *)dMalloc(sizeof(boxes));
+      *val->boxesVal = boxes; ret = true;
       break;
    }
    case CSS_TYPE_SHADOW: {
@@ -1605,6 +1652,7 @@ static bool Css_decoration_property(CssPropertyName prop)
    return (prop >= CSS_PROPERTY_BACKGROUND_ATTACHMENT && prop <= CSS_PROPERTY_BACKGROUND_REPEAT) ||
       (prop >= CSS_PROPERTY_OUTLINE_COLOR && prop <= CSS_PROPERTY_OUTLINE_WIDTH) ||
       prop == CSS_PROPERTY_BOX_SHADOW || prop == CSS_PROPERTY_TRANSFORM ||
+      prop == CSS_PROPERTY_POINTER_EVENTS ||
       prop == CSS_PROPERTY_BORDER_TOP_LEFT_RADIUS || prop == CSS_PROPERTY_BORDER_TOP_RIGHT_RADIUS ||
       prop == CSS_PROPERTY_BORDER_BOTTOM_LEFT_RADIUS || prop == CSS_PROPERTY_BORDER_BOTTOM_RIGHT_RADIUS;
 }
@@ -1794,40 +1842,78 @@ void CssParser::parseDeclaration(CssPropertyList *props,
                   CssPropertyValue initial;
                   initial.intVal = -1;
                   parsed.set(CSS_PROPERTY_BACKGROUND_COLOR, CSS_TYPE_COLOR, initial);
-                  initial.strVal = NULL;
-                  parsed.set(CSS_PROPERTY_BACKGROUND_IMAGE, CSS_TYPE_URI, initial);
                   initial.intVal = 0;
                   parsed.set(CSS_PROPERTY_BACKGROUND_REPEAT, CSS_TYPE_ENUM, initial);
                   parsed.set(CSS_PROPERTY_BACKGROUND_ATTACHMENT, CSS_TYPE_ENUM, initial);
                   initial.posVal = (CssBackgroundPosition *)dMalloc(sizeof(CssBackgroundPosition));
                   initial.posVal->posX = initial.posVal->posY = CSS_CREATE_LENGTH(0, CSS_LENGTH_TYPE_PERCENTAGE);
                   parsed.set(CSS_PROPERTY_BACKGROUND_POSITION, CSS_TYPE_BACKGROUND_POSITION, initial);
-                  bool seen[5] = {}, valid = true, any = false;
-                  while (ttype != CSS_TK_END && !(ttype == CSS_TK_CHAR &&
-                         (tval[0] == ';' || tval[0] == '}' || tval[0] == '!'))) {
-                     bool matched = false;
-                     for (unsigned n = 0; n < 5 && !matched; ++n) {
-                        CssPropertyName name = Css_background_properties[n];
-                        if (!seen[n] && tokenMatchesProperty(name, &type)) {
-                           matched = true;
-                           CssPropertyValue part;
-                           if (!parseValue(name, type, &part)) { valid = false; break; }
-                           parsed.set(name, type, part); seen[n] = true; any = true;
+                  CssBackgroundImages images;
+                  CssBackgroundBoxes origins = {}, clips = {};
+                  bool valid = true, any = false, uri = false, legacyPosition = false;
+                  do {
+                     CssGradient image = {};
+                     bool seen[5] = {}, layer = false;
+                     int origin = 1, clip = 0, boxes = 0;
+                     while (ttype != CSS_TK_END && !(ttype == CSS_TK_CHAR &&
+                            (tval[0] == ';' || tval[0] == '}' || tval[0] == '!' || tval[0] == ','))) {
+                        int box = backgroundBox();
+                        if (box >= 0) {
+                           if (++boxes > 2) { valid = false; break; }
+                           if (boxes == 1) origin = clip = box;
+                           else clip = box;
+                           nextToken(); layer = true; continue;
                         }
+                        bool matched = false;
+                        for (unsigned n = 0; n < 5 && !matched; ++n) {
+                           CssPropertyName name = Css_background_properties[n];
+                           if (!seen[n] && tokenMatchesProperty(name, &type)) {
+                              matched = true;
+                              if (name == CSS_PROPERTY_BACKGROUND_IMAGE && type == CSS_TYPE_BACKGROUND_IMAGES) {
+                                 valid = parseBackgroundImage(&image);
+                              } else {
+                                 CssPropertyValue part;
+                                 valid = parseValue(name, type, &part);
+                                 if (valid) parsed.set(name, type, part);
+                                 if (name == CSS_PROPERTY_BACKGROUND_IMAGE) uri = true;
+                                 if (n >= 2) legacyPosition = true;
+                              }
+                              seen[n] = layer = true;
+                           }
+                        }
+                        if (!matched || !valid) { valid = false; break; }
                      }
-                     if (!matched || !valid) { valid = false; break; }
-                  }
+                     if (!valid || !layer || images.layers.size() == CssBackgroundImages::MAX_LAYERS) {
+                        valid = false; break;
+                     }
+                     any = true;
+                     images.layers.push_back(image);
+                     origins.values[origins.count++] = origin;
+                     clips.values[clips.count++] = clip;
+                     if (ttype != CSS_TK_CHAR || tval[0] != ',') break;
+                     if (seen[0]) { valid = false; break; } // color is allowed only in the last layer
+                     nextToken();
+                  } while (true);
+                  // URL images and their positioning retain the existing single-layer path.
+                  if (images.layers.size() > 1 && (uri || legacyPosition)) valid = false;
                   bool bang = ttype == CSS_TK_CHAR && tval[0] == '!';
                   weight = parseWeight();
                   if (bang && !weight) valid = false;
                   if (ttype != CSS_TK_END && !(ttype == CSS_TK_CHAR && (tval[0] == ';' || tval[0] == '}'))) valid = false;
                   if (valid && any) {
-                     CssPropertyList *dest = weight && importantProps ? importantProps : props;
-                     for (int n = 0; n < parsed.size(); ++n) {
-                        CssProperty *part = parsed.getRef(n);
-                        dest->set((CssPropertyName)part->name, (CssValueType)part->type, part->value);
-                        part->type = CSS_TYPE_UNUSED; // ownership transfers to the declaration list
+                     CssPropertyValue part;
+                     if (!uri) {
+                        part.imagesVal = new CssBackgroundImages(images);
+                        parsed.set(CSS_PROPERTY_BACKGROUND_IMAGE, CSS_TYPE_BACKGROUND_IMAGES, part);
                      }
+                     part.boxesVal = (CssBackgroundBoxes *)dMalloc(sizeof(origins));
+                     *part.boxesVal = origins;
+                     parsed.set(CSS_PROPERTY_BACKGROUND_ORIGIN, CSS_TYPE_BACKGROUND_BOXES, part);
+                     part.boxesVal = (CssBackgroundBoxes *)dMalloc(sizeof(clips));
+                     *part.boxesVal = clips;
+                     parsed.set(CSS_PROPERTY_BACKGROUND_CLIP, CSS_TYPE_BACKGROUND_BOXES, part);
+                     CssPropertyList *dest = weight && importantProps ? importantProps : props;
+                     parsed.apply(dest);
                   }
                   break;
                }

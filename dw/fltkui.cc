@@ -543,7 +543,7 @@ void FltkResource::attachView (FltkView *view)
       this->view = view;
 
       widget = createNewWidget (&allocation);
-      view->addFltkWidget (widget, &allocation);
+      view->addFltkWidget (widget, &allocation, getEventResource());
       if (style)
          setWidgetStyle (widget, style);
       if (! enabled)

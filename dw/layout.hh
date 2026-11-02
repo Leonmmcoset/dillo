@@ -213,7 +213,6 @@ private:
 
    void detachWidget (Widget *widget);
 
-   Widget *getWidgetAtPoint (int x, int y);
    void moveToWidget (Widget *newWidgetAtPoint, ButtonState state);
 
    /**
@@ -312,6 +311,8 @@ public:
    inline int getScrollPosX ()  { return scrollX; }
    inline int getScrollPosY ()  { return scrollY; }
    void flushLayout () { if (resizeIdleId != -1) resizeIdle(); }
+   Widget *getWidgetAtPoint (int x, int y);
+   int getDomNodeAtPoint (int x, int y);
 
    /* public */
 

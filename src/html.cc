@@ -4250,6 +4250,15 @@ static void Html_process_tag(DilloHtml *html, char *tag, int tagsize)
             dStr_sprintfa(css, "background-color:rgba(%u,%u,%u,%.6f);", rgb >> 16, (rgb >> 8) & 255, rgb & 255, s->backgroundAlpha / 255.0);
          } else if (s->backgroundColor) dStr_sprintfa(css, "background-color:#%06x;", s->backgroundColor->getColor());
          else dStr_append(css, "background-color:transparent;");
+         static const char *backgroundBoxes[] = {"border-box", "padding-box", "content-box"};
+         const dw::core::style::BackgroundBoxes *boxes[] = {&s->backgroundClip, &s->backgroundOrigin};
+         for (unsigned property = 0; property < 2; ++property) {
+            dStr_append(css, property ? "background-origin:" : "background-clip:");
+            unsigned count = std::max((size_t)1, s->backgroundLayers.size());
+            for (unsigned n = 0; n < count; ++n)
+               dStr_sprintfa(css, "%s%s", n ? "," : "", backgroundBoxes[boxes[property]->at(n)]);
+            dStr_append(css, ";");
+         }
          static const char *borderStyles[] = {"none", "hidden", "dotted", "dashed", "solid", "double", "groove", "ridge", "inset", "outset"};
          unsigned outlineColor = s->outline.rgba;
          dStr_sprintfa(css, "outline-color:rgba(%u,%u,%u,%.6f);outline-style:%s;outline-width:%dpx;outline-offset:%dpx;",
@@ -4269,6 +4278,7 @@ static void Html_process_tag(DilloHtml *html, char *tag, int tagsize)
          if (s->zIndex == dw::core::style::Z_INDEX_AUTO) dStr_append(css, "z-index:auto;");
          else dStr_sprintfa(css, "z-index:%d;", s->zIndex);
          static const char *overflows[] = {"visible", "hidden", "scroll", "auto"};
+         dStr_sprintfa(css, "pointer-events:%s;", s->pointerEvents == dw::core::style::StyleAttrs::POINTER_EVENTS_NONE ? "none" : "auto");
          dStr_sprintfa(css, "overflow:%s;", overflows[s->overflow]);
          if (s->font) dStr_sprintfa(css, "font-family:%s;font-size:%dpx;font-weight:%d;font-style:%s;",
             s->font->name, s->font->size, s->font->weight,

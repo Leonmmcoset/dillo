@@ -70,7 +70,10 @@ void StyleAttrs::initValues ()
    backgroundColor = NULL;
    backgroundAlpha = 255;
    backgroundImage = NULL;
-   memset(&gradient, 0, sizeof(gradient));
+   backgroundLayers.clear();
+   memset(&backgroundClip, 0, sizeof(backgroundClip)); backgroundClip.count = 1;
+   memset(&backgroundOrigin, 0, sizeof(backgroundOrigin));
+   backgroundOrigin.count = 1; backgroundOrigin.values[0] = BACKGROUND_PADDING_BOX;
    memset(&borderRadius, 0, sizeof(borderRadius));
    memset(&boxShadows, 0, sizeof(boxShadows));
    memset(&outline, 0, sizeof(outline));
@@ -107,6 +110,7 @@ void StyleAttrs::initValues ()
    container.shrink = 1; container.alignItems = ALIGN_STRETCH; container.alignContent = ALIGN_STRETCH;
    whiteSpace = WHITE_SPACE_NORMAL;
    cursor = CURSOR_DEFAULT;
+   pointerEvents = POINTER_EVENTS_AUTO;
    zIndex = Z_INDEX_AUTO;
 }
 
@@ -133,7 +137,10 @@ void StyleAttrs::resetValues ()
    backgroundColor = NULL;
    backgroundAlpha = 255;
    backgroundImage = NULL;
-   memset(&gradient, 0, sizeof(gradient));
+   backgroundLayers.clear();
+   memset(&backgroundClip, 0, sizeof(backgroundClip)); backgroundClip.count = 1;
+   memset(&backgroundOrigin, 0, sizeof(backgroundOrigin));
+   backgroundOrigin.count = 1; backgroundOrigin.values[0] = BACKGROUND_PADDING_BOX;
    memset(&borderRadius, 0, sizeof(borderRadius));
    memset(&boxShadows, 0, sizeof(boxShadows));
    memset(&outline, 0, sizeof(outline));
@@ -189,7 +196,10 @@ bool StyleAttrs::equals (object::Object *other) {
        backgroundColor == otherAttrs->backgroundColor &&
        backgroundAlpha == otherAttrs->backgroundAlpha &&
        backgroundImage == otherAttrs->backgroundImage &&
-       !memcmp(&gradient, &otherAttrs->gradient, sizeof(gradient)) &&
+       backgroundLayers.size() == otherAttrs->backgroundLayers.size() &&
+       (backgroundLayers.empty() || !memcmp(backgroundLayers.data(), otherAttrs->backgroundLayers.data(), backgroundLayers.size() * sizeof(Gradient))) &&
+       !memcmp(&backgroundClip, &otherAttrs->backgroundClip, sizeof(backgroundClip)) &&
+       !memcmp(&backgroundOrigin, &otherAttrs->backgroundOrigin, sizeof(backgroundOrigin)) &&
        !memcmp(&borderRadius, &otherAttrs->borderRadius, sizeof(borderRadius)) &&
        !memcmp(&boxShadows, &otherAttrs->boxShadows, sizeof(boxShadows)) &&
        !memcmp(&outline, &otherAttrs->outline, sizeof(outline)) &&
@@ -244,6 +254,7 @@ bool StyleAttrs::equals (object::Object *other) {
        listStylePosition == otherAttrs->listStylePosition &&
        listStyleType == otherAttrs->listStyleType &&
        cursor == otherAttrs->cursor &&
+       pointerEvents == otherAttrs->pointerEvents &&
        zIndex == otherAttrs->zIndex &&
        x_link == otherAttrs->x_link &&
        x_lang[0] == otherAttrs->x_lang[0] &&
@@ -258,7 +269,9 @@ int StyleAttrs::hashValue () {
       const unsigned char *bytes = static_cast<const unsigned char *>(data);
       for (size_t n = 0; n < size; ++n) decorations = (decorations ^ bytes[n]) * 1099511628211ULL;
    };
-   hashBytes(&gradient, sizeof(gradient));
+   if (!backgroundLayers.empty()) hashBytes(backgroundLayers.data(), backgroundLayers.size() * sizeof(Gradient));
+   hashBytes(&backgroundClip, sizeof(backgroundClip));
+   hashBytes(&backgroundOrigin, sizeof(backgroundOrigin));
    hashBytes(&borderRadius, sizeof(borderRadius));
    hashBytes(&boxShadows, sizeof(boxShadows));
    hashBytes(&outline, sizeof(outline));
@@ -316,6 +329,7 @@ int StyleAttrs::hashValue () {
       listStylePosition +
       listStyleType +
       cursor +
+      pointerEvents +
       zIndex +
       x_link +
       x_lang[0] + x_lang[1] +
@@ -401,7 +415,9 @@ void Style::copyAttrs (StyleAttrs *attrs)
    backgroundColor = attrs->backgroundColor;
    backgroundAlpha = attrs->backgroundAlpha;
    backgroundImage = attrs->backgroundImage;
-   gradient = attrs->gradient;
+   backgroundLayers = attrs->backgroundLayers;
+   backgroundClip = attrs->backgroundClip;
+   backgroundOrigin = attrs->backgroundOrigin;
    borderRadius = attrs->borderRadius;
    boxShadows = attrs->boxShadows;
    outline = attrs->outline;
@@ -451,6 +467,7 @@ void Style::copyAttrs (StyleAttrs *attrs)
    listStylePosition = attrs->listStylePosition;
    listStyleType = attrs->listStyleType;
    cursor = attrs->cursor;
+   pointerEvents = attrs->pointerEvents;
    zIndex = attrs->zIndex;
    x_link = attrs->x_link;
    x_lang[0] = attrs->x_lang[0];
@@ -1277,8 +1294,9 @@ void drawBorder (View *view, Layout *layout, Rectangle *area,
  * tiling of background images (for position 0%/0%, a tile is set at
  * xRef/yRef; for position 100%/100%, a tile is set at xRef +
  * widthRef/yRef + widthRef). See calls for more information; in most
- * cases, these boxes are identical (padding box). All these
- * coordinates are given in canvas coordinates.
+ * cases, these boxes are identical (padding box). background-origin and
+ * background-clip derive their border/content boxes from these padding boxes.
+ * All these coordinates are given in canvas coordinates.
  *
  * "atTop" should be true, only if the area is drawn directly on the
  * canvas, not on top of other areas; this is only true for the
@@ -1322,39 +1340,12 @@ void drawBackground (View *view, Layout *layout, Rectangle *area,
    // necessary to draw the background if background color and image
    // are not set (NULL), i. e. shining through.
 
-   if (hasBgColor || hasBgImage || style->gradient.count) {
-      Rectangle bgArea, intersection;
-      bgArea.x = x;
-      bgArea.y = y;
-      bgArea.width = width;
-      bgArea.height = height;
-
-      if (area->intersectsWith (&bgArea, &intersection)) {
-         if ((hasBgColor || style->gradient.count) &&
-             (hasRoundedCorners(style) || style->gradient.count || style->backgroundAlpha != 255))
-            drawBackgroundPaint(view, layout, &intersection, x, y, width, height, style, bgColor, inverse);
-         else if (hasBgColor)
-            view->drawRectangle (bgColor,
-                                 inverse ?
-                                 Color::SHADING_INVERSE : Color::SHADING_NORMAL,
-                                 true, intersection.x, intersection.y,
-                                 intersection.width, intersection.height);
-
-         if (hasBgImage && hasRoundedCorners(style))
-            drawRoundedBackgroundImage(view, layout, &intersection, x, y, width, height,
-               xRef, yRef, widthRef, heightRef, style);
-         else if (hasBgImage)
-            drawBackgroundImage (view, style->backgroundImage,
-                                 style->backgroundRepeat,
-                                 style->backgroundAttachment,
-                                 style->backgroundPositionX,
-                                 style->backgroundPositionY,
-                                 intersection.x, intersection.y,
-                                 intersection.width, intersection.height,
-                                 xRef, yRef, widthRef, heightRef);
-
-      }
-   }
+   if (hasBgColor || style->hasBackgroundGradient())
+      drawBackgroundPaint(view, layout, area, x, y, width, height,
+         style, hasBgColor ? bgColor : NULL, inverse);
+   if (hasBgImage)
+      drawRoundedBackgroundImage(view, layout, area, x, y, width, height,
+         xRef, yRef, widthRef, heightRef, style);
 }
 
 void drawBackgroundImage (View *view, StyleImage *backgroundImage,

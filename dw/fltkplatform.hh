@@ -101,7 +101,7 @@ public:
    virtual bool usesFltkWidgets () = 0;
 
    virtual void addFltkWidget (Fl_Widget *widget,
-                               core::Allocation *allocation);
+                               core::Allocation *allocation, core::ui::Resource *owner);
    virtual void removeFltkWidget (Fl_Widget *widget);
    virtual void allocateFltkWidget (Fl_Widget *widget,
                                     core::Allocation *allocation);

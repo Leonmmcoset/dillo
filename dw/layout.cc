@@ -1170,6 +1170,17 @@ Widget *Layout::getWidgetAtPoint (int x, int y)
 }
 
 
+/* Resolve DOM identity after the normal stacking and clipping hit test. */
+int Layout::getDomNodeAtPoint (int x, int y)
+{
+   Widget *widget = getWidgetAtPoint(x, y);
+   for (; widget; widget = widget->getParent()) {
+      int node = widget->getDomNodeAtPoint(x, y);
+      if (node) return node;
+   }
+   return 0;
+}
+
 /*
  * Emit the necessary crossing events, when the mouse pointer has moved to
  * the given widget (by mouse or scrolling).

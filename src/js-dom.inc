@@ -567,6 +567,13 @@ class Document extends Node {
     createDocumentFragment() { return wrap(native('create', 11, '')); }
     createEvent(type) { return type === 'CustomEvent' ? new CustomEvent('') : type === 'MouseEvents' ? new MouseEvent('') : new Event(''); }
     getElementById(id) { return this.querySelector('#' + CSS.escape(String(id))); }
+    elementFromPoint(x, y) {
+        x=Number(x);y=Number(y);
+        if(!Number.isFinite(x)||!Number.isFinite(y))return null;
+        let element=wrap(Number(native('control',this._id,'elementFromPoint',x+','+y)));
+        while(element&&element.nodeType!==1)element=element.parentElement;
+        return element;
+    }
     getElementsByName(name) { return collection(() => this.querySelectorAll('[name="' + String(name).replace(/["\\]/g, '\\$&') + '"]')); }
     hasFocus() { return true; }
     write(...values) { native('write', 0, values.join('')); }

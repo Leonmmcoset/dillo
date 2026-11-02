@@ -345,7 +345,6 @@ protected:
       if (embed) embed->queueResize (0, extremesChanged);
    }
 
-   virtual Embed *getEmbed () { return embed; }
    virtual void setEmbed (Embed *embed);
    virtual bool activationIsClick () const { return true; }
 
@@ -357,6 +356,7 @@ public:
    { embed = NULL; DBG_OBJ_CREATE ("dw::core::ui::Resource"); }
 
    virtual ~Resource ();
+   virtual Embed *getEmbed () { return embed; }
 
    virtual void sizeRequest (Requisition *requisition) = 0;
    virtual void getExtremes (Extremes *extremes);

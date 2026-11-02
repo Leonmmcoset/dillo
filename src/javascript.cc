@@ -21,6 +21,7 @@
 #include <cstring>
 #include <cctype>
 #include <set>
+#include <cmath>
 
 #ifdef ENABLE_JAVASCRIPT
 namespace {
@@ -341,12 +342,23 @@ public:
          char *text = layout->getSelectionText();
          std::string result = text ? text : ""; free(text); return result;
       }
-      if (property == "geometry" || property == "computedStyle" || property == "scrollIntoView") {
+      if (property == "geometry" || property == "computedStyle" || property == "scrollIntoView" ||
+          property == "elementFromPoint") {
          // Event handlers still run on the old FLTK widget's stack. Replacing
          // it there would invalidate the native caller; defer that render.
          if (dirty && !rendering && !eventDepth) { dirty = false; render(); }
          dw::core::Layout *layout = static_cast<dw::core::Layout *>(bw->render_layout);
          layout->flushLayout();
+         if (property == "elementFromPoint") {
+            if (!value) return "0";
+            double x, y;
+            if (sscanf(value->c_str(), "%lf,%lf", &x, &y) != 2 ||
+                !std::isfinite(x) || !std::isfinite(y) || x < 0 || y < 0 ||
+                x >= layout->getContentWidthViewport() || y >= layout->getContentHeightViewport())
+               return "0";
+            return std::to_string(layout->getDomNodeAtPoint(
+               (int)x + layout->getScrollPosX(), (int)y + layout->getScrollPosY()));
+         }
          if (property == "computedStyle")
             return view->javascript_styles.count(node) ? view->javascript_styles[node] : "\1";
          dw::core::Allocation box;

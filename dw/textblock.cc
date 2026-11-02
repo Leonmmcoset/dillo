@@ -967,6 +967,15 @@ bool Textblock::getDomAllocation (int node, core::Allocation *result)
    return found;
 }
 
+int Textblock::getDomNodeAtPoint (int x, int y)
+{
+   bool inSpace;
+   const Word *word = findWord(x - allocation.x, y - allocation.y, &inSpace);
+   return word && (inSpace ? word->spaceStyle : word->style)->pointerEvents !=
+      core::style::StyleAttrs::POINTER_EVENTS_NONE && word->domNode ?
+      word->domNode : getDomNode();
+}
+
 bool Textblock::buttonPressImpl (core::EventButton *event)
 {
    bool inSpace;
@@ -979,9 +988,7 @@ bool Textblock::buttonPressImpl (core::EventButton *event)
 bool Textblock::buttonReleaseImpl (core::EventButton *event)
 {
    if (event->button == 1) {
-      bool inSpace;
-      const Word *word = findWord(event->xWidget, event->yWidget, &inSpace);
-      int node = word ? word->domNode : getDomNode();
+      int node = getDomNodeAtPoint(event->xCanvas, event->yCanvas);
       if (node && !emitDomEvent(node, "click")) { emptyLinkPressed = false; return true; }
       if (emptyLinkPressed) {
          emptyLinkPressed = false;
@@ -1008,7 +1015,8 @@ bool Textblock::motionNotifyImpl (core::EventMotion *event)
       const Word *word = findWord (event->xWidget, event->yWidget, &inSpace);
 
       // cursor from word or widget style
-      if (word == NULL) {
+      if (word == NULL || (inSpace ? word->spaceStyle : word->style)->pointerEvents ==
+          core::style::StyleAttrs::POINTER_EVENTS_NONE) {
          setCursor (getStyle()->cursor);
          hoverLink = -1;
          hoverTooltip = NULL;
@@ -1126,12 +1134,14 @@ bool Textblock::sendSelectionEvent (core::SelectionState::EventType eventType,
                           yWidgetBase + word->spaceStyle->font->descent) &&
                          (event->yWidget >
                           yWidgetBase - word->spaceStyle->font->ascent)) {
-                        link = word->spaceStyle->x_link;
+                        if (word->spaceStyle->pointerEvents != core::style::StyleAttrs::POINTER_EVENTS_NONE)
+                           link = word->spaceStyle->x_link;
                      }
                   } else {
                      if (event->yWidget <= yWidgetBase + word->size.descent &&
                          event->yWidget > yWidgetBase - word->size.ascent) {
-                        link = word->style->x_link;
+                        if (word->style->pointerEvents != core::style::StyleAttrs::POINTER_EVENTS_NONE)
+                           link = word->style->x_link;
                      }
                      if (word->content.type == core::Content::TEXT) {
                         int glyphX = wordStartX;
@@ -2957,6 +2967,14 @@ core::Widget *Textblock::getWidgetAtPointLevel (int x, int y, int level,
                       (word->content.widget))
                    widgetAtPoint =
                       word->content.widget->getWidgetAtPoint (x, y, context);
+            }
+            if (!widgetAtPoint) {
+               bool inSpace;
+               Word *word = findWord(x - allocation.x, y - allocation.y, &inSpace);
+               if (word && word->content.type == core::Content::TEXT &&
+                   (inSpace ? word->spaceStyle : word->style)->pointerEvents !=
+                      core::style::StyleAttrs::POINTER_EVENTS_NONE)
+                  widgetAtPoint = this;
             }
          }
       }

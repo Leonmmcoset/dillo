@@ -53,12 +53,14 @@ CssPropertyList::CssPropertyList (const CssPropertyList &p, bool deep) :
                   *transform = *p->value.transformVal; p->value.transformVal = transform;
                }
                break;
-            case CSS_TYPE_GRADIENT:
-               {
-                  CssGradient *gradient = (CssGradient *)dMalloc(sizeof(CssGradient));
-                  *gradient = *p->value.gradientVal; p->value.gradientVal = gradient;
-               }
+            case CSS_TYPE_BACKGROUND_IMAGES:
+               p->value.imagesVal = new CssBackgroundImages(*p->value.imagesVal);
                break;
+            case CSS_TYPE_BACKGROUND_BOXES: {
+               CssBackgroundBoxes *boxes = (CssBackgroundBoxes *)dMalloc(sizeof(CssBackgroundBoxes));
+               *boxes = *p->value.boxesVal; p->value.boxesVal = boxes;
+               break;
+            }
             case CSS_TYPE_SHADOW:
                {
                   CssShadows *shadows = (CssShadows *)dMalloc(sizeof(CssShadows));
@@ -133,9 +135,11 @@ void CssPropertyList::apply (CssPropertyList *props) {
          value.transformVal = (CssTransform *)dMalloc(sizeof(CssTransform));
          *value.transformVal = *getRef(i)->value.transformVal;
       }
-      if (props->ownerOfStrings && getRef(i)->type == CSS_TYPE_GRADIENT) {
-         value.gradientVal = (CssGradient *)dMalloc(sizeof(CssGradient));
-         *value.gradientVal = *getRef(i)->value.gradientVal;
+      if (props->ownerOfStrings && getRef(i)->type == CSS_TYPE_BACKGROUND_IMAGES)
+         value.imagesVal = new CssBackgroundImages(*getRef(i)->value.imagesVal);
+      if (props->ownerOfStrings && getRef(i)->type == CSS_TYPE_BACKGROUND_BOXES) {
+         value.boxesVal = (CssBackgroundBoxes *)dMalloc(sizeof(CssBackgroundBoxes));
+         *value.boxesVal = *getRef(i)->value.boxesVal;
       }
       if (props->ownerOfStrings && getRef(i)->type == CSS_TYPE_SHADOW) {
          value.shadowsVal = (CssShadows *)dMalloc(sizeof(CssShadows));

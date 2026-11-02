@@ -114,10 +114,17 @@ output, use, for example, `dilloc eval 'JSON.stringify({url:location.href})'`.
   Percentages use the border box. Transforms preserve normal flow, establish a
   stacking context, and affect painting, native controls, hit testing and element
   rectangles together.
-- Single-layer linear-gradient() and repeating-linear-gradient() backgrounds,
+- Up to eight linear-gradient(), repeating-linear-gradient() or none background
+  layers, with the first listed layer above later layers and alpha compositing,
   including angle/directional syntax, up to 32 color stops, double-position
   stops, length/percentage/calc() positions and alpha interpolation. Colors
   include RGB/RGBA, HSL/HSLA, named colors, currentColor and 3/4/6/8-digit hex.
+- background-clip and background-origin support border-box, padding-box and
+  content-box lists. Short lists repeat across image layers. The background
+  shorthand recognizes one or two box keywords per layer and a color in the
+  final layer, resetting omitted longhands. Rounded clipping also applies to
+  single URL backgrounds. Backgrounds paint below solid borders, including
+  transparent borders used for layered gradient outlines.
 - Alpha background colors support rgba(), modern space/slash RGB/HSL syntax,
   transparent, currentColor and 4/8-digit hex. Nested backgrounds composite over
   their painted parent; root backgrounds composite over the configured canvas
@@ -134,11 +141,21 @@ output, use, for example, `dilloc eval 'JSON.stringify({url:location.href})'`.
   changing layout or hit areas. Solid, dotted, dashed and double patterns are
   supported, including negative offsets and rounded corners; other border-style
   keywords use a solid outline fallback. Colors may have alpha.
-- Backgrounds, radii, transforms, shadows and outlines recognize initial,
+- pointer-events:auto/none is inherited, permits descendants to restore auto,
+  and applies to text, links, native controls and overlapping decorations.
+  Native mouse dispatch follows CSS stacking and clipping rather than the
+  toolkit's child order. Keyboard focus remains available for none controls.
+- document.elementFromPoint(x,y) returns the rendered element under viewport
+  coordinates, using the same hit test as native clicks. Inline text targets,
+  translations, fixed positioning, scrolling, clipping and pointer-events are
+  included. Invalid or offscreen coordinates return null. Pending visual changes
+  flush before queries except while a native event callback is active.
+- Backgrounds, radii, transforms, shadows, outlines and pointer-events recognize initial,
   inherit and unset, including their supported shorthands and var() expansion.
   Other properties do not yet have general CSS-wide keyword support.
-  getComputedStyle() reports alpha background colors, shadow lengths and outline
-  longhands from the committed render tree.
+  getComputedStyle() reports alpha background colors, shadow lengths, outline
+  longhands, pointer-events and background origin/clip lists from the committed
+  render tree.
 - Immediate window.scroll(), scrollTo() and scrollBy(), using numeric arguments
   or options with left/top.
 
@@ -178,7 +195,10 @@ notifications. Storage events and tab cloning are not implemented.
 Meta charset/refresh handling on the JavaScript path needs further integration.
 Rendering remains a subset. Transforms do not implement scale, rotation,
 perspective or general 3D; translate3d() requires a zero z component. Gradients
-do not implement radial/conic shapes or multiple background layers.
+do not implement radial/conic shapes. Layered URL images and per-layer lists of
+background-position/repeat/attachment remain unsupported; the existing
+single-URL path is retained. A shorthand requiring these unsupported lists is
+ignored atomically, preserving a previous fallback declaration.
 Rounded solid borders are supported; other border styles retain the legacy
 square-border fallback. Background-image corner clipping uses row spans rather
 than an antialiased image mask. Overflow clipping is rectangular: rounded corners
@@ -225,3 +245,10 @@ Baidu compatibility. Remaining layout differences, font icons and unsupported
 decorative CSS still affect real sites. Further renderer work and incremental
 DOM-to-render updates are needed before claiming the planned Chrome-like visual
 compatibility goal.
+
+The layered-background regression includes Baidu's white padding-box gradient
+over its colored border-box gradient, avoiding the old solid blue fallback.
+An isolated live check on 2026-11-02 also completed Chinese input and button
+submission to rendered search results with the default user agent. This is one
+successful acceptance run, not a guarantee that future requests bypass CAPTCHA
+or that every page interaction is supported.

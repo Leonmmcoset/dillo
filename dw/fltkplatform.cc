@@ -376,7 +376,7 @@ void FltkTooltip::onMotion()
 }
 
 void FltkView::addFltkWidget (Fl_Widget *widget,
-                              core::Allocation *allocation)
+                              core::Allocation *allocation, core::ui::Resource *owner)
 {
 }
 

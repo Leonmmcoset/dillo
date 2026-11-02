@@ -254,7 +254,8 @@ Widget *Widget::getWidgetAtPoint (int x, int y,
 {
    // Suitable for simple widgets, without children.
 
-   if (inAllocation (x, y) && isPointVisible(x, y))
+   if (style->pointerEvents != style::StyleAttrs::POINTER_EVENTS_NONE &&
+       inAllocation (x, y) && isPointVisible(x, y))
       return this;
    else
       return NULL;
@@ -1573,9 +1574,6 @@ void Widget::drawBox (View *view, style::Style *style, Rectangle *area,
    style::drawBoxShadows(view, layout, &canvasArea, allocation.x + x,
       allocation.y + y, width, height, style, false, inverse);
 
-   style::drawBorder (view, layout, &canvasArea,
-                      allocation.x + x, allocation.y + y,
-                      width, height, style, inverse);
 
    // This method is used for inline elements, where the CSS 2 specification
    // does not define what here is called "reference area". To make it look
@@ -1597,6 +1595,9 @@ void Widget::drawBox (View *view, style::Style *style, Rectangle *area,
        - style->margin.bottom - style->borderWidth.bottom,
        xPad, yPad, widthPad, heightPad, style, style->backgroundColor,
        inverse, false);
+   style::drawBorder (view, layout, &canvasArea,
+                      allocation.x + x, allocation.y + y,
+                      width, height, style, inverse);
    style::drawBoxShadows(view, layout, &canvasArea, allocation.x + x,
       allocation.y + y, width, height, style, true, inverse);
    style::drawOutline(view, layout, &canvasArea, allocation.x + x,
@@ -1621,8 +1622,6 @@ void Widget::drawWidgetBox (View *view, Rectangle *area, bool inverse)
    getMarginArea (&xMar, &yMar, &widthMar, &heightMar);
    style::drawBoxShadows(view, layout, &canvasArea, xMar, yMar, widthMar,
       heightMar, style, false, inverse);
-   style::drawBorder (view, layout, &canvasArea, xMar, yMar, widthMar,
-                      heightMar, style, inverse);
 
    int xPad, yPad, widthPad, heightPad;
    getPaddingArea (&xPad, &yPad, &widthPad, &heightPad);
@@ -1646,6 +1645,8 @@ void Widget::drawWidgetBox (View *view, Rectangle *area, bool inverse)
                           xPad, yPad, widthPad, heightPad,
                           xPad, yPad, widthPad, heightPad,
                           style, bgColor, inverse, parent == NULL);
+   style::drawBorder (view, layout, &canvasArea, xMar, yMar, widthMar,
+                      heightMar, style, inverse);
    style::drawBoxShadows(view, layout, &canvasArea, xMar, yMar, widthMar,
       heightMar, style, true, inverse);
    style::drawOutline(view, layout, &canvasArea, xMar, yMar, widthMar,

@@ -79,6 +79,31 @@ struct RoundedBox {
    }
 };
 
+// Callers pass the padding box. Each layer independently chooses the box
+// used for positioning and the rounded box that clips its paint.
+struct BackgroundArea {
+   Rectangle bounds;
+   RoundedBox rounded;
+   BackgroundArea(Style *style, int x, int y, int width, int height, BackgroundBox box) :
+      bounds(x - style->borderWidth.left, y - style->borderWidth.top,
+         width + style->borderWidth.left + style->borderWidth.right,
+         height + style->borderWidth.top + style->borderWidth.bottom),
+      rounded(style, bounds.width, bounds.height)
+   {
+      if (box != BACKGROUND_BORDER_BOX) inset(style->borderWidth);
+      if (box == BACKGROUND_CONTENT_BOX) inset(style->padding);
+   }
+   void inset(const Box &box) {
+      rounded = rounded.inset(box.left, box.top, box.right, box.bottom);
+      bounds.x += box.left; bounds.y += box.top;
+      bounds.width = std::max(0, bounds.width - box.left - box.right);
+      bounds.height = std::max(0, bounds.height - box.top - box.bottom);
+   }
+   bool contains(double x, double y) const {
+      return rounded.contains(x - bounds.x, y - bounds.y);
+   }
+};
+
 // Premultiplied channels make transparent color stops interpolate without
 // adding a dark fringe (e.g. white -> transparent).
 struct Pixel {
@@ -388,16 +413,47 @@ bool drawRoundedBorder(View *view, Layout *layout, Rectangle *area,
 void drawBackgroundPaint(View *view, Layout *layout, Rectangle *area,
    int x, int y, int width, int height, Style *style, Color *color, bool inverse)
 {
-   Rectangle box(x, y, width, height), visible;
-   if (!area->intersectsWith(&box, &visible)) return;
-   const Box &border = style->borderWidth;
-   RoundedBox outer(style, width + border.left + border.right, height + border.top + border.bottom);
-   RoundedBox inner = outer.inset(border.left, border.top, border.right, border.bottom);
-   LinearGradient gradient(style->gradient, width, height);
+   unsigned count = std::max((size_t)1, style->backgroundLayers.size());
+   BackgroundArea colorArea(style, x, y, width, height, style->backgroundClip.at(count - 1));
+   if (!style->hasBackgroundGradient() && color && style->backgroundAlpha == 255 && !hasRoundedCorners(style)) {
+      Rectangle visible;
+      if (area->intersectsWith(&colorArea.bounds, &visible))
+         view->drawRectangle(color, inverse ? Color::SHADING_INVERSE : Color::SHADING_NORMAL,
+            true, visible.x, visible.y, visible.width, visible.height);
+      return;
+   }
+   BackgroundArea borderArea(style, x, y, width, height, BACKGROUND_BORDER_BOX);
+   Rectangle visible;
+   if (!area->intersectsWith(&borderArea.bounds, &visible)) return;
+   struct Layer {
+      BackgroundArea clip, origin;
+      LinearGradient gradient;
+      Layer(Style *style, int x, int y, int width, int height, unsigned n) :
+         clip(style, x, y, width, height, style->backgroundClip.at(n)),
+         origin(style, x, y, width, height, style->backgroundOrigin.at(n)),
+         gradient(style->backgroundLayers[n], origin.bounds.width, origin.bounds.height) { }
+   };
+   std::vector<Layer> layers;
+   for (unsigned n = 0; n < style->backgroundLayers.size(); ++n)
+      layers.emplace_back(style, x, y, width, height, n);
    Pixel background((rgba(color, inverse) & ~255u) | (color ? style->backgroundAlpha : 0));
    raster(view, layout, visible, [&](double px, double py) {
-      double xLocal = px - x, yLocal = py - y;
-      return inner.contains(xLocal, yLocal) ? gradient.sample(xLocal, yLocal).over(background) : Pixel();
+      Pixel result = colorArea.contains(px, py) ? background : Pixel();
+      for (size_t n = layers.size(); n > 0; --n) {
+         const Layer &layer = layers[n - 1];
+         const Rectangle &origin = layer.origin.bounds;
+         if (!layer.gradient.gradient.count || !origin.width || !origin.height || !layer.clip.contains(px, py)) continue;
+         double gx = px - origin.x - length(style->backgroundPositionX, 0);
+         double gy = py - origin.y - length(style->backgroundPositionY, 0);
+         bool repeatX = style->backgroundRepeat == BACKGROUND_REPEAT || style->backgroundRepeat == BACKGROUND_REPEAT_X;
+         bool repeatY = style->backgroundRepeat == BACKGROUND_REPEAT || style->backgroundRepeat == BACKGROUND_REPEAT_Y;
+         if (!repeatX && (gx < 0 || gx >= origin.width)) continue;
+         if (!repeatY && (gy < 0 || gy >= origin.height)) continue;
+         if (repeatX) gx -= std::floor(gx / origin.width) * origin.width;
+         if (repeatY) gy -= std::floor(gy / origin.height) * origin.height;
+         result = layer.gradient.sample(gx, gy).over(result);
+      }
+      return result;
    });
 }
 
@@ -406,21 +462,27 @@ void drawRoundedBackgroundImage(View *view, Layout *layout, Rectangle *area,
    int heightRef, Style *style)
 {
    (void)layout;
-   Rectangle box(x, y, width, height), visible;
-   if (!area->intersectsWith(&box, &visible)) return;
-   const Box &border = style->borderWidth;
-   RoundedBox outer(style, width + border.left + border.right, height + border.top + border.bottom);
-   RoundedBox inner = outer.inset(border.left, border.top, border.right, border.bottom);
+   BackgroundArea clip(style, x, y, width, height, style->backgroundClip.at(0));
+   BackgroundArea origin(style, xRef, yRef, widthRef, heightRef, style->backgroundOrigin.at(0));
+   Rectangle visible;
+   if (!area->intersectsWith(&clip.bounds, &visible)) return;
+   if (!hasRoundedCorners(style)) {
+      drawBackgroundImage(view, style->backgroundImage, style->backgroundRepeat,
+         style->backgroundAttachment, style->backgroundPositionX, style->backgroundPositionY,
+         visible.x, visible.y, visible.width, visible.height,
+         origin.bounds.x, origin.bounds.y, origin.bounds.width, origin.bounds.height);
+      return;
+   }
    // Clip image rows only at rounded corners. The image keeps its original
    // reference box, so clipping cannot restart background tiling/positioning.
    for (int row = visible.y; row < visible.y + visible.height; ++row) {
       int left = visible.x, right = visible.x + visible.width;
-      while (left < right && !inner.contains(left - x + .5, row - y + .5)) ++left;
-      while (right > left && !inner.contains(right - x - .5, row - y + .5)) --right;
+      while (left < right && !clip.contains(left + .5, row + .5)) ++left;
+      while (right > left && !clip.contains(right - .5, row + .5)) --right;
       if (left < right)
          drawBackgroundImage(view, style->backgroundImage, style->backgroundRepeat,
             style->backgroundAttachment, style->backgroundPositionX, style->backgroundPositionY,
-            left, row, right - left, 1, xRef, yRef, widthRef, heightRef);
+            left, row, right - left, 1, origin.bounds.x, origin.bounds.y, origin.bounds.width, origin.bounds.height);
    }
 }
 

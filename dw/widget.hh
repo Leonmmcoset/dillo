@@ -486,6 +486,7 @@ public:
    inline style::Style *getStyle () { return style; }
    void setDomNode (int node) { domNode = node; }
    int getDomNode () const { return domNode; }
+   virtual int getDomNodeAtPoint (int x, int y) { return domNode; }
    void setDomEventHandler (DomEventCallback callback, void *data)
    { domEventCallback = callback; domEventData = data; }
    bool emitDomEvent (int node, const char *type, const char *key = "",

@@ -39,6 +39,8 @@ class CssParser {
       bool parseCalcAtom(CssLength *value, unsigned depth);
       bool parseTransform(CssTransform *value);
       bool parseGradient(CssGradient *value);
+      bool parseBackgroundImage(CssGradient *value);
+      int backgroundBox();
       bool parseColor(unsigned *rgba);
       bool parseShadows(CssShadows *value);
       bool parseWeight();

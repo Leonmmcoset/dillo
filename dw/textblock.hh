@@ -870,6 +870,7 @@ public:
    static int CLASS_ID;
    int currentDomNode;
    bool getDomAllocation (int node, core::Allocation *result);
+   int getDomNodeAtPoint (int x, int y);
 
    static void setPenaltyHyphen (int penaltyHyphen);
    static void setPenaltyHyphen2 (int penaltyHyphen2);

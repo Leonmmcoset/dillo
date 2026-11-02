@@ -547,10 +547,15 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
          initial.initValues();
          const StyleAttrs &value = p->value.intVal == 1 ? *stack->getRef(i - 1)->style : initial;
          switch (p->name) {
+         case CSS_PROPERTY_POINTER_EVENTS:
+            attrs->pointerEvents = p->value.intVal == 2 ?
+               stack->getRef(i - 1)->style->pointerEvents : value.pointerEvents; break;
          case CSS_PROPERTY_BACKGROUND_COLOR:
             attrs->backgroundColor = value.backgroundColor; attrs->backgroundAlpha = value.backgroundAlpha; break;
          case CSS_PROPERTY_BACKGROUND_IMAGE:
-            attrs->backgroundImage = value.backgroundImage; attrs->gradient = value.gradient; break;
+            attrs->backgroundImage = value.backgroundImage; attrs->backgroundLayers = value.backgroundLayers; break;
+         case CSS_PROPERTY_BACKGROUND_CLIP: attrs->backgroundClip = value.backgroundClip; break;
+         case CSS_PROPERTY_BACKGROUND_ORIGIN: attrs->backgroundOrigin = value.backgroundOrigin; break;
          case CSS_PROPERTY_BACKGROUND_REPEAT: attrs->backgroundRepeat = value.backgroundRepeat; break;
          case CSS_PROPERTY_BACKGROUND_ATTACHMENT: attrs->backgroundAttachment = value.backgroundAttachment; break;
          case CSS_PROPERTY_BACKGROUND_POSITION:
@@ -577,6 +582,8 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
       }
 
       switch (p->name) {
+         case CSS_PROPERTY_POINTER_EVENTS:
+            attrs->pointerEvents = (StyleAttrs::PointerEvents)p->value.intVal; break;
          case CSS_PROPERTY_ALIGN_CONTENT: attrs->container.alignContent = p->value.intVal; break;
          case CSS_PROPERTY_ALIGN_ITEMS: attrs->container.alignItems = p->value.intVal; break;
          case CSS_PROPERTY_ALIGN_SELF: attrs->container.alignSelf = p->value.intVal; break;
@@ -606,6 +613,14 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
             attrs->backgroundAttachment =
                (BackgroundAttachment) p->value.intVal;
             break;
+         case CSS_PROPERTY_BACKGROUND_CLIP:
+         case CSS_PROPERTY_BACKGROUND_ORIGIN: {
+            BackgroundBoxes &boxes = p->name == CSS_PROPERTY_BACKGROUND_CLIP ? attrs->backgroundClip : attrs->backgroundOrigin;
+            memset(&boxes, 0, sizeof(boxes));
+            boxes.count = p->value.boxesVal->count;
+            for (unsigned n = 0; n < boxes.count; ++n) boxes.values[n] = (BackgroundBox)p->value.boxesVal->values[n];
+            break;
+         }
          case CSS_PROPERTY_BACKGROUND_COLOR:
             {
                unsigned color = p->type == CSS_TYPE_RGBA ? p->value.colorVal.rgba :
@@ -619,20 +634,23 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
             break;
          case CSS_PROPERTY_BACKGROUND_IMAGE:
             attrs->backgroundImage = NULL;
-            memset(&attrs->gradient, 0, sizeof(attrs->gradient));
-            if (p->type == CSS_TYPE_GRADIENT) {
-               const CssGradient &g = *p->value.gradientVal;
-               attrs->gradient.count = g.count;
-               attrs->gradient.angle = g.angle;
-               attrs->gradient.cornerX = g.cornerX;
-               attrs->gradient.cornerY = g.cornerY;
-               attrs->gradient.repeating = g.repeating;
-               for (unsigned n = 0; n < g.count; ++n) {
-                  attrs->gradient.stops[n].rgba = g.stops[n].currentColor ?
-                     ((unsigned)attrs->color->getColor() << 8) | 255 : g.stops[n].rgba;
-                  attrs->gradient.stops[n].positioned = g.stops[n].positioned;
-                  if (g.stops[n].positioned)
-                     computeLength(&attrs->gradient.stops[n].position, g.stops[n].position, attrs->font);
+            attrs->backgroundLayers.clear();
+            if (p->type == CSS_TYPE_BACKGROUND_IMAGES) {
+               for (const CssGradient &g : p->value.imagesVal->layers) {
+                  Gradient gradient = {};
+                  gradient.count = g.count;
+                  gradient.angle = g.angle;
+                  gradient.cornerX = g.cornerX;
+                  gradient.cornerY = g.cornerY;
+                  gradient.repeating = g.repeating;
+                  for (unsigned n = 0; n < g.count; ++n) {
+                     gradient.stops[n].rgba = g.stops[n].currentColor ?
+                        ((unsigned)attrs->color->getColor() << 8) | 255 : g.stops[n].rgba;
+                     gradient.stops[n].positioned = g.stops[n].positioned;
+                     if (g.stops[n].positioned)
+                        computeLength(&gradient.stops[n].position, g.stops[n].position, attrs->font);
+                  }
+                  attrs->backgroundLayers.push_back(gradient);
                }
             } else if (p->value.strVal) {
                // URI properties are already absolute.

@@ -4,6 +4,7 @@
 #include <time.h>         // for time_t
 #include <sys/time.h>     // for time_t in FreeBSD
 #include <vector>
+#include <map>
 
 #include <FL/Fl_Group.H>
 #include <FL/x.H>
@@ -61,6 +62,8 @@ protected:
    int canvasWidth, canvasHeight;
    int mouse_x, mouse_y;
    Fl_Widget *focused_child;
+   std::map<Fl_Widget *, core::ui::Resource *> nativeOwners;
+   int handleNativeMouseEvent (int event);
 
    virtual int translateViewXToCanvasX (int x) = 0;
    virtual int translateViewYToCanvasY (int y) = 0;
@@ -132,7 +135,7 @@ public:
                    int x, int y, int width, int height);
 
    bool usesFltkWidgets ();
-   void addFltkWidget (Fl_Widget *widget, core::Allocation *allocation);
+   void addFltkWidget (Fl_Widget *widget, core::Allocation *allocation, core::ui::Resource *owner);
    void removeFltkWidget (Fl_Widget *widget);
    void allocateFltkWidget (Fl_Widget *widget,
                             core::Allocation *allocation);

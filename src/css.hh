@@ -19,6 +19,7 @@
 #include "cssmedia.hh"
 #include <map>
 #include <string>
+#include <vector>
 
 /* Origin and weight. Used only internally.*/
 typedef enum {
@@ -69,7 +70,8 @@ typedef enum {
    CSS_TYPE_BACKGROUND_POSITION,
    CSS_TYPE_TRANSFORM,
    CSS_TYPE_CORNER_RADIUS,
-   CSS_TYPE_GRADIENT,
+   CSS_TYPE_BACKGROUND_IMAGES,
+   CSS_TYPE_BACKGROUND_BOXES,
    CSS_TYPE_SHADOW,
    CSS_TYPE_WIDE_KEYWORD,       /**< initial=0, inherit=1, unset=2. */
    CSS_TYPE_COMPONENTS,         /**< Raw component values for track lists. */
@@ -182,8 +184,10 @@ typedef enum {
    CSS_PROPERTY_ALIGN_ITEMS,
    CSS_PROPERTY_ALIGN_SELF,
    CSS_PROPERTY_BACKGROUND_ATTACHMENT,
+   CSS_PROPERTY_BACKGROUND_CLIP,
    CSS_PROPERTY_BACKGROUND_COLOR,
    CSS_PROPERTY_BACKGROUND_IMAGE,
+   CSS_PROPERTY_BACKGROUND_ORIGIN,
    CSS_PROPERTY_BACKGROUND_POSITION,
    CSS_PROPERTY_BACKGROUND_REPEAT,
    CSS_PROPERTY_BORDER_BOTTOM_COLOR,
@@ -262,6 +266,7 @@ typedef enum {
    CSS_PROPERTY_PADDING_LEFT,
    CSS_PROPERTY_PADDING_RIGHT,
    CSS_PROPERTY_PADDING_TOP,
+   CSS_PROPERTY_POINTER_EVENTS,
    CSS_PROPERTY_POSITION,
    CSS_PROPERTY_QUOTES,
    CSS_PROPERTY_RIGHT,
@@ -313,6 +318,16 @@ struct CssGradient {
    } stops[MAX_STOPS];
 };
 
+struct CssBackgroundImages {
+   enum { MAX_LAYERS = 8 };
+   std::vector<CssGradient> layers;
+};
+
+struct CssBackgroundBoxes {
+   unsigned count;
+   int values[CssBackgroundImages::MAX_LAYERS];
+};
+
 struct CssColor {
    unsigned rgba;
    bool currentColor;
@@ -335,7 +350,8 @@ typedef union {
    char *strVal;
    CssBackgroundPosition *posVal;
    CssTransform *transformVal;
-   CssGradient *gradientVal;
+   CssBackgroundImages *imagesVal;
+   CssBackgroundBoxes *boxesVal;
    CssShadows *shadowsVal;
 } CssPropertyValue;
 
@@ -400,8 +416,11 @@ class CssProperty {
             case CSS_TYPE_TRANSFORM:
                dFree (value.transformVal);
                break;
-            case CSS_TYPE_GRADIENT:
-               dFree (value.gradientVal);
+            case CSS_TYPE_BACKGROUND_IMAGES:
+               delete value.imagesVal;
+               break;
+            case CSS_TYPE_BACKGROUND_BOXES:
+               dFree(value.boxesVal);
                break;
             case CSS_TYPE_SHADOW:
                dFree(value.shadowsVal);

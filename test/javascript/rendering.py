@@ -275,8 +275,8 @@ def main():
                  [(50,25,(255,255,255))]),
                 ('invalid-background', 'background:blue;background:linear-gradient(red,red) garbage',
                  [(50,25,(0,0,255))]),
-                ('unsupported-layers', 'background:blue;background-image:linear-gradient(red,red),linear-gradient(lime,lime)',
-                 [(50,25,(0,0,255))]),
+                ('multiple-layers', 'background:blue;background-image:linear-gradient(red,red),linear-gradient(lime,lime)',
+                 [(50,25,(255,0,0))]),
                 ('invalid-radius', 'background:red;border-radius:20px;border-top-left-radius:10px garbage',
                  [(0,0,(255,255,255)), (50,25,(255,0,0))]),
                 ('important-radius', 'background:red;border-radius:20px!important;border-radius:0',
@@ -314,6 +314,79 @@ def main():
             for id, css, samples in cases:
                 for x,y,expected in samples:
                     color(picture, 'value-'+id, x, y, expected, 'CSS value '+id+' at '+str((x,y)), 6)
+
+            cases = [
+                ('baidu-border', 'border:6px solid transparent;border-radius:18px;background:#4e6ef2;background:linear-gradient(white,white) padding-box,linear-gradient(160deg,#3377fe,#4c6fff,#8370ff,#ba59ff) border-box',
+                 [(50,25,(255,255,255)), (0,0,(255,255,255))]),
+                ('layer-alpha', 'background:linear-gradient(#ff000080,#ff000080),linear-gradient(blue,blue)',
+                 [(50,25,(128,0,127))]),
+                ('none-layers', 'background:blue;background-image:none,linear-gradient(red,red),none',
+                 [(50,25,(255,0,0))]),
+                ('clip-content', 'border:4px solid transparent;padding:10px;background:red;background-clip:content-box',
+                 [(50,25,(255,0,0)), (5,25,(255,255,255)), (1,25,(255,255,255))]),
+                ('clip-padding', 'border:4px solid transparent;padding:10px;background:red;background-clip:padding-box',
+                 [(50,25,(255,0,0)), (5,25,(255,0,0)), (1,25,(255,255,255))]),
+                ('clip-border', 'border:4px solid transparent;padding:10px;background:red',
+                 [(50,25,(255,0,0)), (1,25,(255,0,0))]),
+                ('layer-clip-list', 'border:6px solid transparent;padding:6px;background-image:linear-gradient(red,red),linear-gradient(blue,blue);background-clip:content-box,border-box',
+                 [(50,25,(255,0,0)), (1,25,(0,0,255)), (8,25,(0,0,255))]),
+                ('layer-clip-repeat', 'border:6px solid transparent;padding:6px;background-image:linear-gradient(red,red),linear-gradient(lime,lime),linear-gradient(blue,blue);background-clip:content-box,padding-box',
+                 [(50,25,(255,0,0)), (8,25,(0,255,0)), (1,25,(255,255,255))]),
+                ('layer-last-color', 'border:6px solid transparent;padding:6px;background:linear-gradient(transparent,transparent) border-box,blue content-box',
+                 [(50,25,(0,0,255)), (8,25,(255,255,255)), (1,25,(255,255,255))]),
+                ('two-boxes', 'border:6px solid transparent;padding:6px;background:linear-gradient(red,red) border-box content-box',
+                 [(50,25,(255,0,0)), (8,25,(255,255,255))]),
+                ('origin-border', 'border:10px solid transparent;background:linear-gradient(90deg,red,blue);background-origin:border-box',
+                 [(1,25,(251,0,4)), (98,25,(4,0,251))]),
+                ('origin-content', 'border:5px solid transparent;padding:15px;background:linear-gradient(90deg,red,blue);background-origin:content-box;background-clip:content-box',
+                 [(21,25,(249,0,6)), (78,25,(6,0,249)), (10,25,(255,255,255))]),
+                ('single-url-clip', 'border:5px solid transparent;padding:10px;background:url(tile.svg);background-clip:content-box;background-origin:content-box',
+                 [(50,25,(224,32,48)), (8,25,(255,255,255))]),
+                ('layer-important', 'background:linear-gradient(red,red) padding-box,linear-gradient(blue,blue) border-box!important;background:lime',
+                 [(50,25,(255,0,0))]),
+                ('layer-invalid-box', 'background:blue;background:linear-gradient(red,red) padding-box content-box border-box',
+                 [(50,25,(0,0,255))]),
+                ('layer-color-first', 'background:blue;background:red,linear-gradient(lime,lime)',
+                 [(50,25,(0,0,255))]),
+                ('layer-trailing-comma', 'background:blue;background:linear-gradient(red,red),',
+                 [(50,25,(0,0,255))]),
+                ('layer-unknown', 'background:blue;background:linear-gradient(red,red),unknown',
+                 [(50,25,(0,0,255))]),
+                ('layer-url-unsupported', 'background:blue;background:linear-gradient(red,red),url(tile.svg)',
+                 [(50,25,(0,0,255))]),
+                ('clip-invalid-list', 'border:5px solid transparent;background:red;background-clip:content-box,invalid',
+                 [(1,25,(255,0,0))]),
+                ('layer-reset', 'border:5px solid transparent;background:linear-gradient(red,red) content-box,linear-gradient(blue,blue) content-box;background:lime',
+                 [(1,25,(0,255,0))]),
+                ('layer-clip-initial', 'border:5px solid transparent;background:red;background-clip:content-box;background-clip:initial',
+                 [(1,25,(255,0,0))]),
+                ('layer-variables', '--layers:linear-gradient(red,red) content-box,linear-gradient(blue,blue) border-box;border:5px solid transparent;padding:5px;background:var(--layers)',
+                 [(50,25,(255,0,0)), (1,25,(0,0,255))]),
+                ('layer-limit', 'background:blue;background-image:' + ','.join(['linear-gradient(red,red)']*9),
+                 [(50,25,(0,0,255))]),
+                ('layer-max', 'background-image:' + ','.join(['none']*7+['linear-gradient(red,red)']),
+                 [(50,25,(255,0,0))]),
+                ('solid-border-above', 'border:6px solid lime;background:linear-gradient(red,red) border-box',
+                 [(50,25,(255,0,0)), (1,25,(0,255,0))]),
+            ]
+            markup = '<div id=origin></div>'
+            for n, (id, css, samples) in enumerate(cases):
+                markup += '<div id="layers-' + id + '" style="position:absolute;box-sizing:border-box;left:' + str(20+155*(n%5)) + 'px;top:' + str(20+80*(n//5)) + 'px;width:100px;height:50px;' + css + '"></div>'
+            command('eval', 'document.body.innerHTML=' + json.dumps(markup))
+            picture = screenshot('layered-backgrounds')
+            for id, css, samples in cases:
+                for x,y,expected in samples:
+                    color(picture, 'layers-'+id, x, y, expected, 'layered background '+id+' at '+str((x,y)), 6)
+            box = rect('layers-baidu-border')
+            edge = pixel(picture, origin[0]+box['left']+50, origin[1]+box['top']+2)
+            check(edge[2] > 200 and edge[0] < 210 and edge[1] < 180, 'Baidu border has gradient at the edge and white in the center', edge)
+            check(evaluate('getComputedStyle(document.getElementById("layers-two-boxes")).backgroundOrigin') == 'border-box', 'computed background origin reflects shorthand')
+            check(evaluate('getComputedStyle(document.getElementById("layers-layer-clip-repeat")).backgroundClip') == 'content-box,padding-box,content-box', 'computed background clip repeats its list for each image')
+            command('eval', '''document.body.innerHTML='<div id=origin></div><div style="position:absolute;left:20px;top:20px;width:120px;height:70px;border:5px solid transparent;padding:10px;background:linear-gradient(red,red) content-box,linear-gradient(blue,blue) border-box"><div id=layer-inherited style="width:100px;height:50px;border:5px solid transparent;padding:5px;box-sizing:border-box;background:inherit"></div></div>' ''')
+            picture = screenshot('layered-inheritance')
+            color(picture, 'layer-inherited', 50, 25, (255,0,0), 'background inherit preserves all image layers')
+            color(picture, 'layer-inherited', 1, 25, (0,0,255), 'background inherit preserves layer clips')
+            check(evaluate('getComputedStyle(document.getElementById("layer-inherited")).backgroundOrigin') == 'content-box,border-box', 'background inherit preserves origin list')
 
             # Native controls are leaf widgets, so test their clipping and
             # hit-testing separately from the container/anchor cases above.
@@ -410,6 +483,70 @@ def main():
             actual = pixel(picture, origin[0]+400, origin[1]+300)
             check(actual == (255,127,127), 'body alpha background propagates to a transparent root', actual)
             command('eval', 'document.documentElement.style.background="white";document.body.style.background="white"')
+
+            # JS hit queries and real native clicks must share the renderer's
+            # stacking, pointer-events inheritance and clipping decisions.
+            markup = '''<div id=origin></div>
+              <button id=hit-button style="position:absolute;left:20px;top:20px;width:140px;height:50px">Click</button>
+              <div id=hit-decoration style="position:absolute;z-index:5;left:20px;top:20px;width:140px;height:50px;pointer-events:none"></div>
+              <div id=hit-parent style="position:absolute;left:200px;top:20px;width:140px;height:80px;pointer-events:none">
+                <div id=hit-inherited style="width:130px;height:25px">Ignored</div>
+                <span id=hit-inline style="pointer-events:auto">Inline target</span>
+              </div>
+              <div id=hit-clipped style="position:absolute;left:400px;top:20px;width:50px;height:50px;overflow:hidden">
+                <div id=hit-overflow style="width:120px;height:50px;background:red"></div>
+              </div>
+              <input id=hit-input-under style="position:absolute;left:20px;top:130px;width:140px;height:40px">
+              <input id=hit-input-over style="position:absolute;z-index:2;left:20px;top:130px;width:140px;height:40px;pointer-events:none">
+              <div id=hit-transformed style="position:absolute;left:200px;top:130px;width:100px;height:40px;transform:translate(30px,10px)"></div>
+              <div id=hit-fixed style="position:fixed;left:400px;top:130px;width:100px;height:40px"></div>
+              <div style="height:1200px;width:1200px"></div>'''
+            command('eval', 'document.body.innerHTML=' + json.dumps(markup) + ';window.hitClicks=[];document.addEventListener("click",e=>hitClicks.push(e.target.id))')
+            command('wait', '5')
+
+            def hit(id, x=10, y=10):
+                return evaluate('(()=>{const r=document.getElementById(' + json.dumps(id) + ').getBoundingClientRect();return document.elementFromPoint(r.left+' + str(x) + ',r.top+' + str(y) + ')?.id||""})()')
+
+            def click(id, x=10, y=10):
+                box = rect(id)
+                subprocess.run(['xdotool', 'mousemove', '--window', win,
+                                str(int(origin[0]+box['left']+x)), str(int(origin[1]+box['top']+y)),
+                                'click', '1'], env=env, check=True)
+
+            check(hit('hit-button') == 'hit-button', 'elementFromPoint passes through decorative layers')
+            click('hit-button')
+            check(evaluate('hitClicks[hitClicks.length-1]') == 'hit-button', 'real click passes through decorative layers to native button')
+            check(hit('hit-inherited') not in ['hit-inherited','hit-parent'], 'pointer-events none inherits to children')
+            check(hit('hit-inline', 20, 8) == 'hit-inline', 'inline descendant can restore pointer-events auto')
+            click('hit-inline', 20, 8)
+            check(evaluate('hitClicks[hitClicks.length-1]') == 'hit-inline', 'real click reaches inline auto descendant')
+            check(hit('hit-overflow', 20, 20) == 'hit-overflow', 'elementFromPoint includes visible clipped content')
+            check(hit('hit-overflow', 80, 20) != 'hit-overflow', 'elementFromPoint excludes content outside its clip')
+            check(hit('hit-input-under') == 'hit-input-under', 'elementFromPoint ignores native pointer-events none input')
+            click('hit-input-under')
+            subprocess.run(['xdotool', 'type', '--clearmodifiers', 'under'], env=env, check=True)
+            check(evaluate('document.getElementById("hit-input-under").value') == 'under' and
+                  evaluate('document.getElementById("hit-input-over").value') == '', 'real input targets the lower native control')
+            check(hit('hit-transformed') == 'hit-transformed', 'elementFromPoint follows translated geometry')
+            check(evaluate('[-1,NaN,Infinity,1e100].every(x=>document.elementFromPoint(x,20)===null)&&document.elementFromPoint(20,innerHeight)===null'), 'elementFromPoint rejects invalid and offscreen coordinates')
+            command('eval', 'document.getElementById("hit-decoration").style.pointerEvents="auto"')
+            check(hit('hit-button') == 'hit-decoration', 'elementFromPoint flushes pending style changes')
+            click('hit-button')
+            check(evaluate('hitClicks[hitClicks.length-1]') == 'hit-decoration', 'pointer-events auto decoration intercepts native button activation')
+            command('eval', 'document.getElementById("hit-input-over").focus()')
+            subprocess.run(['xdotool', 'type', '--clearmodifiers', 'keyboard'], env=env, check=True)
+            check(evaluate('document.getElementById("hit-input-over").value') == 'keyboard', 'pointer-events none preserves programmatic keyboard focus')
+            command('eval', '''const p=document.getElementById("hit-parent"),i=document.getElementById("hit-inline");i.style.pointerEvents="unset"''')
+            check(hit('hit-inline',20,8) not in ['hit-parent','hit-inline'], 'pointer-events unset inherits none')
+            command('eval', 'document.getElementById("hit-inline").style.pointerEvents="initial"')
+            check(hit('hit-inline',20,8) == 'hit-inline', 'pointer-events initial restores auto')
+            command('eval', 'document.getElementById("hit-inline").style.cssText="--p:none;pointer-events:var(--p)!important;pointer-events:auto"')
+            check(hit('hit-inline',20,8) != 'hit-inline', 'pointer-events honors variables and important')
+            command('eval', 'document.getElementById("hit-decoration").style.pointerEvents="none";scrollTo(80,200)')
+            command('wait', '5')
+            check(hit('hit-fixed') == 'hit-fixed', 'elementFromPoint follows fixed elements after scrolling')
+            command('eval', 'scrollTo(0,0)')
+            command('wait', '5')
 
             markup = '''<div id=origin></div>
               <div style="position:absolute;left:20px;top:20px;width:200px;height:80px">

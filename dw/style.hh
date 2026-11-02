@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <math.h>
+#include <vector>
 
 #ifndef __INCLUDED_FROM_DW_CORE_HH__
 #   error Do not include this file directly, use "core.hh" instead.
@@ -571,14 +572,22 @@ struct ContainerStyle {
    Length columnTracks[32], rowTracks[32];
 };
 
-// Inline, value-owned decorations keep shared styles immutable and avoid
-// allocating a paint resource for every DOM node.
+// Value-owned decorations keep shared styles immutable. Gradient layers are
+// allocated only for styles that actually declare background images.
 struct Gradient {
    double angle;
    int cornerX, cornerY;
    bool repeating;
    unsigned count;
    struct Stop { unsigned rgba; Length position; bool positioned; } stops[32];
+};
+
+enum BackgroundBox { BACKGROUND_BORDER_BOX, BACKGROUND_PADDING_BOX, BACKGROUND_CONTENT_BOX };
+
+struct BackgroundBoxes {
+   unsigned count;
+   BackgroundBox values[8];
+   BackgroundBox at(unsigned layer) const { return values[layer % count]; }
 };
 
 struct BorderRadius {
@@ -610,7 +619,8 @@ public:
    Color *color, *backgroundColor;
    unsigned backgroundAlpha;
    StyleImage *backgroundImage;
-   Gradient gradient;
+   std::vector<Gradient> backgroundLayers;
+   BackgroundBoxes backgroundClip, backgroundOrigin;
    BorderRadius borderRadius;
    BoxShadows boxShadows;
    Outline outline;
@@ -652,6 +662,7 @@ public:
    ListStylePosition listStylePosition;
    ListStyleType listStyleType;
    Cursor cursor;
+   enum PointerEvents { POINTER_EVENTS_AUTO, POINTER_EVENTS_NONE } pointerEvents;
    int zIndex;
 
    int x_link;
@@ -695,7 +706,11 @@ public:
    }
 
    inline bool hasBackground ()
-   { return backgroundColor != NULL || backgroundImage != NULL || gradient.count; }
+   { return backgroundColor != NULL || backgroundImage != NULL || hasBackgroundGradient(); }
+   bool hasBackgroundGradient() const {
+      for (const Gradient &gradient : backgroundLayers) if (gradient.count) return true;
+      return false;
+   }
 
    bool equals (lout::object::Object *other);
    int hashValue ();
