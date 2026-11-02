@@ -10,6 +10,12 @@ namespace oof {
 class OOFPosAbsLikeMgr: public OOFPositionedMgr
 {
 protected:
+   virtual int referenceWidth(bool forceValue)
+   { return !container->getParent() && !container->getStyle()->hasTransform ? container->getLayout()->getContentWidthViewport() :
+      containerAllocationState != NOT_ALLOCATED ? containerAllocation.width : container->getAvailWidth(forceValue); }
+   virtual int referenceHeight(bool forceValue)
+   { return !container->getParent() && !container->getStyle()->hasTransform ? container->getLayout()->getContentHeightViewport() :
+      containerAllocationState != NOT_ALLOCATED ? containerAllocation.ascent + containerAllocation.descent : container->getAvailHeight(forceValue); }
    virtual int containerBoxOffsetX () = 0;
    virtual int containerBoxOffsetY () = 0;
    virtual int containerBoxRestWidth () = 0;

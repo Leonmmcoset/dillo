@@ -13,6 +13,7 @@
 #include "dlib/i18n.h"
 #include "form.hh"
 #include "html_common.hh"
+#include "javascript.hh"
 
 #include <errno.h>
 #include <iconv.h>
@@ -76,6 +77,7 @@ typedef enum {
 class DilloHtmlForm {
    friend class DilloHtmlReceiver;
    friend class DilloHtmlInput;
+   friend DilloUrl *a_Html_control_submit(DilloHtml *html, int node);
 
    DilloHtml *html;
    bool showing_hiddens;
@@ -98,6 +100,8 @@ class DilloHtmlForm {
                                   Dstr *x, Dstr *y);
 
 public:  //BUG: for now everything is public
+   int javascript_node;
+   bool script_submit;
    DilloHtmlMethod method;
    DilloUrl *action;
    DilloHtmlEnc content_type;
@@ -148,6 +152,7 @@ private:
    bool owns_embed; /* Should destroy embed? */
 
 public:  //BUG: for now everything is public
+   int javascript_node;
    DilloHtmlInputType type;
    char *name;
    char *init_str;    /* note: some overloading - for buttons, init_str
@@ -176,6 +181,8 @@ public:
 class DilloHtmlOptbase
 {
 public:
+   int javascript_node;
+   DilloHtmlOptbase(): javascript_node(0) {}
    virtual ~DilloHtmlOptbase () {};
    virtual bool isSelected() {return false;}
    virtual bool select() {return false;}
@@ -220,7 +227,7 @@ public:
 
 class DilloHtmlSelect {
    friend class DilloHtmlInput;
-private:
+public:
    lout::misc::SimpleVector<DilloHtmlOptbase *> *opts;
    DilloHtmlSelect ();
    ~DilloHtmlSelect ();
@@ -285,6 +292,11 @@ static void Html_add_input(DilloHtml *html, DilloHtmlInputType type,
    _MSG("name=[%s] init_str=[%s] init_val=[%d]\n", name, init_str, init_val);
    DilloHtmlInput *input =
       new DilloHtmlInput(type, embed, name, init_str, init_val, owns_embed);
+   input->javascript_node = S_TOP(html)->javascript_node;
+   if (html->javascript && embed) {
+      embed->setDomNode(input->javascript_node);
+      embed->setDomEventHandler(a_Javascript_ui_event, html->javascript);
+   }
    if (html->InFlags & IN_FORM) {
       html->getCurrentForm()->addInput(input, type);
    } else {
@@ -292,7 +304,7 @@ static void Html_add_input(DilloHtml *html, DilloHtmlInputType type,
       html->inputs_outside_form->increase();
       html->inputs_outside_form->set(ni, input);
 
-      if (html->bw->NumPendingStyleSheets > 0) {
+      if (!html->javascript && html->bw->NumPendingStyleSheets > 0) {
          input->setEnabled(false);
       }
    }
@@ -929,6 +941,7 @@ void Html_tag_open_option(DilloHtml *html, const char *tag, int tagsize)
 
       DilloHtmlOption *option =
          new DilloHtmlOption (value, label, selected, enabled);
+      option->javascript_node = S_TOP(html)->javascript_node;
 
       input->select->addOpt(option);
    }
@@ -996,10 +1009,18 @@ void Html_tag_open_button(DilloHtml *html, const char *tag, int tagsize)
          /* We used to have Textblock (prefs.limit_text_width, ...) here,
           * but it caused 100% CPU usage.
           */
-         Widget *page = new Textblock (false, true);
-         page->setStyle (html->backgroundStyle ());
+         Widget *page = new Textblock (false, !html->style()->modernLayout);
+         if (html->style()->modernLayout) {
+            // The embed owns the button's CSS box. Its private text layout
+            // inherits text properties, without duplicating size and padding.
+            StyleAttrs attrs = *html->style();
+            attrs.resetValues(); attrs.modernLayout = true;
+            attrs.display = DISPLAY_BLOCK;
+            Style *contentStyle = Style::create(&attrs);
+            page->setStyle(contentStyle); contentStyle->unref();
+         } else page->setStyle (html->backgroundStyle ());
 
-         ComplexButtonResource *resource = factory->createComplexButtonResource(page, true);
+         ComplexButtonResource *resource = factory->createComplexButtonResource(page, !html->style()->modernLayout);
          embed = new Embed(resource);
 
          HT2TB(html)->addWidget (embed, html->backgroundStyle ());
@@ -1044,6 +1065,8 @@ DilloHtmlForm::DilloHtmlForm (DilloHtml *html2,
                               const char *charset, bool enabled)
 {
    html = html2;
+   javascript_node = S_TOP(html)->javascript_node;
+   script_submit = false;
    method = method2;
    action = a_Url_dup(action2);
    content_type = content_type2;
@@ -1090,6 +1113,8 @@ void DilloHtmlForm::eventHandler(Resource *resource, EventButton *event)
  */
 void DilloHtmlForm::submit(DilloHtmlInput *active_input, EventButton *event)
 {
+   if (!script_submit && html->javascript && javascript_node &&
+       !a_Javascript_event(html->javascript, javascript_node, "submit")) return;
    if (!dStrAsciiCasecmp(URL_SCHEME(html->page_url), "https") &&
        dStrAsciiCasecmp(URL_SCHEME(action), "https")) {
       int choice = a_Dialog_choice(_("Dillo: Insecure form submission"),
@@ -1720,6 +1745,7 @@ DilloHtmlInput::DilloHtmlInput (DilloHtmlInputType type2, Embed *embed2,
                                 bool init_val2, bool owns_embed)
 {
    type = type2;
+   javascript_node = 0;
    assert(embed2);
    embed = embed2; /* Cannot be NULL! */
    this->owns_embed = owns_embed;
@@ -2124,4 +2150,194 @@ static void Html_option_finish(DilloHtml *html)
       DilloHtmlOptbase *opt = input->select->getCurrentOpt ();
       opt->setContent (html->Stash->str, html->Stash->len);
    }
+}
+
+/* Keep controls and the persistent document in sync without replacing values
+ * that JavaScript has just written into an existing native control. */
+static void Html_collect_inputs(DilloHtml *html,
+                                lout::misc::SimpleVector<DilloHtmlInput *> *all)
+{
+   for (int i = 0; i < html->forms->size(); ++i) {
+      DilloHtmlForm *form = html->forms->get(i);
+      for (int j = 0; j < form->inputs->size(); ++j) {
+         all->increase(); all->set(all->size() - 1, form->inputs->get(j));
+      }
+   }
+   for (int i = 0; i < html->inputs_outside_form->size(); ++i) {
+      all->increase(); all->set(all->size() - 1, html->inputs_outside_form->get(i));
+   }
+}
+
+char *a_Html_control_text(DilloHtml *html, int node, const char *value)
+{
+   if (!html || !node) return NULL;
+   lout::misc::SimpleVector<DilloHtmlInput *> all(16);
+   Html_collect_inputs(html, &all);
+   for (int i = 0; i < all.size(); ++i) {
+      DilloHtmlInput *input = all.get(i);
+      if (input->javascript_node != node) continue;
+      Resource *r = input->getResource();
+      if (r && (input->type == DILLO_HTML_INPUT_TEXT ||
+                input->type == DILLO_HTML_INPUT_PASSWORD ||
+                input->type == DILLO_HTML_INPUT_TEXTAREA ||
+                input->type == DILLO_HTML_INPUT_HIDDEN)) {
+         TextResource *text = static_cast<TextResource *>(r);
+         if (value) text->setText(value);
+         return dStrdup(text->getText());
+      }
+      if (value) { dFree(input->init_str); input->init_str = dStrdup(value); }
+      return dStrdup(input->init_str ? input->init_str : "");
+   }
+   return NULL;
+}
+
+bool a_Html_controls_busy(DilloHtml *html)
+{
+   lout::misc::SimpleVector<DilloHtmlInput *> all(16);
+   Html_collect_inputs(html, &all);
+   for (int i = 0; i < all.size(); ++i) {
+      DilloHtmlInput *input = all.get(i);
+      if (input->type != DILLO_HTML_INPUT_TEXT && input->type != DILLO_HTML_INPUT_PASSWORD &&
+          input->type != DILLO_HTML_INPUT_TEXTAREA) continue;
+      TextResource *resource = static_cast<TextResource *>(input->getResource());
+      if (resource && resource->hasPendingPaste()) return true;
+   }
+   return false;
+}
+
+void a_Html_sync_controls(DilloHtml *html)
+{
+   if (!html || !html->javascript) return;
+   lout::misc::SimpleVector<DilloHtmlInput *> all(16);
+   Html_collect_inputs(html, &all);
+   for (int i = 0; i < all.size(); ++i) {
+      DilloHtmlInput *input = all.get(i);
+      if (!input->javascript_node) continue;
+      if (input->type == DILLO_HTML_INPUT_CHECKBOX || input->type == DILLO_HTML_INPUT_RADIO) {
+         ToggleButtonResource *r = static_cast<ToggleButtonResource *>(input->getResource());
+         if (r) a_Javascript_set_state(html->javascript, input->javascript_node, "checked", r->isActivated() ? "true" : "false");
+      } else if (input->type == DILLO_HTML_INPUT_SELECT || input->type == DILLO_HTML_INPUT_SEL_LIST) {
+         SelectionResource *r = static_cast<SelectionResource *>(input->getResource());
+         if (r && input->select) for (int j = 0; j < input->select->opts->size(); ++j) {
+            DilloHtmlOptbase *option = input->select->opts->get(j);
+            if (option->javascript_node) a_Javascript_set_state(html->javascript, option->javascript_node,
+               "selected", r->isSelected(j) ? "true" : "false");
+         }
+      } else if (input->type != DILLO_HTML_INPUT_FILE) {
+         char *text = a_Html_control_text(html, input->javascript_node, NULL);
+         if (text) a_Javascript_set_value(html->javascript, input->javascript_node, text);
+         dFree(text);
+      }
+   }
+}
+
+char *a_Html_control_state(DilloHtml *html, int node, const char *name, const char *value)
+{
+   if (!html || !node) return NULL;
+   lout::misc::SimpleVector<DilloHtmlInput *> all(16); Html_collect_inputs(html, &all);
+   for (int i = 0; i < all.size(); ++i) {
+      DilloHtmlInput *input = all.get(i);
+      if (input->javascript_node == node && !strcmp(name, "checked") &&
+          (input->type == DILLO_HTML_INPUT_CHECKBOX || input->type == DILLO_HTML_INPUT_RADIO)) {
+         ToggleButtonResource *r = static_cast<ToggleButtonResource *>(input->getResource());
+         if (!r) return NULL;
+         if (value) r->setActivated(!strcmp(value, "true"));
+         return dStrdup(r->isActivated() ? "true" : "false");
+      }
+      if ((input->type == DILLO_HTML_INPUT_SELECT || input->type == DILLO_HTML_INPUT_SEL_LIST) && input->select) {
+         SelectionResource *r = static_cast<SelectionResource *>(input->getResource());
+         if (!r) continue;
+         for (int j = 0; j < input->select->opts->size(); ++j) {
+            if (input->select->opts->get(j)->javascript_node != node || strcmp(name, "selected")) continue;
+            if (value) r->setItem(j, !strcmp(value, "true"));
+            return dStrdup(r->isSelected(j) ? "true" : "false");
+         }
+      }
+   }
+   return NULL;
+}
+
+DilloUrl *a_Html_control_submit(DilloHtml *html, int node)
+{
+   if (!html) return NULL;
+   a_Html_sync_controls(html);
+   for (int i = 0; i < html->forms->size(); ++i) {
+      DilloHtmlForm *form = html->forms->get(i);
+      if (form->javascript_node == node) return form->buildQueryUrl(NULL);
+   }
+   return NULL;
+}
+
+int a_Html_control_focus(DilloHtml *html, int *start, int *end)
+{
+   lout::misc::SimpleVector<DilloHtmlInput *> all(16); Html_collect_inputs(html, &all);
+   for (int i = 0; i < all.size(); ++i) {
+      DilloHtmlInput *input = all.get(i);
+      if (input->type == DILLO_HTML_INPUT_TEXT || input->type == DILLO_HTML_INPUT_PASSWORD ||
+          input->type == DILLO_HTML_INPUT_TEXTAREA) {
+         TextResource *r = static_cast<TextResource *>(input->getResource());
+         if (r && r->hasFocus()) { *start = r->selectionStart(); *end = r->selectionEnd(); return input->javascript_node; }
+      }
+   }
+   return 0;
+}
+void a_Html_control_restore_focus(DilloHtml *html, int node, int start, int end)
+{
+   if (!node) return;
+   lout::misc::SimpleVector<DilloHtmlInput *> all(16); Html_collect_inputs(html, &all);
+   for (int i = 0; i < all.size(); ++i) {
+      DilloHtmlInput *input = all.get(i);
+      if (input->javascript_node == node && (input->type == DILLO_HTML_INPUT_TEXT ||
+          input->type == DILLO_HTML_INPUT_PASSWORD || input->type == DILLO_HTML_INPUT_TEXTAREA)) {
+         TextResource *r = static_cast<TextResource *>(input->getResource());
+         if (r) r->restoreFocus(start, end);
+      }
+   }
+}
+
+/* FLTK selection offsets count UTF-8 bytes; the DOM counts UTF-16 units. */
+static int Html_text_offset(const char *text, int offset, bool toBytes)
+{
+   int bytes = 0, units = 0;
+   while (text[bytes] && (toBytes ? units : bytes) < offset) {
+      unsigned char c = text[bytes];
+      int size = c < 0x80 ? 1 : c < 0xe0 ? 2 : c < 0xf0 ? 3 : 4;
+      int actual = 1;
+      while (actual < size && text[bytes + actual] &&
+             (static_cast<unsigned char>(text[bytes + actual]) & 0xc0) == 0x80) ++actual;
+      if (toBytes && units + (size == 4 ? 2 : 1) > offset) break;
+      bytes += actual; units += size == 4 ? 2 : 1;
+   }
+   return toBytes ? bytes : units;
+}
+
+char *a_Html_control_selection(DilloHtml *html, int node, const char *property, const char *value)
+{
+   if (!html || !node) return NULL;
+   lout::misc::SimpleVector<DilloHtmlInput *> all(16); Html_collect_inputs(html, &all);
+   for (int i = 0; i < all.size(); ++i) {
+      DilloHtmlInput *input = all.get(i);
+      if (input->javascript_node != node || (input->type != DILLO_HTML_INPUT_TEXT &&
+          input->type != DILLO_HTML_INPUT_PASSWORD && input->type != DILLO_HTML_INPUT_TEXTAREA)) continue;
+      TextResource *r = static_cast<TextResource *>(input->getResource());
+      if (!r) return NULL;
+      int start = r->selectionStart(), end = r->selectionEnd();
+      // Taking focus can dispatch native events, which refresh the editor's
+      // temporary text buffer. Keep our own snapshot across that callback.
+      std::string text = r->getText();
+      if (!strcmp(property, "focus")) r->restoreFocus(start, end);
+      else if (!strcmp(property, "blur")) r->clearFocus();
+      else if (value) {
+         int first = 0, last = 0;
+         if (sscanf(value, "%d,%d", &first, &last) == 2) {
+            first = lout::misc::max(0, first); last = lout::misc::max(first, last);
+            r->setSelection(Html_text_offset(text.c_str(), first, true), Html_text_offset(text.c_str(), last, true));
+         }
+      }
+      Dstr *selection = dStr_new("");
+      dStr_sprintfa(selection, "%d,%d", Html_text_offset(text.c_str(), r->selectionStart(), false),
+         Html_text_offset(text.c_str(), r->selectionEnd(), false));
+      char *result = selection->str; dStr_free(selection, FALSE); return result;
+   }
+   return NULL;
 }

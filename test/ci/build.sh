@@ -12,17 +12,12 @@ cd build-$v
 make
 make install
 DILLOBINDIR=$(readlink -f ../install-$v/bin) make check
-# Check release fits in a floppy disk of 1.44 MB
+# The source archive includes the pinned QuickJS and Lexbor dependencies.
 make dist-gzip
 size=$(stat -c %s dillo-*.tar.gz)
-floppy=$((1474560 - 32*1024)) # Leave room for FAT table
-echo "Floppy occupation: $(($size * 100 / $floppy)) %"
-if [ $size -lt $floppy ]; then
-  echo 'OK: Fits in floopy disk'
-else
-  echo "FAIL: Release size too big: $size / $floppy"
-  exit 1
-fi
+limit=$((16 * 1024 * 1024))
+echo "Source archive size: $size / $limit bytes"
+test "$size" -lt "$limit"
 cd ..
 rm -rf build-$v install-$v
 # ----------------------------------------------------------------------

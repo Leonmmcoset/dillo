@@ -22,6 +22,7 @@
 #include "../lout/misc.hh"
 
 #include <FL/fl_draw.H>
+#include <FL/Fl_RGB_Image.H>
 #include <math.h>
 
 #define IMAGE_MAX_AREA (6000 * 6000)
@@ -605,8 +606,14 @@ void FltkImgbuf::draw (Fl_Widget *target, int xRoot, int yRoot,
       height = this->height - y;
    }
 
-   fl_draw_image(rawdata+bpp*(y*this->width + x), xRoot + x, yRoot + y, width,
-                 height, bpp, this->width * bpp);
+   if (bpp == 4) {
+      // fl_draw_image treats a fourth channel as padding. Fl_RGB_Image
+      // composites real alpha, including antialiased CSS box decorations.
+      Fl_RGB_Image image(rawdata, this->width, this->height, bpp);
+      image.draw(xRoot + x, yRoot + y, width, height, x, y);
+   } else
+      fl_draw_image(rawdata+bpp*(y*this->width + x), xRoot + x, yRoot + y, width,
+                    height, bpp, this->width * bpp);
 
 }
 

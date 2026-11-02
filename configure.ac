@@ -13,6 +13,14 @@ sysconfdir=${sysconfdir}/${PACKAGE}
 
 dnl Options
 
+AC_ARG_ENABLE([javascript],
+  [AS_HELP_STRING([--disable-javascript], [Build without the QuickJS JavaScript engine])],
+  [enable_javascript=$enableval], [enable_javascript=yes])
+AS_IF([test "x$enable_javascript" = "xyes"],
+  [AC_DEFINE([ENABLE_JAVASCRIPT], [1], [Build the QuickJS JavaScript engine])])
+AM_CONDITIONAL([ENABLE_JAVASCRIPT], [test "x$enable_javascript" = "xyes"])
+AC_PATH_PROG([PYTHON3], [python3], [python3])
+
 AC_ARG_WITH([jpeg-lib],
   [AS_HELP_STRING([--with-jpeg-lib=DIR], [Specify where to find libjpeg])],
   LIBJPEG_LIBDIR=$withval)
@@ -284,6 +292,24 @@ fi
 if test -z "${FLTK_LIBS+set}"; then
   FLTK_LIBS="`$FLTK_CONFIG --ldflags`"
 fi
+
+AC_ARG_ENABLE([modern-text],
+  [AS_HELP_STRING([--disable-modern-text], [Disable Pango/Cairo text shaping on Linux])],
+  [enable_modern_text=$enableval], [enable_modern_text=auto])
+modern_text_ok=no
+AS_CASE([$target_os], [linux*], [
+  AS_IF([test "x$enable_modern_text" != xno], [
+    AC_PATH_PROG([PKG_CONFIG], [pkg-config])
+    AS_IF([test -n "$PKG_CONFIG" && $PKG_CONFIG --exists pangocairo], [
+      modern_text_ok=yes
+      FLTK_CXXFLAGS="$FLTK_CXXFLAGS `$PKG_CONFIG --cflags pangocairo`"
+      FLTK_LIBS="$FLTK_LIBS `$PKG_CONFIG --libs pangocairo`"
+      AC_DEFINE([HAVE_PANGO_CAIRO], [1], [Use Pango and Cairo for Linux text])
+    ])
+  ])
+])
+AS_IF([test "x$enable_modern_text" = xyes && test "x$modern_text_ok" != xyes],
+  [AC_MSG_ERROR([Pango/Cairo text requires Linux and the pangocairo development package])])
 
 dnl -----------------------------------
 dnl Test for X11 (only on some systems)
@@ -947,6 +973,7 @@ AC_SUBST(datadir)
 
 AC_CONFIG_FILES([
     Makefile
+    vendor/Makefile
     dlib/Makefile
     dpip/Makefile
     dpid/Makefile
@@ -961,6 +988,7 @@ AC_CONFIG_FILES([
     test/dw/Makefile
     test/html/Makefile
     test/dilloc/Makefile
+    test/javascript/Makefile
 ])
 
 AC_OUTPUT
@@ -991,6 +1019,8 @@ _AS_ECHO([])
 _AS_ECHO([Features:])
 _AS_ECHO([])
 _AS_ECHO([  Cookies enabled: ${enable_cookies}])
+_AS_ECHO([  JavaScript     : ${enable_javascript} (QuickJS)])
+_AS_ECHO([  Pango/Cairo    : ${modern_text_ok}])
 _AS_ECHO([  XEmbed enabled : ${enable_xembed}])
 _AS_ECHO([  JPEG enabled   : ${jpeg_ok}])
 _AS_ECHO([  PNG enabled    : ${png_ok}])

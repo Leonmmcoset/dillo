@@ -102,6 +102,7 @@ typedef struct {
    bool_t load_background_images;
    bool_t load_stylesheets;
    bool_t parse_embedded_css;
+   bool_t javascript_enabled;
    bool_t http_persistent_conns;
    bool_t http_strict_transport_security;
    bool_t http_force_https;

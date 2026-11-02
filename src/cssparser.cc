@@ -18,6 +18,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <cmath>
 
 #include "msg.h"
 #include "colors.h"
@@ -36,10 +37,9 @@ using namespace dw::core::style;
 
 #define DEBUG_LEVEL 10
 
-/* The last three ones are never parsed. */
-#define CSS_NUM_INTERNAL_PROPERTIES 3
-#define CSS_NUM_PARSED_PROPERTIES \
-   (CSS_PROPERTY_LAST - CSS_NUM_INTERNAL_PROPERTIES)
+/* Only the alphabetically sorted CSS properties participate in bsearch.
+ * Internal properties and their aliases below this boundary are not CSS. */
+#define CSS_NUM_PARSED_PROPERTIES CSS_PROPERTY_X_LINK
 
 
 typedef struct {
@@ -90,7 +90,7 @@ static const char *const Css_cursor_enum_vals[] = {
 static const char *const Css_display_enum_vals[] = {
    "block", "inline", "inline-block", "list-item", "none", "table",
    "table-row-group", "table-header-group", "table-footer-group", "table-row",
-   "table-cell", NULL
+   "table-cell", "flex", "inline-flex", "grid", "inline-grid", NULL
 };
 
 static const char *const Css_float_enum_vals[] = {
@@ -167,17 +167,29 @@ static const char *const Css_word_spacing_enum_vals[] = {
    "normal", NULL
 };
 
+static const char *const Css_box_alignment_vals[] = {
+   "normal", "stretch", "flex-start", "flex-end", "center", "baseline",
+   "space-between", "space-around", "space-evenly", "start", "end", "self-start", "self-end", NULL
+};
+static const char *const Css_flex_direction_vals[] = {"row", "row-reverse", "column", "column-reverse", NULL};
+static const char *const Css_flex_wrap_vals[] = {"nowrap", "wrap", "wrap-reverse", NULL};
+
 const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
+   {"align-content", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_box_alignment_vals},
+   {"align-items", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_box_alignment_vals},
+   {"align-self", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_box_alignment_vals},
    {"background-attachment", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED},
     Css_background_attachment_enum_vals},
    {"background-color", {CSS_TYPE_COLOR, CSS_TYPE_UNUSED}, NULL},
-   {"background-image", {CSS_TYPE_URI, CSS_TYPE_UNUSED}, NULL},
+   {"background-image", {CSS_TYPE_GRADIENT, CSS_TYPE_URI, CSS_TYPE_UNUSED}, NULL},
    {"background-position", {CSS_TYPE_BACKGROUND_POSITION, CSS_TYPE_UNUSED},
     NULL},
    {"background-repeat", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED},
     Css_background_repeat_enum_vals},
    {"border-bottom-color", {CSS_TYPE_ENUM, CSS_TYPE_COLOR, CSS_TYPE_UNUSED},
     Css_border_color_enum_vals},
+   {"border-bottom-left-radius", {CSS_TYPE_CORNER_RADIUS, CSS_TYPE_UNUSED}, NULL},
+   {"border-bottom-right-radius", {CSS_TYPE_CORNER_RADIUS, CSS_TYPE_UNUSED}, NULL},
    {"border-bottom-style", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED},
     Css_border_style_enum_vals},
    {"border-bottom-width", {CSS_TYPE_ENUM, CSS_TYPE_LENGTH, CSS_TYPE_UNUSED},
@@ -194,21 +206,24 @@ const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
     Css_border_color_enum_vals},
    {"border-right-style", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED},
     Css_border_style_enum_vals},
-   {"border-rigth-width", {CSS_TYPE_ENUM, CSS_TYPE_LENGTH, CSS_TYPE_UNUSED},
+   {"border-right-width", {CSS_TYPE_ENUM, CSS_TYPE_LENGTH, CSS_TYPE_UNUSED},
     Css_border_width_enum_vals},
    {"border-spacing", {CSS_TYPE_LENGTH, CSS_TYPE_UNUSED}, NULL},
    {"border-top-color", {CSS_TYPE_ENUM, CSS_TYPE_COLOR, CSS_TYPE_UNUSED},
     Css_border_color_enum_vals},
+   {"border-top-left-radius", {CSS_TYPE_CORNER_RADIUS, CSS_TYPE_UNUSED}, NULL},
+   {"border-top-right-radius", {CSS_TYPE_CORNER_RADIUS, CSS_TYPE_UNUSED}, NULL},
    {"border-top-style", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED},
     Css_border_style_enum_vals},
    {"border-top-width", {CSS_TYPE_ENUM, CSS_TYPE_LENGTH, CSS_TYPE_UNUSED},
     Css_border_width_enum_vals},
-   {"bottom", {CSS_TYPE_SIGNED_LENGTH, CSS_TYPE_UNUSED}, NULL},
+   {"bottom", {CSS_TYPE_SIGNED_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
    {"box-sizing", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_box_sizing_enum_vals},
    {"caption-side", {CSS_TYPE_UNUSED}, NULL},
    {"clear", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_clear_enum_vals},
    {"clip", {CSS_TYPE_UNUSED}, NULL},
    {"color", {CSS_TYPE_COLOR, CSS_TYPE_UNUSED}, NULL},
+   {"column-gap", {CSS_TYPE_LENGTH, CSS_TYPE_UNUSED}, NULL},
    {"content", {CSS_TYPE_STRING, CSS_TYPE_UNUSED}, NULL},
    {"counter-increment", {CSS_TYPE_UNUSED}, NULL},
    {"counter-reset", {CSS_TYPE_UNUSED}, NULL},
@@ -216,6 +231,11 @@ const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
    {"direction", {CSS_TYPE_UNUSED}, NULL},
    {"display", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_display_enum_vals},
    {"empty-cells", {CSS_TYPE_UNUSED}, NULL},
+   {"flex-basis", {CSS_TYPE_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
+   {"flex-direction", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_flex_direction_vals},
+   {"flex-grow", {CSS_TYPE_LENGTH_PERCENTAGE_NUMBER, CSS_TYPE_UNUSED}, NULL},
+   {"flex-shrink", {CSS_TYPE_LENGTH_PERCENTAGE_NUMBER, CSS_TYPE_UNUSED}, NULL},
+   {"flex-wrap", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_flex_wrap_vals},
    {"float", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_float_enum_vals},
    {"font-family", {CSS_TYPE_SYMBOL, CSS_TYPE_UNUSED}, NULL},
    {"font-size", {CSS_TYPE_ENUM, CSS_TYPE_LENGTH_PERCENTAGE, CSS_TYPE_UNUSED},
@@ -227,8 +247,11 @@ const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
     Css_font_variant_enum_vals},
    {"font-weight", {CSS_TYPE_ENUM, CSS_TYPE_FONT_WEIGHT, CSS_TYPE_UNUSED},
     Css_font_weight_enum_vals},
+   {"grid-template-columns", {CSS_TYPE_COMPONENTS, CSS_TYPE_UNUSED}, NULL},
+   {"grid-template-rows", {CSS_TYPE_COMPONENTS, CSS_TYPE_UNUSED}, NULL},
    {"height", {CSS_TYPE_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
-   {"left", {CSS_TYPE_SIGNED_LENGTH, CSS_TYPE_UNUSED}, NULL},
+   {"justify-content", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_box_alignment_vals},
+   {"left", {CSS_TYPE_SIGNED_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
    {"letter-spacing", {CSS_TYPE_ENUM, CSS_TYPE_SIGNED_LENGTH, CSS_TYPE_UNUSED},
     Css_letter_spacing_enum_vals},
    {"line-height",
@@ -257,6 +280,7 @@ const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
     NULL},
    {"min-width", {CSS_TYPE_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED},
     NULL},
+   {"order", {CSS_TYPE_INTEGER, CSS_TYPE_UNUSED}, NULL},
    {"outline-color", {CSS_TYPE_UNUSED}, NULL},
    {"outline-style", {CSS_TYPE_UNUSED}, NULL},
    {"outline-width", {CSS_TYPE_UNUSED}, NULL},
@@ -267,7 +291,8 @@ const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
    {"padding-top", {CSS_TYPE_LENGTH, CSS_TYPE_UNUSED}, NULL},
    {"position", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_position_enum_vals},
    {"quotes", {CSS_TYPE_UNUSED}, NULL},
-   {"right", {CSS_TYPE_SIGNED_LENGTH, CSS_TYPE_UNUSED}, NULL},
+   {"right", {CSS_TYPE_SIGNED_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
+   {"row-gap", {CSS_TYPE_LENGTH, CSS_TYPE_UNUSED}, NULL},
    {"text-align", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_text_align_enum_vals},
    {"text-decoration", {CSS_TYPE_MULTI_ENUM, CSS_TYPE_UNUSED},
     Css_text_decoration_enum_vals},
@@ -275,7 +300,8 @@ const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
    {"text-shadow", {CSS_TYPE_UNUSED}, NULL},
    {"text-transform", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED},
     Css_text_transform_enum_vals},
-   {"top", {CSS_TYPE_SIGNED_LENGTH, CSS_TYPE_UNUSED}, NULL},
+   {"top", {CSS_TYPE_SIGNED_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
+   {"transform", {CSS_TYPE_TRANSFORM, CSS_TYPE_UNUSED}, NULL},
    {"unicode-bidi", {CSS_TYPE_UNUSED}, NULL},
    {"vertical-align",{CSS_TYPE_ENUM, CSS_TYPE_UNUSED},Css_vertical_align_vals},
    {"visibility", {CSS_TYPE_UNUSED}, NULL},
@@ -295,6 +321,11 @@ const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
 typedef struct {
    const char *symbol;
    enum {
+      CSS_SHORTHAND_BACKGROUND,
+      CSS_SHORTHAND_RADIUS,
+      CSS_SHORTHAND_FLEX,
+      CSS_SHORTHAND_FLOW,
+      CSS_SHORTHAND_GAP,
       CSS_SHORTHAND_MULTIPLE,   /**< [ p1 || p2 || ...], the property pi is
                                  * determined  by the type */
       CSS_SHORTHAND_DIRECTIONS, /**< <t>{1,4} */
@@ -320,6 +351,12 @@ const CssPropertyName Css_background_properties[] = {
    CSS_PROPERTY_BACKGROUND_POSITION,
    CSS_PROPERTY_END
 };
+
+const CssPropertyName Css_flex_properties[] = {
+   CSS_PROPERTY_FLEX_GROW, CSS_PROPERTY_FLEX_SHRINK, CSS_PROPERTY_FLEX_BASIS, CSS_PROPERTY_END
+};
+const CssPropertyName Css_flow_properties[] = {CSS_PROPERTY_FLEX_DIRECTION, CSS_PROPERTY_FLEX_WRAP, CSS_PROPERTY_END};
+const CssPropertyName Css_gap_properties[] = {CSS_PROPERTY_ROW_GAP, CSS_PROPERTY_COLUMN_GAP, CSS_PROPERTY_END};
 
 const CssPropertyName Css_border_bottom_properties[] = {
    CSS_PROPERTY_BORDER_BOTTOM_WIDTH,
@@ -410,7 +447,14 @@ const CssPropertyName Css_border_properties[] = {
    CSS_PROPERTY_BORDER_LEFT_COLOR,
    CSS_PROPERTY_BORDER_RIGHT_WIDTH,
    CSS_PROPERTY_BORDER_RIGHT_STYLE,
-   CSS_PROPERTY_BORDER_RIGHT_COLOR
+   CSS_PROPERTY_BORDER_RIGHT_COLOR,
+   CSS_PROPERTY_END
+};
+
+const CssPropertyName Css_radius_properties[] = {
+   CSS_PROPERTY_BORDER_TOP_LEFT_RADIUS, CSS_PROPERTY_BORDER_TOP_RIGHT_RADIUS,
+   CSS_PROPERTY_BORDER_BOTTOM_RIGHT_RADIUS, CSS_PROPERTY_BORDER_BOTTOM_LEFT_RADIUS,
+   CSS_PROPERTY_END
 };
 
 const CssPropertyName Css_font_properties[] = {
@@ -423,7 +467,7 @@ const CssPropertyName Css_font_properties[] = {
 };
 
 static const CssShorthandInfo Css_shorthand_info[] = {
-   {"background", CssShorthandInfo::CSS_SHORTHAND_MULTIPLE,
+   {"background", CssShorthandInfo::CSS_SHORTHAND_BACKGROUND,
     Css_background_properties},
    {"border", CssShorthandInfo::CSS_SHORTHAND_BORDER,
     Css_border_properties},
@@ -433,6 +477,7 @@ static const CssShorthandInfo Css_shorthand_info[] = {
     Css_border_color_properties},
    {"border-left", CssShorthandInfo::CSS_SHORTHAND_MULTIPLE,
     Css_border_left_properties},
+   {"border-radius", CssShorthandInfo::CSS_SHORTHAND_RADIUS, Css_radius_properties},
    {"border-right", CssShorthandInfo::CSS_SHORTHAND_MULTIPLE,
     Css_border_right_properties},
    {"border-style", CssShorthandInfo::CSS_SHORTHAND_DIRECTIONS,
@@ -441,8 +486,11 @@ static const CssShorthandInfo Css_shorthand_info[] = {
     Css_border_top_properties},
    {"border-width", CssShorthandInfo::CSS_SHORTHAND_DIRECTIONS,
     Css_border_width_properties},
+   {"flex", CssShorthandInfo::CSS_SHORTHAND_FLEX, Css_flex_properties},
+   {"flex-flow", CssShorthandInfo::CSS_SHORTHAND_FLOW, Css_flow_properties},
    {"font", CssShorthandInfo::CSS_SHORTHAND_FONT,
     Css_font_properties},
+   {"gap", CssShorthandInfo::CSS_SHORTHAND_GAP, Css_gap_properties},
    {"list-style", CssShorthandInfo::CSS_SHORTHAND_MULTIPLE,
     Css_list_style_properties},
    {"margin", CssShorthandInfo::CSS_SHORTHAND_DIRECTIONS,
@@ -738,6 +786,20 @@ bool CssParser::tokenMatchesProperty(CssPropertyName prop, CssValueType *type)
          }
          break;
 
+      case CSS_TYPE_TRANSFORM:
+         if (ttype == CSS_TK_SYMBOL && (!dStrAsciiCasecmp(tval, "none") ||
+             !dStrAsciiCasecmp(tval, "translate") || !dStrAsciiCasecmp(tval, "translateX") ||
+             !dStrAsciiCasecmp(tval, "translateY") || !dStrAsciiCasecmp(tval, "translate3d")))
+            return true;
+         break;
+      case CSS_TYPE_GRADIENT:
+         if (ttype == CSS_TK_SYMBOL && (!dStrAsciiCasecmp(tval, "linear-gradient") ||
+             !dStrAsciiCasecmp(tval, "repeating-linear-gradient"))) return true;
+         break;
+      case CSS_TYPE_CORNER_RADIUS:
+         if (ttype == CSS_TK_DECINT || ttype == CSS_TK_FLOAT ||
+             (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "calc"))) return true;
+         break;
       case CSS_TYPE_BACKGROUND_POSITION:
          if (ttype == CSS_TK_SYMBOL &&
              (dStrAsciiCasecmp(tval, "center") == 0 ||
@@ -756,6 +818,9 @@ bool CssParser::tokenMatchesProperty(CssPropertyName prop, CssValueType *type)
             return false;
          // Fall Through
       case CSS_TYPE_SIGNED_LENGTH:
+      case CSS_TYPE_SIGNED_LENGTH_PERCENTAGE:
+         if (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "calc"))
+            return true;
          if (ttype == CSS_TK_DECINT || ttype == CSS_TK_FLOAT)
             return true;
          break;
@@ -768,7 +833,8 @@ bool CssParser::tokenMatchesProperty(CssPropertyName prop, CssValueType *type)
       case CSS_TYPE_COLOR:
          if ((ttype == CSS_TK_COLOR ||
               ttype == CSS_TK_SYMBOL) &&
-            (dStrAsciiCasecmp(tval, "rgb") == 0 ||
+            ((prop == CSS_PROPERTY_BACKGROUND_COLOR && !dStrAsciiCasecmp(tval, "transparent")) ||
+             dStrAsciiCasecmp(tval, "rgb") == 0 ||
              a_Color_parse(tval, -1, &err) != -1))
             return true;
          break;
@@ -892,6 +958,248 @@ bool CssParser::parseRgbColor(int32_t *c) {
    return true;
 }
 
+static void Css_calc_terms(CssLength *value)
+{
+   if (value->type != CSS_LENGTH_TYPE_CALC) {
+      if (value->type != CSS_LENGTH_TYPE_NONE) value->terms[value->type] = CSS_LENGTH_VALUE(*value);
+      value->type = CSS_LENGTH_TYPE_CALC;
+   }
+}
+
+bool CssParser::parseCalcAtom(CssLength *value, unsigned depth)
+{
+   if (depth > 32) return false;
+   if (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "calc")) nextToken();
+   if (ttype == CSS_TK_CHAR && tval[0] == '(') {
+      nextToken();
+      if (!parseCalcSum(value, depth + 1) || ttype != CSS_TK_CHAR || tval[0] != ')') return false;
+      nextToken(); return true;
+   }
+   CssPropertyValue parsed;
+   if (!parseValue(CSS_PROPERTY_WIDTH, CSS_TYPE_LENGTH_PERCENTAGE_NUMBER, &parsed)) return false;
+   *value = parsed.lenVal;
+   return value->type != CSS_LENGTH_TYPE_NONE || std::isfinite(value->f);
+}
+
+bool CssParser::parseCalcProduct(CssLength *value, unsigned depth)
+{
+   if (!parseCalcAtom(value, depth)) return false;
+   while (ttype == CSS_TK_CHAR && (tval[0] == '*' || tval[0] == '/')) {
+      bool divide = tval[0] == '/'; nextToken();
+      CssLength right;
+      if (!parseCalcAtom(&right, depth)) return false;
+      if (divide && (right.type != CSS_LENGTH_TYPE_NONE || right.f == 0)) return false;
+      if (value->type != CSS_LENGTH_TYPE_NONE && right.type != CSS_LENGTH_TYPE_NONE) return false;
+      if (value->type == CSS_LENGTH_TYPE_NONE && right.type == CSS_LENGTH_TYPE_NONE) {
+         value->f = divide ? value->f / right.f : value->f * right.f;
+         if (!std::isfinite(value->f)) return false;
+      } else {
+         float factor;
+         if (right.type == CSS_LENGTH_TYPE_NONE) factor = divide ? 1 / right.f : right.f;
+         else { factor = value->f; *value = right; }
+         Css_calc_terms(value);
+         for (int i = 1; i <= CSS_LENGTH_TYPE_PERCENTAGE; ++i) {
+            value->terms[i] *= factor;
+            if (!std::isfinite(value->terms[i]) || std::fabs(value->terms[i]) > 10000000) return false;
+         }
+      }
+   }
+   return true;
+}
+
+bool CssParser::parseCalcSum(CssLength *value, unsigned depth)
+{
+   if (!parseCalcProduct(value, depth)) return false;
+   while ((ttype == CSS_TK_CHAR || ttype == CSS_TK_SYMBOL) && !tval[1] && (tval[0] == '+' || tval[0] == '-')) {
+      bool subtract = tval[0] == '-'; nextToken();
+      CssLength right;
+      if (!parseCalcProduct(&right, depth)) return false;
+      if (value->type == CSS_LENGTH_TYPE_NONE && right.type == CSS_LENGTH_TYPE_NONE) {
+         value->f += (subtract ? -1 : 1) * right.f;
+      } else {
+         if ((value->type == CSS_LENGTH_TYPE_NONE && value->f != 0) ||
+             (right.type == CSS_LENGTH_TYPE_NONE && right.f != 0)) return false;
+         Css_calc_terms(value); Css_calc_terms(&right);
+         for (int i = 1; i <= CSS_LENGTH_TYPE_PERCENTAGE; ++i) {
+            value->terms[i] += (subtract ? -1 : 1) * right.terms[i];
+            if (!std::isfinite(value->terms[i]) || std::fabs(value->terms[i]) > 10000000) return false;
+         }
+      }
+   }
+   return true;
+}
+
+bool CssParser::parseTransform(CssTransform *value)
+{
+   value->active = false;
+   value->x = value->y = CSS_CREATE_LENGTH(0, CSS_LENGTH_TYPE_CALC);
+   if (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "none")) {
+      nextToken();
+   } else {
+      unsigned functions = 0;
+      while (ttype == CSS_TK_SYMBOL) {
+         bool xOnly = !dStrAsciiCasecmp(tval, "translateX");
+         bool yOnly = !dStrAsciiCasecmp(tval, "translateY");
+         bool three = !dStrAsciiCasecmp(tval, "translate3d");
+         if ((!xOnly && !yOnly && !three && dStrAsciiCasecmp(tval, "translate")) ||
+             ++functions > 32) return false;
+         nextToken();
+         if (ttype != CSS_TK_CHAR || tval[0] != '(') return false;
+         nextToken();
+         CssPropertyValue first, second, third;
+         second.lenVal = CSS_CREATE_LENGTH(0, CSS_LENGTH_TYPE_PX);
+         if (!parseValue(CSS_PROPERTY_LEFT, CSS_TYPE_SIGNED_LENGTH_PERCENTAGE, &first)) return false;
+         if (!xOnly && !yOnly && ttype == CSS_TK_CHAR && tval[0] == ',') {
+            nextToken();
+            if (!parseValue(CSS_PROPERTY_TOP, CSS_TYPE_SIGNED_LENGTH_PERCENTAGE, &second)) return false;
+         } else if (three) return false;
+         if (three) {
+            if (ttype != CSS_TK_CHAR || tval[0] != ',') return false;
+            nextToken();
+            if (!parseValue(CSS_PROPERTY_TOP, CSS_TYPE_SIGNED_LENGTH, &third) ||
+                third.lenVal.type == CSS_LENGTH_TYPE_CALC || CSS_LENGTH_VALUE(third.lenVal) != 0) return false;
+         }
+         if (ttype != CSS_TK_CHAR || tval[0] != ')') return false;
+         nextToken();
+         auto add = [](CssLength *sum, const CssLength &part) {
+            if (part.type == CSS_LENGTH_TYPE_CALC) {
+               for (unsigned n = 0; n < sizeof(sum->terms) / sizeof(sum->terms[0]); ++n)
+                  sum->terms[n] += part.terms[n];
+            } else if (part.type <= CSS_LENGTH_TYPE_PERCENTAGE)
+               sum->terms[part.type] += CSS_LENGTH_VALUE(part);
+         };
+         add(yOnly ? &value->y : &value->x, first.lenVal);
+         if (!xOnly && !yOnly) add(&value->y, second.lenVal);
+         value->active = true;
+      }
+      if (!value->active) return false;
+   }
+   return ttype == CSS_TK_END || (ttype == CSS_TK_CHAR &&
+      (tval[0] == ';' || tval[0] == '}' || tval[0] == '!'));
+}
+
+bool CssParser::parseGradientColor(unsigned *rgba)
+{
+   if (ttype == CSS_TK_COLOR) {
+      const char *hex = tval + (tval[0] == '#');
+      size_t len = strlen(hex);
+      if (len != 3 && len != 4 && len != 6 && len != 8) return false;
+      for (size_t n = 0; n < len; ++n) if (!dIsxdigit(hex[n])) return false;
+      unsigned long v = strtoul(hex, NULL, 16);
+      if (len == 3 || len == 4) {
+         *rgba = 0;
+         for (size_t n = 0; n < len; ++n)
+            *rgba = (*rgba << 8) | (((v >> (4 * (len - 1 - n))) & 15) * 17);
+         if (len == 3) *rgba = (*rgba << 8) | 255;
+      } else *rgba = len == 6 ? (unsigned)(v << 8) | 255 : (unsigned)v;
+      nextToken(); return true;
+   }
+   if (ttype != CSS_TK_SYMBOL) return false;
+   if (!dStrAsciiCasecmp(tval, "transparent")) {
+      *rgba = 0; nextToken(); return true;
+   }
+   if (dStrAsciiCasecmp(tval, "rgb") && dStrAsciiCasecmp(tval, "rgba")) {
+      int error;
+      int color = a_Color_parse(tval, -1, &error);
+      if (error) return false;
+      *rgba = ((unsigned)color << 8) | 255; nextToken(); return true;
+   }
+   nextToken();
+   if (ttype != CSS_TK_CHAR || tval[0] != '(') return false;
+   nextToken();
+   double components[4] = {0, 0, 0, 1};
+   bool comma = false;
+   for (int n = 0; n < 4; ++n) {
+      if (n == 3 && ttype == CSS_TK_CHAR && tval[0] == ')') break;
+      if (n) {
+         if (ttype == CSS_TK_CHAR && (tval[0] == ',' || (n == 3 && tval[0] == '/'))) {
+            if (n == 1) comma = tval[0] == ',';
+            if ((tval[0] == ',') != comma) return false;
+            nextToken();
+         } else if (comma || !spaceSeparated || n == 3) return false;
+      }
+      if (ttype != CSS_TK_DECINT && ttype != CSS_TK_FLOAT) return false;
+      double component = strtod(tval, NULL);
+      if (!std::isfinite(component)) return false;
+      nextToken();
+      if (ttype == CSS_TK_CHAR && tval[0] == '%') {
+         component /= 100; nextToken();
+      } else if (n < 3) component /= 255;
+      components[n] = lout::misc::min(1.0, lout::misc::max(0.0, component));
+   }
+   if (ttype != CSS_TK_CHAR || tval[0] != ')') return false;
+   *rgba = 0;
+   for (int n = 0; n < 4; ++n) *rgba = (*rgba << 8) | (unsigned)(components[n] * 255 + .5);
+   nextToken(); return true;
+}
+
+bool CssParser::parseGradient(CssGradient *value)
+{
+   value->repeating = !dStrAsciiCasecmp(tval, "repeating-linear-gradient");
+   value->angle = 180;
+   nextToken();
+   if (ttype != CSS_TK_CHAR || tval[0] != '(') return false;
+   nextToken();
+   bool direction = false;
+   if (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "to")) {
+      nextToken();
+      while (ttype == CSS_TK_SYMBOL) {
+         if (!dStrAsciiCasecmp(tval, "left") && !value->cornerX) value->cornerX = -1;
+         else if (!dStrAsciiCasecmp(tval, "right") && !value->cornerX) value->cornerX = 1;
+         else if (!dStrAsciiCasecmp(tval, "top") && !value->cornerY) value->cornerY = -1;
+         else if (!dStrAsciiCasecmp(tval, "bottom") && !value->cornerY) value->cornerY = 1;
+         else return false;
+         direction = true; nextToken();
+      }
+      if (!direction) return false;
+      if (!value->cornerX || !value->cornerY) {
+         value->angle = value->cornerX ? (value->cornerX > 0 ? 90 : 270) : (value->cornerY > 0 ? 180 : 0);
+         value->cornerX = value->cornerY = 0;
+      }
+   } else if (ttype == CSS_TK_DECINT || ttype == CSS_TK_FLOAT) {
+      double angle = strtod(tval, NULL);
+      nextToken();
+      if (!spaceSeparated && ttype == CSS_TK_SYMBOL) {
+         if (!dStrAsciiCasecmp(tval, "turn")) angle *= 360;
+         else if (!dStrAsciiCasecmp(tval, "rad")) angle *= 180 / std::acos(-1.0);
+         else if (!dStrAsciiCasecmp(tval, "grad")) angle *= .9;
+         else if (dStrAsciiCasecmp(tval, "deg")) return false;
+         nextToken();
+      } else if (angle != 0) return false;
+      if (!std::isfinite(angle)) return false;
+      value->angle = std::fmod(angle, 360); direction = true;
+   }
+   if (direction) {
+      if (ttype != CSS_TK_CHAR || tval[0] != ',') return false;
+      nextToken();
+   }
+   while (value->count < CssGradient::MAX_STOPS) {
+      CssGradient::Stop stop = {};
+      if (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "currentColor")) {
+         stop.currentColor = true; nextToken();
+      } else if (!parseGradientColor(&stop.rgba)) return false;
+      for (int position = 0; position < 2; ++position) {
+         bool hasPosition = ttype == CSS_TK_DECINT || ttype == CSS_TK_FLOAT ||
+            (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "calc"));
+         if (position && !hasPosition) break;
+         if (hasPosition) {
+            CssPropertyValue length;
+            if (!parseValue(CSS_PROPERTY_LEFT, CSS_TYPE_SIGNED_LENGTH_PERCENTAGE, &length)) return false;
+            stop.position = length.lenVal; stop.positioned = true;
+         }
+         if (value->count == CssGradient::MAX_STOPS) return false;
+         value->stops[value->count++] = stop;
+      }
+      if (ttype == CSS_TK_CHAR && tval[0] == ')') {
+         if (value->count < 2) return false;
+         nextToken(); return true;
+      }
+      if (ttype != CSS_TK_CHAR || tval[0] != ',') return false;
+      nextToken();
+   }
+   return false;
+}
+
 bool CssParser::parseValue(CssPropertyName prop,
                            CssValueType type,
                            CssPropertyValue *val)
@@ -937,6 +1245,16 @@ bool CssParser::parseValue(CssPropertyName prop,
    case CSS_TYPE_LENGTH_PERCENTAGE_NUMBER:
    case CSS_TYPE_LENGTH:
    case CSS_TYPE_SIGNED_LENGTH:
+   case CSS_TYPE_SIGNED_LENGTH_PERCENTAGE:
+      if (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "calc")) {
+         nextToken();
+         if (ttype != CSS_TK_CHAR || tval[0] != '(') break;
+         nextToken();
+         if (!parseCalcSum(&val->lenVal, 0) || ttype != CSS_TK_CHAR || tval[0] != ')') break;
+         nextToken();
+         ret = val->lenVal.type != CSS_LENGTH_TYPE_NONE || val->lenVal.f == 0;
+         break;
+      }
       if (ttype == CSS_TK_DECINT || ttype == CSS_TK_FLOAT) {
          fval = atof(tval);
          lentype = CSS_LENGTH_TYPE_NONE;
@@ -995,7 +1313,8 @@ bool CssParser::parseValue(CssPropertyName prop,
                ret = false;
             }
          } else if (!spaceSeparated &&
-                    (type == CSS_TYPE_LENGTH_PERCENTAGE ||
+                    (type == CSS_TYPE_SIGNED_LENGTH_PERCENTAGE ||
+                     type == CSS_TYPE_LENGTH_PERCENTAGE ||
                      type == CSS_TYPE_LENGTH_PERCENTAGE_NUMBER) &&
                     ttype == CSS_TK_CHAR &&
                     tval[0] == '%') {
@@ -1019,12 +1338,15 @@ bool CssParser::parseValue(CssPropertyName prop,
    case CSS_TYPE_AUTO:
       assert (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "auto"));
       ret = true;
-      val->intVal = CSS_LENGTH_TYPE_AUTO;
+      val->lenVal = CSS_CREATE_LENGTH(0, CSS_LENGTH_TYPE_AUTO);
       nextToken();
       break;
 
    case CSS_TYPE_COLOR:
-      if (ttype == CSS_TK_COLOR) {
+      if (prop == CSS_PROPERTY_BACKGROUND_COLOR && ttype == CSS_TK_SYMBOL &&
+          !dStrAsciiCasecmp(tval, "transparent")) {
+         val->intVal = -1; ret = true; nextToken();
+      } else if (ttype == CSS_TK_COLOR) {
          val->intVal = a_Color_parse(tval, -1, &err);
          if (err)
             MSG_CSS("color is not in \"%s\" format\n", "#RRGGBB");
@@ -1107,6 +1429,38 @@ bool CssParser::parseValue(CssPropertyName prop,
       }
       break;
 
+   case CSS_TYPE_TRANSFORM: {
+      CssTransform transform;
+      if (parseTransform(&transform)) {
+         val->transformVal = (CssTransform *)dMalloc(sizeof(transform));
+         *val->transformVal = transform; ret = true;
+      }
+      break;
+   }
+   case CSS_TYPE_GRADIENT: {
+      CssGradient gradient = {};
+      if (parseGradient(&gradient)) {
+         val->gradientVal = (CssGradient *)dMalloc(sizeof(gradient));
+         *val->gradientVal = gradient; ret = true;
+      }
+      break;
+   }
+   case CSS_TYPE_CORNER_RADIUS: {
+      CssPropertyValue x, y;
+      if (parseValue(prop, CSS_TYPE_LENGTH_PERCENTAGE, &x)) {
+         y = x;
+         if (ttype == CSS_TK_DECINT || ttype == CSS_TK_FLOAT ||
+             (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "calc"))) {
+            if (!parseValue(prop, CSS_TYPE_LENGTH_PERCENTAGE, &y)) break;
+         }
+         if ((x.lenVal.type != CSS_LENGTH_TYPE_CALC && CSS_LENGTH_VALUE(x.lenVal) < 0) ||
+             (y.lenVal.type != CSS_LENGTH_TYPE_CALC && CSS_LENGTH_VALUE(y.lenVal) < 0)) break;
+         val->posVal = (CssBackgroundPosition *)dMalloc(sizeof(CssBackgroundPosition));
+         val->posVal->posX = x.lenVal; val->posVal->posY = y.lenVal; ret = true;
+      }
+      break;
+   }
+
    case CSS_TYPE_BACKGROUND_POSITION:
       // 'background-position' consists of one or two values: vertical and
       // horizontal position; in most cases in this order. However, as long it
@@ -1122,7 +1476,7 @@ bool CssParser::parseValue(CssPropertyName prop,
       // they can be used for a horizontal (h[i]) or vertical (v[i]) position
       // (or both). When neither h[i] or v[i] is set, pos[i] is undefined.
       for (i = 0; i < 2; i++) {
-         CssValueType typeTmp;
+         CssValueType typeTmp = CSS_TYPE_UNUSED;
          // tokenMatchesProperty will, for CSS_PROPERTY_BACKGROUND_POSITION,
          // work on both parts, since they are exchangeable.
          if (tokenMatchesProperty (CSS_PROPERTY_BACKGROUND_POSITION,
@@ -1256,6 +1610,66 @@ static int Css_shorthand_info_cmp(const void *a, const void *b)
 void CssParser::parseDeclaration(CssPropertyList *props,
                                  CssPropertyList *importantProps)
 {
+   /* Keep token streams containing var() until custom properties have been
+    * cascaded for this element. A shorthand reserves every affected longhand
+    * so later declarations and !important still take precedence correctly. */
+   if (ttype == CSS_TK_SYMBOL) {
+      std::string name = tval;
+      int colon = bufptr;
+      while (colon < buflen && dIsspace(buf[colon])) ++colon;
+      if (colon < buflen && buf[colon] == ':') {
+         int end = colon + 1, nesting = 0, bang = -1;
+         char quote = 0;
+         for (; end < buflen; ++end) {
+            char c = buf[end];
+            if (c == '\\') { if (end + 1 < buflen) ++end; continue; }
+            if (quote) { if (c == quote) quote = 0; continue; }
+            if (c == '\'' || c == '"') { quote = c; continue; }
+            if (c == '/' && end + 1 < buflen && buf[end + 1] == '*') {
+               end += 2;
+               while (end + 1 < buflen && !(buf[end] == '*' && buf[end + 1] == '/')) ++end;
+               ++end; continue;
+            }
+            if (c == '(' || c == '[' || c == '{') ++nesting;
+            else if ((c == ')' || c == ']' || c == '}') && nesting) --nesting;
+            else if ((c == ';' || c == '}') && !nesting) break;
+            else if (c == '!' && !nesting) bang = end;
+         }
+         std::string value(buf + colon + 1, end - colon - 1);
+         bool custom = name.compare(0, 2, "--") == 0;
+         bool components = name == "grid-template-columns" || name == "grid-template-rows";
+         if (custom || components || value.find("var(") != std::string::npos) {
+            bool important = false;
+            if (bang >= 0) {
+               std::string weight(buf + bang + 1, end - bang - 1);
+               size_t first = weight.find_first_not_of(" \t\r\n\f"), last = weight.find_last_not_of(" \t\r\n\f");
+               important = first != std::string::npos && !dStrAsciiCasecmp(weight.substr(first, last - first + 1).c_str(), "important");
+               if (important) value.assign(buf + colon + 1, bang - colon - 1);
+            }
+            CssPropertyList *dest = important && importantProps ? importantProps : props;
+            if (custom) dest->customProperties[name] = value;
+            else {
+               CssPropertyInfo key = {name.c_str(), {CSS_TYPE_UNUSED}, NULL};
+               CssPropertyInfo *property = (CssPropertyInfo *)bsearch(&key, Css_property_info,
+                  CSS_NUM_PARSED_PROPERTIES, sizeof(CssPropertyInfo), Css_property_info_cmp);
+               CssShorthandInfo *shorthand = (CssShorthandInfo *)bsearch(&key, Css_shorthand_info,
+                  CSS_SHORTHAND_NUM, sizeof(CssShorthandInfo), Css_shorthand_info_cmp);
+               std::string declaration = name + ":" + value;
+               CssPropertyValue deferred;
+               if (property) {
+                  deferred.strVal = dStrdup((components && value.find("var(") == std::string::npos ? value : declaration).c_str());
+                  dest->set((CssPropertyName)(property - Css_property_info), components && value.find("var(") == std::string::npos ? CSS_TYPE_COMPONENTS : CSS_TYPE_DEFERRED, deferred);
+               } else if (shorthand) for (int i = 0; shorthand->type == CssShorthandInfo::CSS_SHORTHAND_DIRECTIONS ? i < 4 : shorthand->properties[i] != CSS_PROPERTY_END; ++i) {
+                  deferred.strVal = dStrdup(declaration.c_str());
+                  dest->set(shorthand->properties[i], CSS_TYPE_DEFERRED, deferred);
+               }
+            }
+            bufptr = end; nextToken();
+            if (ttype == CSS_TK_CHAR && tval[0] == ';') nextToken();
+            return;
+         }
+      }
+   }
    CssPropertyInfo pi = {NULL, {CSS_TYPE_UNUSED}, NULL}, *pip;
    CssShorthandInfo *sip;
    CssValueType type = CSS_TYPE_UNUSED;
@@ -1286,6 +1700,13 @@ void CssParser::parseDeclaration(CssPropertyList *props,
             nextToken();
             if (tokenMatchesProperty (prop, &type) &&
                 parseValue(prop, type, &val)) {
+               if ((type == CSS_TYPE_GRADIENT || type == CSS_TYPE_CORNER_RADIUS) &&
+                   ttype != CSS_TK_END && !(ttype == CSS_TK_CHAR &&
+                   (tval[0] == ';' || tval[0] == '}' || tval[0] == '!'))) {
+                  CssProperty invalid; invalid.type = type; invalid.value = val;
+                  invalid.free();
+                  return;
+               }
                weight = parseWeight();
                if (weight && importantProps)
                   importantProps->set(prop, type, val);
@@ -1307,6 +1728,136 @@ void CssParser::parseDeclaration(CssPropertyList *props,
                nextToken();
 
                switch (Css_shorthand_info[sh_index].type) {
+
+               case CssShorthandInfo::CSS_SHORTHAND_BACKGROUND: {
+                  CssPropertyList parsed(true);
+                  CssPropertyValue initial;
+                  initial.intVal = -1;
+                  parsed.set(CSS_PROPERTY_BACKGROUND_COLOR, CSS_TYPE_COLOR, initial);
+                  initial.strVal = NULL;
+                  parsed.set(CSS_PROPERTY_BACKGROUND_IMAGE, CSS_TYPE_URI, initial);
+                  initial.intVal = 0;
+                  parsed.set(CSS_PROPERTY_BACKGROUND_REPEAT, CSS_TYPE_ENUM, initial);
+                  parsed.set(CSS_PROPERTY_BACKGROUND_ATTACHMENT, CSS_TYPE_ENUM, initial);
+                  initial.posVal = (CssBackgroundPosition *)dMalloc(sizeof(CssBackgroundPosition));
+                  initial.posVal->posX = initial.posVal->posY = CSS_CREATE_LENGTH(0, CSS_LENGTH_TYPE_PERCENTAGE);
+                  parsed.set(CSS_PROPERTY_BACKGROUND_POSITION, CSS_TYPE_BACKGROUND_POSITION, initial);
+                  bool seen[5] = {}, valid = true, any = false;
+                  while (ttype != CSS_TK_END && !(ttype == CSS_TK_CHAR &&
+                         (tval[0] == ';' || tval[0] == '}' || tval[0] == '!'))) {
+                     bool matched = false;
+                     for (unsigned n = 0; n < 5 && !matched; ++n) {
+                        CssPropertyName name = Css_background_properties[n];
+                        if (!seen[n] && tokenMatchesProperty(name, &type)) {
+                           matched = true;
+                           CssPropertyValue part;
+                           if (!parseValue(name, type, &part)) { valid = false; break; }
+                           parsed.set(name, type, part); seen[n] = true; any = true;
+                        }
+                     }
+                     if (!matched || !valid) { valid = false; break; }
+                  }
+                  bool bang = ttype == CSS_TK_CHAR && tval[0] == '!';
+                  weight = parseWeight();
+                  if (bang && !weight) valid = false;
+                  if (ttype != CSS_TK_END && !(ttype == CSS_TK_CHAR && (tval[0] == ';' || tval[0] == '}'))) valid = false;
+                  if (valid && any) {
+                     CssPropertyList *dest = weight && importantProps ? importantProps : props;
+                     for (int n = 0; n < parsed.size(); ++n) {
+                        CssProperty *part = parsed.getRef(n);
+                        dest->set((CssPropertyName)part->name, (CssValueType)part->type, part->value);
+                        part->type = CSS_TYPE_UNUSED; // ownership transfers to the declaration list
+                     }
+                  }
+                  break;
+               }
+
+               case CssShorthandInfo::CSS_SHORTHAND_RADIUS: {
+                  CssLength radii[2][4];
+                  int count[2] = {0, 0}; bool valid = true;
+                  for (int axis = 0; axis < 2; ++axis) {
+                     while (count[axis] < 4 && (ttype == CSS_TK_DECINT || ttype == CSS_TK_FLOAT ||
+                            (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "calc")))) {
+                        CssPropertyValue part;
+                        if (!parseValue(CSS_PROPERTY_BORDER_TOP_LEFT_RADIUS, CSS_TYPE_LENGTH_PERCENTAGE, &part) ||
+                            (part.lenVal.type != CSS_LENGTH_TYPE_CALC && CSS_LENGTH_VALUE(part.lenVal) < 0)) { valid = false; break; }
+                        radii[axis][count[axis]++] = part.lenVal;
+                     }
+                     if (!valid || !count[axis]) { valid = false; break; }
+                     if (!axis) {
+                        if (ttype == CSS_TK_CHAR && tval[0] == '/') nextToken();
+                        else { count[1] = count[0]; for (int n = 0; n < count[0]; ++n) radii[1][n] = radii[0][n]; break; }
+                     }
+                  }
+                  if (ttype != CSS_TK_END && !(ttype == CSS_TK_CHAR &&
+                      (tval[0] == ';' || tval[0] == '}' || tval[0] == '!'))) valid = false;
+                  if (valid) {
+                     const int map[4][4] = {{0,0,0,0}, {0,1,0,1}, {0,1,2,1}, {0,1,2,3}};
+                     weight = parseWeight();
+                     for (int n = 0; n < 4; ++n) {
+                        CssPropertyValue radius;
+                        radius.posVal = (CssBackgroundPosition *)dMalloc(sizeof(CssBackgroundPosition));
+                        radius.posVal->posX = radii[0][map[count[0]-1][n]];
+                        radius.posVal->posY = radii[1][map[count[1]-1][n]];
+                        (weight && importantProps ? importantProps : props)->set(Css_radius_properties[n], CSS_TYPE_CORNER_RADIUS, radius);
+                     }
+                  }
+                  break;
+               }
+
+               case CssShorthandInfo::CSS_SHORTHAND_FLEX: {
+                  CssPropertyValue flex[3];
+                  flex[0].lenVal = CSS_CREATE_LENGTH(1, CSS_LENGTH_TYPE_NONE);
+                  flex[1].lenVal = CSS_CREATE_LENGTH(1, CSS_LENGTH_TYPE_NONE);
+                  flex[2].lenVal = CSS_CREATE_LENGTH(0, CSS_LENGTH_TYPE_PERCENTAGE);
+                  bool valid = true;
+                  if (ttype == CSS_TK_SYMBOL && (!strcmp(tval, "none") || !strcmp(tval, "auto") || !strcmp(tval, "initial"))) {
+                     flex[0].lenVal.f = !strcmp(tval, "auto") ? 1 : 0;
+                     flex[1].lenVal.f = !strcmp(tval, "none") ? 0 : 1;
+                     flex[2].lenVal = CSS_CREATE_LENGTH(0, CSS_LENGTH_TYPE_AUTO); nextToken();
+                  } else {
+                     int numbers = 0; bool basis = false;
+                     while (valid) {
+                        if ((ttype == CSS_TK_DECINT || ttype == CSS_TK_FLOAT) && numbers < 2) {
+                           CssPropertyValue part;
+                           if (!parseValue(CSS_PROPERTY_FLEX_BASIS, CSS_TYPE_LENGTH_PERCENTAGE_NUMBER, &part)) { valid = false; break; }
+                           if (part.lenVal.type == CSS_LENGTH_TYPE_NONE && part.lenVal.f >= 0) flex[numbers++] = part;
+                           else if (!basis) { flex[2] = part; basis = true; }
+                           else valid = false;
+                        } else if (!basis && tokenMatchesProperty(CSS_PROPERTY_FLEX_BASIS, &type)) {
+                           valid = parseValue(CSS_PROPERTY_FLEX_BASIS, type, &flex[2]); basis = true;
+                        } else break;
+                     }
+                     if (!numbers && !basis) valid = false;
+                  }
+                  weight = parseWeight();
+                  if (valid) for (int k = 0; k < 3; ++k)
+                     (weight && importantProps ? importantProps : props)->set(Css_flex_properties[k],
+                        k == 2 ? CSS_TYPE_LENGTH_PERCENTAGE : CSS_TYPE_LENGTH_PERCENTAGE_NUMBER, flex[k]);
+                  break;
+               }
+               case CssShorthandInfo::CSS_SHORTHAND_FLOW: {
+                  CssPropertyValue values[2]; values[0].intVal = 0; values[1].intVal = 0;
+                  bool seen[2] = {false, false};
+                  for (int k = 0; k < 2; ++k) for (int n = 0; n < 2; ++n)
+                     if (!seen[n] && tokenMatchesProperty(Css_flow_properties[n], &type)) {
+                        seen[n] = parseValue(Css_flow_properties[n], type, &values[n]); break;
+                     }
+                  weight = parseWeight();
+                  if (seen[0] || seen[1]) for (int k = 0; k < 2; ++k)
+                     (weight && importantProps ? importantProps : props)->set(Css_flow_properties[k], CSS_TYPE_ENUM, values[k]);
+                  break;
+               }
+               case CssShorthandInfo::CSS_SHORTHAND_GAP: {
+                  CssPropertyValue values[2];
+                  if (parseValue(CSS_PROPERTY_ROW_GAP, CSS_TYPE_LENGTH, &values[0])) {
+                     if (!parseValue(CSS_PROPERTY_COLUMN_GAP, CSS_TYPE_LENGTH, &values[1])) values[1] = values[0];
+                     weight = parseWeight();
+                     for (int k = 0; k < 2; ++k)
+                        (weight && importantProps ? importantProps : props)->set(Css_gap_properties[k], CSS_TYPE_LENGTH, values[k]);
+                  }
+                  break;
+               }
 
                case CssShorthandInfo::CSS_SHORTHAND_FONT:
                   /* \todo Implement details. */

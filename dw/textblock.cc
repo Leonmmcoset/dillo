@@ -206,6 +206,7 @@ void Textblock::setStretchabilityFactor (int stretchabilityFactor)
 
 Textblock::Textblock (bool limitTextWidth, bool treatAsInline)
 {
+   currentDomNode = 0;
    DBG_OBJ_CREATE ("dw::Textblock");
    registerName ("dw::Textblock", &CLASS_ID);
    setButtonSensitive(true);
@@ -249,6 +250,7 @@ Textblock::Textblock (bool limitTextWidth, bool treatAsInline)
    DBG_OBJ_SET_NUM ("wrapRefLinesFCY", wrapRefLinesFCY);
 
    hoverLink = -1;
+   emptyLinkPressed = false;
 
    // -1 means undefined.
    lineBreakWidth = -1;
@@ -941,13 +943,52 @@ bool Textblock::isBlockLevel ()
    return true;
 }
 
+bool Textblock::getDomAllocation (int node, core::Allocation *result)
+{
+   // A word for an out-of-flow widget is only its placeholder in normal
+   // flow. Query the allocated widget before falling back to inline words.
+   if (Widget::getDomAllocation(node, result)) return true;
+   bool found = false;
+   for (int i = 0; i < words->size(); ++i) {
+      Word *word = words->getRef(i);
+      if (word->domNode != node) continue;
+      core::Allocation box;
+      TextblockIterator *it = TextblockIterator::createWordIndexIterator(this, core::Content::ALL, i);
+      it->getAllocation(0, INT_MAX, &box);
+      it->unref();
+      if (!found) { *result = box; found = true; }
+      else {
+         int right = misc::max(result->x + result->width, box.x + box.width);
+         int bottom = misc::max(result->y + result->ascent + result->descent, box.y + box.ascent + box.descent);
+         result->x = misc::min(result->x, box.x); result->y = misc::min(result->y, box.y);
+         result->width = right - result->x; result->ascent = bottom - result->y; result->descent = 0;
+      }
+   }
+   return found;
+}
+
 bool Textblock::buttonPressImpl (core::EventButton *event)
 {
+   bool inSpace;
+   emptyLinkPressed = getStyle()->modernLayout && getStyle()->x_link != -1 &&
+      event->button == 1 && !findWord(event->xWidget, event->yWidget, &inSpace);
+   if (emptyLinkPressed) return true;
    return sendSelectionEvent (core::SelectionState::BUTTON_PRESS, event);
 }
 
 bool Textblock::buttonReleaseImpl (core::EventButton *event)
 {
+   if (event->button == 1) {
+      bool inSpace;
+      const Word *word = findWord(event->xWidget, event->yWidget, &inSpace);
+      int node = word ? word->domNode : getDomNode();
+      if (node && !emitDomEvent(node, "click")) { emptyLinkPressed = false; return true; }
+      if (emptyLinkPressed) {
+         emptyLinkPressed = false;
+         layout->emitLinkClick(this, getStyle()->x_link, -1, -1, -1, event);
+         return true;
+      }
+   }
    return sendSelectionEvent (core::SelectionState::BUTTON_RELEASE, event);
 }
 
@@ -1757,8 +1798,10 @@ void Textblock::drawLevel (core::View *view, core::Rectangle *area,
             if (word->content.type == core::Content::WIDGET_OOF_REF &&
                 getOOFMIndex (word->content.widgetReference->widget)
                 == oofmIndex &&
-                doesWidgetOOFInterruptDrawing (word->content.widget))
-               word->content.widget->drawInterruption (view, area, context);
+                doesWidgetOOFInterruptDrawing
+                   (word->content.widgetReference->widget))
+               word->content.widgetReference->widget
+                  ->drawInterruption (view, area, context);
          }
       }
       break;
@@ -1801,7 +1844,7 @@ Textblock::Word *Textblock::addWord (int width, int ascent, int descent,
 void Textblock::initWord (int wordNo)
 {
    Word *word = words->getRef (wordNo);
-
+   word->domNode = currentDomNode;
    word->style = word->spaceStyle = NULL;
    word->wordImgRenderer = NULL;
    word->spaceImgRenderer = NULL;
@@ -2493,7 +2536,7 @@ void Textblock::addWidget (core::Widget *widget, core::style::Style *style)
 
    initOutOfFlowMgrs ();
 
-   if (testWidgetOutOfFlow (widget)) {
+   if (childOutOfFlow (widget)) {
       int oofmIndex = getOOFMIndex (widget);
       DBG_OBJ_MSGF ("construct.word", 1, "ouf of flow: oofmIndex = %d (%s)",
                     oofmIndex, OOFM_NAME[oofmIndex]);
@@ -3243,7 +3286,11 @@ bool Textblock::usesMaxGeneratorWidth ()
 
       // In detail, this depends on what the respective OOFM does with the
       // child widget:
-      result = toplevel || (block && !(vloat || abspos || fixpos));
+      bool definitePositionedWidth = getStyle()->modernLayout &&
+         (abspos || fixpos) && (getStyle()->width != core::style::LENGTH_AUTO ||
+            (getStyle()->left != core::style::LENGTH_AUTO &&
+             getStyle()->right != core::style::LENGTH_AUTO));
+      result = toplevel || (block && !(vloat || abspos || fixpos)) || definitePositionedWidth;
    }
 
    DBG_OBJ_LEAVE_VAL ("%s", boolToStr(result));

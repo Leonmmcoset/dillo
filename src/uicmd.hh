@@ -31,6 +31,7 @@ void a_UIcmd_open_url(BrowserWindow *bw, const DilloUrl *url);
 void a_UIcmd_open_url_nw(BrowserWindow *bw, const DilloUrl *url);
 void a_UIcmd_open_url_nt(void *vbw, const DilloUrl *url, int focus);
 int a_UIcmd_has_finished(BrowserWindow *bw);
+void a_UIcmd_flush_render(BrowserWindow *bw);
 void a_UIcmd_finish_loading(BrowserWindow *bw);
 void a_UIcmd_back(void *vbw);
 void a_UIcmd_back_nt(void *vbw);

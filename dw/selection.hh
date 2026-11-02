@@ -243,6 +243,7 @@ public:
    inline void setLayout (Layout *layout) { this->layout = layout; }
    void reset ();
    void copy (int selection);
+   char *getText (); // Caller frees the returned UTF-8 string.
    bool buttonPress (Iterator *it, int charPos, int linkNo,
                      EventButton *event);
    bool buttonRelease (Iterator *it, int charPos, int linkNo,

@@ -247,6 +247,7 @@ private:
 
 protected:
    Fl_Widget *createNewWidget (core::Allocation *allocation);
+   void setWidgetStyle(Fl_Widget *widget, core::style::Style *style);
 
 public:
    FltkLabelButtonResource (FltkPlatform *platform, const char *label);
@@ -282,6 +283,7 @@ protected:
    int reliefYThickness ();
 
    Fl_Widget *createNewWidget (core::Allocation *allocation);
+   void setWidgetStyle (Fl_Widget *widget, core::style::Style *style);
 
 public:
    FltkComplexButtonResource (FltkPlatform *platform, dw::core::Widget *widget,
@@ -326,6 +328,13 @@ public:
    bool isEditable ();
    void setEditable (bool editable);
    void setMaxLength (int maxlen);
+   bool hasFocus ();
+   bool hasPendingPaste ();
+   int selectionStart ();
+   int selectionEnd ();
+   void setSelection (int start, int end);
+   void clearFocus ();
+   void restoreFocus (int start, int end);
 };
 
 
@@ -349,6 +358,13 @@ public:
 
    const char *getText ();
    void setText (const char *text);
+   bool hasFocus ();
+   bool hasPendingPaste ();
+   int selectionStart ();
+   int selectionEnd ();
+   void setSelection (int start, int end);
+   void clearFocus ();
+   void restoreFocus (int start, int end);
    bool isEditable ();
    void setEditable (bool editable);
 };

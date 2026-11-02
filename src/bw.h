@@ -21,6 +21,7 @@
 #define BW_Root            (1)  /* Root URLs */
 #define BW_Img             (2)  /* Image URLs */
 #define BW_Force           (4)  /* Stop connection too */
+#define BW_Stylesheet      (8)  /* Document stylesheets */
 
 
 /** Contains the specific data for a single window */
@@ -40,6 +41,10 @@ typedef struct {
    Dlist *RootClients;
    /** Image Keys for all active connections in the window */
    Dlist *ImageClients;
+   /** Stylesheets survive replacement of the document's image renderers. */
+   Dlist *StyleClients;
+   /** Stylesheet URLs already requested by this document. */
+   Dlist *StyleUrls;
    /** Number of images in the page */
    int NumImages;
    /** Number of images already loaded */
@@ -87,6 +92,8 @@ BrowserWindow *a_Bw_get(int i);
 int a_Bw_num(void);
 
 void a_Bw_add_client(BrowserWindow *bw, int Key, int Root);
+void a_Bw_add_stylesheet_client(BrowserWindow *bw, int Key, const DilloUrl *url);
+int a_Bw_stylesheet_requested(BrowserWindow *bw, const DilloUrl *url);
 int a_Bw_remove_client(BrowserWindow *bw, int ClientKey);
 void a_Bw_close_client(BrowserWindow *bw, int ClientKey);
 void a_Bw_stop_clients(BrowserWindow *bw, int flags);

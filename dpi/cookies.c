@@ -105,6 +105,7 @@ typedef struct {
    time_t expires_at;
    bool_t host_only;
    bool_t secure;
+   bool_t http_only;
    bool_t session_only;
    long last_used;
 } CookieData_t;
@@ -263,7 +264,7 @@ static void Cookies_load_cookies(FILE *stream)
       /* Remove leading and trailing whitespaces */
       dStrstrip(line);
 
-      if ((line[0] != '\0') && (line[0] != '#')) {
+      if ((line[0] != '\0') && (line[0] != '#' || !strncmp(line, "#HttpOnly_", 10))) {
          /*
           * Split the row into pieces using a tab as the delimiter.
           * pieces[0] The domain name
@@ -278,6 +279,9 @@ static void Cookies_load_cookies(FILE *stream)
          char *piece;
          char *line_marker = line;
          CookieData_t *cookie = dNew0(CookieData_t, 1);
+         if (!strncmp(line_marker, "#HttpOnly_", 10)) {
+            cookie->http_only = TRUE; line_marker += 10;
+         }
 
          cookie->session_only = FALSE;
          cookie->domain = dStrdup(dStrsep(&line_marker, "\t"));
@@ -416,7 +420,8 @@ static void Cookies_save_and_free(void)
             int len;
             char buf[LINE_MAXLEN];
 
-            len = snprintf(buf, LINE_MAXLEN, "%s\t%s\t%s\t%s\t%ld\t%s\t%s\n",
+            len = snprintf(buf, LINE_MAXLEN, "%s%s\t%s\t%s\t%s\t%ld\t%s\t%s\n",
+                           cookie->http_only ? "#HttpOnly_" : "",
                            cookie->domain,
                            cookie->host_only ? "FALSE" : "TRUE",
                            cookie->path,
@@ -991,6 +996,7 @@ static CookieData_t *Cookies_parse(char *cookie_str, const char *server_date)
          cookie->secure = TRUE;
          Cookies_eat_value(&str);
       } else if (dStrAsciiCasecmp(attr, "HttpOnly") == 0) {
+         cookie->http_only = TRUE;
          Cookies_eat_value(&str);
       } else {
          MSG("Cookie contains unknown attribute: '%s'\n", attr);
@@ -1215,7 +1221,8 @@ static bool_t Cookies_validate_domain(CookieData_t *cookie, char *host)
  * Return value: 0 set OK, -1 disabled, -2 denied, -3 rejected.
  */
 static int Cookies_set(char *cookie_string, char *url_host,
-                       char *url_path, char *server_date)
+                       char *url_path, char *server_date, bool_t document,
+                       bool_t is_tls)
 {
    CookieControlAction action;
    CookieData_t *cookie;
@@ -1235,6 +1242,21 @@ static int Cookies_set(char *cookie_string, char *url_host,
       if ((cookie = Cookies_parse(cookie_string, server_date))) {
          if (Cookies_validate_domain(cookie, url_host)) {
             Cookies_validate_path(cookie, url_path);
+            if (document) {
+               int i;
+               CookieData_t *existing;
+               if (cookie->http_only || (cookie->secure && !is_tls)) {
+                  Cookies_free_cookie(cookie); return -3;
+               }
+               for (i = 0; (existing = dList_nth_data(all_cookies, i)); ++i) {
+                  if (!dStrAsciiCasecmp(existing->domain, cookie->domain) &&
+                      !strcmp(existing->name, cookie->name) &&
+                      !strcmp(existing->path, cookie->path) &&
+                      (existing->http_only || (existing->secure && !is_tls))) {
+                     Cookies_free_cookie(cookie); return -3;
+                  }
+               }
+            }
             if (action == COOKIE_ACCEPT_SESSION)
                cookie->session_only = TRUE;
             Cookies_add_cookie(cookie);
@@ -1320,7 +1342,7 @@ static void Cookies_add_matching_cookies(const char *domain,
  * Return a string that contains all relevant cookies as headers.
  */
 static char *Cookies_get(char *url_host, char *url_path,
-                         char *url_scheme)
+                         char *url_scheme, bool_t document)
 {
    char *domain_str, *str;
    CookieData_t *cookie;
@@ -1381,6 +1403,9 @@ static char *Cookies_get(char *url_host, char *url_path,
    }
 
    /* Found the cookies, now make the string */
+   if (document) for (i = 0; (cookie = dList_nth_data(matching_cookies, i)); ++i) {
+      if (cookie->http_only) { dList_remove(matching_cookies, cookie); --i; }
+   }
    cookie_dstring = dStr_new("");
    if (dList_length(matching_cookies) > 0) {
 
@@ -1564,7 +1589,7 @@ static int srv_parse_tok(Dsh *sh, ClientInfo *client, char *Buf)
       MSG("(pid %d): Got DpiBye.\n", (int)getpid());
       exit(0);
 
-   } else if (strcmp(cmd, "set_cookie") == 0) {
+   } else if (strcmp(cmd, "set_cookie") == 0 || strcmp(cmd, "set_document_cookie") == 0) {
       int st;
       char *date;
 
@@ -1573,7 +1598,10 @@ static int srv_parse_tok(Dsh *sh, ClientInfo *client, char *Buf)
       path = a_Dpip_get_attr_l(Buf, BufSize, "path");
       date = a_Dpip_get_attr_l(Buf, BufSize, "date");
 
-      st = Cookies_set(cookie, host, path, date);
+      char *scheme = a_Dpip_get_attr_l(Buf, BufSize, "scheme");
+      st = cookie && host && path ? Cookies_set(cookie, host, path, date,
+         !strcmp(cmd, "set_document_cookie"), scheme && !dStrAsciiCasecmp(scheme, "https")) : -3;
+      dFree(scheme);
 
       dFree(cmd);
       cmd = a_Dpip_build_cmd("cmd=%s msg=%s", "set_cookie_answer",
@@ -1586,13 +1614,14 @@ static int srv_parse_tok(Dsh *sh, ClientInfo *client, char *Buf)
       dFree(cookie);
       ret = 2;
 
-   } else if (strcmp(cmd, "get_cookie") == 0) {
+   } else if (strcmp(cmd, "get_cookie") == 0 || strcmp(cmd, "get_document_cookie") == 0) {
       char *scheme = a_Dpip_get_attr_l(Buf, BufSize, "scheme");
 
       host = a_Dpip_get_attr_l(Buf, BufSize, "host");
       path = a_Dpip_get_attr_l(Buf, BufSize, "path");
 
-      cookie = Cookies_get(host, path, scheme);
+      cookie = host && path && scheme ? Cookies_get(host, path, scheme,
+         !strcmp(cmd, "get_document_cookie")) : dStrdup("");
       dFree(scheme);
       dFree(path);
       dFree(host);

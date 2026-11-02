@@ -16,6 +16,11 @@ extern "C" {
 void a_Nav_redirection0(BrowserWindow *bw, const DilloUrl *new_url);
 void a_Nav_push(BrowserWindow *bw, const DilloUrl *url,
                 const DilloUrl *requester);
+void a_Nav_replace(BrowserWindow *bw, const DilloUrl *url,
+                   const DilloUrl *requester);
+int a_Nav_history_update(BrowserWindow *bw, const DilloUrl *url,
+                         const char *state, int replace);
+const char *a_Nav_history_state(BrowserWindow *bw);
 void a_Nav_repush(BrowserWindow *bw);
 void a_Nav_back(BrowserWindow *bw);
 void a_Nav_back_nt(BrowserWindow *bw);

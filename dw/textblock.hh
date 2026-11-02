@@ -426,6 +426,7 @@ protected:
 
    struct Word
    {
+      int domNode;
       enum {
          /** Can be hyphenated automatically. (Cleared after
           * hyphenation.) */
@@ -615,6 +616,7 @@ protected:
       hlStart[core::HIGHLIGHT_NUM_LAYERS], hlEnd[core::HIGHLIGHT_NUM_LAYERS];
 
    int hoverLink;  /* The link under the mouse pointer */
+   bool emptyLinkPressed;
 
    int numSizeReferences;
    Widget *sizeReferences[NUM_OOFM];
@@ -845,6 +847,7 @@ protected:
    void markExtremesChange (int ref);
 
    bool isBlockLevel ();
+   virtual bool childOutOfFlow(core::Widget *child) { return testWidgetOutOfFlow(child); }
 
    bool buttonPressImpl (core::EventButton *event);
    bool buttonReleaseImpl (core::EventButton *event);
@@ -865,6 +868,8 @@ protected:
 
 public:
    static int CLASS_ID;
+   int currentDomNode;
+   bool getDomAllocation (int node, core::Allocation *result);
 
    static void setPenaltyHyphen (int penaltyHyphen);
    static void setPenaltyHyphen2 (int penaltyHyphen2);
@@ -884,15 +889,15 @@ public:
 
    void flush ();
 
-   void addText (const char *text, size_t len, core::style::Style *style);
+   virtual void addText (const char *text, size_t len, core::style::Style *style);
    inline void addText (const char *text, core::style::Style *style)
    { addText (text, strlen(text), style); }
-   void addWidget (core::Widget *widget, core::style::Style *style);
+   virtual void addWidget (core::Widget *widget, core::style::Style *style);
    bool addAnchor (const char *name, core::style::Style *style);
-   void addSpace (core::style::Style *style);
-   void addBreakOption (core::style::Style *style, bool forceBreak);
-   void addParbreak (int space, core::style::Style *style);
-   void addLinebreak (core::style::Style *style);
+   virtual void addSpace (core::style::Style *style);
+   virtual void addBreakOption (core::style::Style *style, bool forceBreak);
+   virtual void addParbreak (int space, core::style::Style *style);
+   virtual void addLinebreak (core::style::Style *style);
 
    void handOverBreak (core::style::Style *style);
    void changeLinkColor (int link, int newColor);

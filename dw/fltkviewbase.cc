@@ -20,6 +20,8 @@
 
 
 #include "fltkviewport.hh"
+#include "config.h"
+#include "fltktext.hh"
 
 #include <FL/Fl.H>
 #include <FL/fl_draw.H>
@@ -68,6 +70,7 @@ FltkViewBase::FltkViewBase (int x, int y, int w, int h, const char *label):
    canvasWidth = 1;
    canvasHeight = 1;
    bgColor = FL_WHITE;
+   cssBackground = NULL;
    mouse_x = mouse_y = 0;
    focused_child = NULL;
    exposeArea = NULL;
@@ -81,6 +84,30 @@ FltkViewBase::FltkViewBase (int x, int y, int w, int h, const char *label):
 FltkViewBase::~FltkViewBase ()
 {
    cancelQueueDraw ();
+   if (cssBackground) cssBackground->unref();
+}
+
+void FltkViewBase::setCssBackground(core::style::Style *style)
+{
+   if (style) style->ref();
+   if (cssBackground) cssBackground->unref();
+   cssBackground = style;
+}
+
+void FltkViewBase::paintBackground(core::Rectangle *area)
+{
+   fl_color(bgColor);
+   fl_rectf(translateCanvasXToViewX(area->x), translateCanvasYToViewY(area->y), area->width, area->height);
+   if (cssBackground) {
+      const core::style::Box &padding = cssBackground->padding;
+      int width = w() + padding.left + padding.right;
+      int height = h() + padding.top + padding.bottom;
+      int left = translateViewXToCanvasX(x()) - padding.left;
+      int top = translateViewYToCanvasY(y()) - padding.top;
+      core::style::drawBackground(this, theLayout, area, left, top,
+         width, height, left, top, width, height,
+         cssBackground, cssBackground->backgroundColor, false, false);
+   }
 }
 
 void FltkViewBase::setBufferedDrawing (bool b) {
@@ -158,8 +185,7 @@ void FltkViewBase::draw (const core::Rectangle *rect,
       backBuffer->setSize (X + W, Y + H); // would be nicer to use (W, H)...
       fl_begin_offscreen (backBuffer->offscreen);
       fl_push_matrix ();
-      fl_color (bgColor);
-      fl_rectf (X, Y, W, H);
+      paintBackground(&r);
       theLayout->expose (this, &r);
       fl_pop_matrix ();
       fl_end_offscreen ();
@@ -169,13 +195,11 @@ void FltkViewBase::draw (const core::Rectangle *rect,
       // if type == DRAW_BUFFERED but we do not have backBuffer available
       // we fall back to clipped drawing
       fl_push_clip (X, Y, W, H);
-      fl_color (bgColor);
-      fl_rectf (X, Y, W, H);
+      paintBackground(&r);
       theLayout->expose (this, &r);
       fl_pop_clip ();
    } else {
-      fl_color (bgColor);
-      fl_rectf (X, Y, W, H);
+      paintBackground(&r);
       theLayout->expose (this, &r);
    }
    // DEBUG:
@@ -614,6 +638,13 @@ void FltkWidgetView::drawText (core::style::Font *font,
                                core::style::Color::Shading shading,
                                int X, int Y, const char *text, int len)
 {
+#ifdef HAVE_PANGO_CAIRO
+   unsigned char red, green, blue;
+   Fl::get_color(((FltkColor*)color)->colors[shading], red, green, blue);
+   drawShapedText(font, (red << 16) | (green << 8) | blue,
+      translateCanvasXToViewX(X), translateCanvasYToViewY(Y), text, len);
+   return;
+#endif
    //printf ("drawText (..., %d, %d, '", X, Y);
    //for (int i = 0; i < len; i++)
    //   putchar (text[i]);

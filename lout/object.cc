@@ -275,10 +275,10 @@ int ConstString::compareTo(Comparable *other)
 int ConstString::hashValue(const char *str)
 {
    if (str) {
-      int h = 0;
+      unsigned int h = 0;
       for (int i = 0; str[i]; i++)
          h = (h * 256 + str[i]);
-      return h;
+      return static_cast<int>(h);
    } else
       return 0;
 }

@@ -15,7 +15,7 @@ jobs:
     - name: Update package lists
       run: sudo apt update
     - name: Install dependencies
-      run: sudo apt install -y libfltk1.3-dev libssl-dev libpng-dev libjpeg-dev libwebp-dev libbrotli-dev xvfb x11-apps x11-utils imagemagick
+      run: sudo apt install -y libfltk1.3-dev libssl-dev libpng-dev libjpeg-dev libwebp-dev libbrotli-dev xvfb x11-apps x11-utils imagemagick xdotool python3 libpango1.0-dev
 
     - name: autogen
       run: ./autogen.sh
@@ -36,19 +36,14 @@ jobs:
         export DILLOBINDIR=$(readlink -f install/bin)
         cd build && make check || (cat test/html/test-suite.log; false)
         export DILLOBINDIR=
-    - name: Check release fits in a floppy disk of 1.44 MB
+    - name: Check source release size (includes QuickJS and Lexbor)
       run: |
         cd build
         make dist-gzip
         size=$(stat -c %s dillo-*.tar.gz)
-        floppy=$((1474560 - 32*1024)) # Leave room for FAT table
-        echo "Floppy occupation: $(($size * 100 / $floppy)) %"
-        if [ $size -lt $floppy ]; then
-          echo 'OK: Fits in floopy disk'
-        else
-          echo "FAIL: Release size too big: $size / $floppy"
-          exit 1
-        fi
+        limit=$((16 * 1024 * 1024))
+        echo "Source archive size: $size / $limit bytes"
+        test "$size" -lt "$limit"
     - name: make distcheck (with HTML tests)
       run: |
         export DILLOBINDIR=
@@ -72,7 +67,7 @@ jobs:
     - name: Update package lists
       run: sudo apt update
     - name: Install dependencies
-      run: sudo apt install -y libfltk1.3-dev libssl-dev libpng-dev libjpeg-dev libwebp-dev libbrotli-dev xvfb x11-apps x11-utils imagemagick
+      run: sudo apt install -y libfltk1.3-dev libssl-dev libpng-dev libjpeg-dev libwebp-dev libbrotli-dev xvfb x11-apps x11-utils imagemagick xdotool python3 libpango1.0-dev
     - name: autogen
       run: ./autogen.sh
     - name: Make install dir
@@ -299,3 +294,12 @@ jobs:
         make
         make check
         ls -l src/dillo
+
+  ubuntu-latest-no-javascript:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - run: sudo apt update && sudo apt install -y libfltk1.3-dev libssl-dev
+    - run: ./autogen.sh
+    - run: ./configure --disable-javascript --disable-cookies --disable-modern-text CFLAGS="-Werror" CXXFLAGS="-Werror -std=c++11"
+    - run: make -j2 && make check

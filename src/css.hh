@@ -17,6 +17,8 @@
 #include "doctree.hh"
 #include "html.hh"
 #include "cssmedia.hh"
+#include <map>
+#include <string>
 
 /* Origin and weight. Used only internally.*/
 typedef enum {
@@ -50,6 +52,7 @@ typedef enum {
                                    in this particular case (e.g.
                                    'margin-*-width'). */
    CSS_TYPE_SIGNED_LENGTH,      /**< As CSS_TYPE_LENGTH but may be negative. */
+   CSS_TYPE_SIGNED_LENGTH_PERCENTAGE, /**< Signed <length> or <percentage>. */
    CSS_TYPE_LENGTH_PERCENTAGE_NUMBER,  /* <length> or <percentage>, or <number> */
    CSS_TYPE_AUTO,               /**< Represented as CssLength of type
                                    CSS_LENGTH_TYPE_AUTO */
@@ -63,6 +66,11 @@ typedef enum {
                                    'font-family'. */
    CSS_TYPE_URI,                /**< <uri> */
    CSS_TYPE_BACKGROUND_POSITION,
+   CSS_TYPE_TRANSFORM,
+   CSS_TYPE_CORNER_RADIUS,
+   CSS_TYPE_GRADIENT,
+   CSS_TYPE_COMPONENTS,         /**< Raw component values for track lists. */
+   CSS_TYPE_DEFERRED,           /**< A declaration containing var(), parsed after cascade. */
    CSS_TYPE_UNUSED              /**< Not yet used. Will itself get unused some
                                    day. */
 } CssValueType;
@@ -88,6 +96,7 @@ typedef enum {
    CSS_LENGTH_TYPE_PERCENTAGE,
    CSS_LENGTH_TYPE_RELATIVE,   /**< This does not exist in CSS but
                                   is used in HTML */
+   CSS_LENGTH_TYPE_CALC,
    CSS_LENGTH_TYPE_AUTO        /**< This can be used as a simple value. */
 } CssLengthType;
 
@@ -98,10 +107,12 @@ typedef struct {
       int i;
       float f;
    };
+   float terms[CSS_LENGTH_TYPE_PERCENTAGE + 1];
 } CssLength;
 
 inline CssLength CSS_CREATE_LENGTH (float v, CssLengthType t) {
    CssLength l;
+   for (unsigned i = 0; i < sizeof(l.terms) / sizeof(l.terms[0]); ++i) l.terms[i] = 0;
    l.type = t;
    switch (t) {
    case CSS_LENGTH_TYPE_PX:
@@ -122,6 +133,7 @@ inline CssLength CSS_CREATE_LENGTH (float v, CssLengthType t) {
       l.f = v;
       break;
    case CSS_LENGTH_TYPE_AUTO:
+   case CSS_LENGTH_TYPE_CALC:
       l.i = 0;
       break;
    default:
@@ -163,12 +175,17 @@ inline float CSS_LENGTH_VALUE (CssLength l) {
 
 typedef enum {
    CSS_PROPERTY_END = -1, // used as terminator in CssShorthandInfo
+   CSS_PROPERTY_ALIGN_CONTENT,
+   CSS_PROPERTY_ALIGN_ITEMS,
+   CSS_PROPERTY_ALIGN_SELF,
    CSS_PROPERTY_BACKGROUND_ATTACHMENT,
    CSS_PROPERTY_BACKGROUND_COLOR,
    CSS_PROPERTY_BACKGROUND_IMAGE,
    CSS_PROPERTY_BACKGROUND_POSITION,
    CSS_PROPERTY_BACKGROUND_REPEAT,
    CSS_PROPERTY_BORDER_BOTTOM_COLOR,
+   CSS_PROPERTY_BORDER_BOTTOM_LEFT_RADIUS,
+   CSS_PROPERTY_BORDER_BOTTOM_RIGHT_RADIUS,
    CSS_PROPERTY_BORDER_BOTTOM_STYLE,
    CSS_PROPERTY_BORDER_BOTTOM_WIDTH,
    CSS_PROPERTY_BORDER_COLLAPSE,
@@ -180,6 +197,8 @@ typedef enum {
    CSS_PROPERTY_BORDER_RIGHT_WIDTH,
    CSS_PROPERTY_BORDER_SPACING,
    CSS_PROPERTY_BORDER_TOP_COLOR,
+   CSS_PROPERTY_BORDER_TOP_LEFT_RADIUS,
+   CSS_PROPERTY_BORDER_TOP_RIGHT_RADIUS,
    CSS_PROPERTY_BORDER_TOP_STYLE,
    CSS_PROPERTY_BORDER_TOP_WIDTH,
    CSS_PROPERTY_BOTTOM,
@@ -188,6 +207,7 @@ typedef enum {
    CSS_PROPERTY_CLEAR,
    CSS_PROPERTY_CLIP,
    CSS_PROPERTY_COLOR,
+   CSS_PROPERTY_COLUMN_GAP,
    CSS_PROPERTY_CONTENT,
    CSS_PROPERTY_COUNTER_INCREMENT,
    CSS_PROPERTY_COUNTER_RESET,
@@ -195,6 +215,11 @@ typedef enum {
    CSS_PROPERTY_DIRECTION,
    CSS_PROPERTY_DISPLAY,
    CSS_PROPERTY_EMPTY_CELLS,
+   CSS_PROPERTY_FLEX_BASIS,
+   CSS_PROPERTY_FLEX_DIRECTION,
+   CSS_PROPERTY_FLEX_GROW,
+   CSS_PROPERTY_FLEX_SHRINK,
+   CSS_PROPERTY_FLEX_WRAP,
    CSS_PROPERTY_FLOAT,
    CSS_PROPERTY_FONT_FAMILY,
    CSS_PROPERTY_FONT_SIZE,
@@ -203,7 +228,10 @@ typedef enum {
    CSS_PROPERTY_FONT_STYLE,
    CSS_PROPERTY_FONT_VARIANT,
    CSS_PROPERTY_FONT_WEIGHT,
+   CSS_PROPERTY_GRID_TEMPLATE_COLUMNS,
+   CSS_PROPERTY_GRID_TEMPLATE_ROWS,
    CSS_PROPERTY_HEIGHT,
+   CSS_PROPERTY_JUSTIFY_CONTENT,
    CSS_PROPERTY_LEFT,
    CSS_PROPERTY_LETTER_SPACING,
    CSS_PROPERTY_LINE_HEIGHT,
@@ -220,6 +248,7 @@ typedef enum {
    CSS_PROPERTY_MAX_WIDTH,
    CSS_PROPERTY_MIN_HEIGHT,
    CSS_PROPERTY_MIN_WIDTH,
+   CSS_PROPERTY_ORDER,
    CSS_PROPERTY_OUTLINE_COLOR,
    CSS_PROPERTY_OUTLINE_STYLE,
    CSS_PROPERTY_OUTLINE_WIDTH,
@@ -231,12 +260,14 @@ typedef enum {
    CSS_PROPERTY_POSITION,
    CSS_PROPERTY_QUOTES,
    CSS_PROPERTY_RIGHT,
+   CSS_PROPERTY_ROW_GAP,
    CSS_PROPERTY_TEXT_ALIGN,
    CSS_PROPERTY_TEXT_DECORATION,
    CSS_PROPERTY_TEXT_INDENT,
    CSS_PROPERTY_TEXT_SHADOW,
    CSS_PROPERTY_TEXT_TRANSFORM,
    CSS_PROPERTY_TOP,
+   CSS_PROPERTY_TRANSFORM,
    CSS_PROPERTY_UNICODE_BIDI,
    CSS_PROPERTY_VERTICAL_ALIGN,
    CSS_PROPERTY_VISIBILITY,
@@ -259,11 +290,31 @@ typedef struct {
    CssLength posY;
 } CssBackgroundPosition;
 
+struct CssTransform {
+   bool active;
+   CssLength x, y;
+};
+
+struct CssGradient {
+   enum { MAX_STOPS = 32 };
+   double angle;
+   int cornerX, cornerY;
+   bool repeating;
+   unsigned count;
+   struct Stop {
+      unsigned rgba;
+      bool positioned, currentColor;
+      CssLength position;
+   } stops[MAX_STOPS];
+};
+
 typedef union {
    int32_t intVal;
    CssLength lenVal;
    char *strVal;
    CssBackgroundPosition *posVal;
+   CssTransform *transformVal;
+   CssGradient *gradientVal;
 } CssPropertyValue;
 
 typedef enum {
@@ -316,10 +367,20 @@ class CssProperty {
             case CSS_TYPE_STRING:
             case CSS_TYPE_SYMBOL:
             case CSS_TYPE_URI:
+            case CSS_TYPE_DEFERRED:
+            case CSS_TYPE_COMPONENTS:
                dFree (value.strVal);
                break;
             case CSS_TYPE_BACKGROUND_POSITION:
+            case CSS_TYPE_CORNER_RADIUS:
                dFree (value.posVal);
+               break;
+            case CSS_TYPE_TRANSFORM:
+               dFree (value.transformVal);
+               break;
+            case CSS_TYPE_GRADIENT:
+               dFree (value.gradientVal);
+               break;
             default:
                break;
          }
@@ -336,6 +397,7 @@ class CssPropertyList : public lout::misc::SimpleVector <CssProperty> {
    bool safe;
 
    public:
+      std::map<std::string, std::string> customProperties;
       inline CssPropertyList(bool ownerOfStrings = false) :
                   lout::misc::SimpleVector <CssProperty> (1) {
          refCount = 0;
@@ -348,7 +410,8 @@ class CssPropertyList : public lout::misc::SimpleVector <CssProperty> {
       void set (CssPropertyName name, CssValueType type,
                 CssPropertyValue value);
       void apply (CssPropertyList *props);
-      bool isSafe () { return safe; };
+      bool isSafe () { return safe && customProperties.empty(); };
+      bool empty() { return size() == 0 && customProperties.empty(); }
       void print ();
       inline void ref () { refCount++; }
       inline void unref () { if (--refCount == 0) delete this; }

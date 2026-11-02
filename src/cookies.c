@@ -240,6 +240,34 @@ char *a_Cookies_get_query(const DilloUrl *query_url, const DilloUrl *requester,
  *   - 1 = Parsed OK, with cookies disabled
  *   - 2 = Can't open the control file
  */
+
+/* Script access uses the same jar and rules, with HttpOnly filtering in dpi. */
+char *a_Cookies_get_document(const DilloUrl *url)
+{
+   if (disabled || !prefs.cookies_enabled || Cookies_control_check(url) == COOKIE_DENY)
+      return dStrdup("");
+   char *cmd = a_Dpip_build_cmd("cmd=%s scheme=%s host=%s path=%s",
+      "get_document_cookie", URL_SCHEME(url), URL_HOST(url),
+      URL_PATH_(url) ? URL_PATH(url) : "/");
+   char *reply = a_Dpi_send_blocking_cmd("cookies", cmd), *result = NULL;
+   if (reply) result = a_Dpip_get_attr(reply, "cookie");
+   dFree(reply); dFree(cmd);
+   if (!result) return dStrdup("");
+   if (!strncmp(result, "Cookie: ", 8)) memmove(result, result + 8, strlen(result + 8) + 1);
+   char *end = strpbrk(result, "\r\n"); if (end) *end = 0;
+   return result;
+}
+
+void a_Cookies_set_document(const DilloUrl *url, const char *value)
+{
+   if (disabled || !prefs.cookies_enabled || Cookies_control_check(url) == COOKIE_DENY ||
+       strlen(value) > 4096 || strpbrk(value, "\r\n")) return;
+   char *cmd = a_Dpip_build_cmd("cmd=%s cookie=%s scheme=%s host=%s path=%s",
+      "set_document_cookie", value, URL_SCHEME(url), URL_HOST(url),
+      URL_PATH_(url) ? URL_PATH(url) : "/");
+   char *reply = a_Dpi_send_blocking_cmd("cookies", cmd);
+   dFree(reply); dFree(cmd);
+}
 static int Cookie_control_init(void)
 {
    CookieControl cc;

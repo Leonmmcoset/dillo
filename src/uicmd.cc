@@ -16,6 +16,8 @@
  */
 
 #include "dlib/i18n.h"
+#include "javascript.hh"
+#include "html_common.hh"
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -692,7 +694,7 @@ void a_UIcmd_close_bw(void *vbw)
    Layout *layout = (Layout*)bw->render_layout;
 
    _MSG("a_UIcmd_close_bw\n");
-   a_Bw_stop_clients(bw, BW_Root + BW_Img + BW_Force);
+   a_Bw_stop_clients(bw, BW_Root + BW_Img + BW_Stylesheet + BW_Force);
    delete(layout);
    if (tabs) {
       tabs->remove_tab(ui);
@@ -971,6 +973,11 @@ void a_UIcmd_reload_all_active()
  */
 void a_UIcmd_repush(void *vbw)
 {
+   DilloHtml *document = static_cast<DilloHtml *>(a_Bw_get_current_doc((BrowserWindow *)vbw));
+   if (document && document->javascript) {
+      a_Javascript_render(document->javascript);
+      return;
+   }
    a_Nav_repush((BrowserWindow*)vbw);
 }
 
@@ -1188,10 +1195,11 @@ const char *a_UIcmd_select_file()
 void a_UIcmd_stop(void *vbw)
 {
    BrowserWindow *bw = (BrowserWindow *)vbw;
+   a_Javascript_stop(bw);
 
    MSG("a_UIcmd_stop()\n");
    a_Nav_cancel_expect(bw);
-   a_Bw_stop_clients(bw, BW_Root + BW_Img + BW_Force);
+   a_Bw_stop_clients(bw, BW_Root + BW_Img + BW_Stylesheet + BW_Force);
    a_UIcmd_set_buttons_sens(bw);
 }
 
@@ -1623,10 +1631,10 @@ void a_UIcmd_set_page_title(BrowserWindow *bw, const char *label)
  */
 const char *a_UIcmd_get_page_title(BrowserWindow *bw)
 {
-   DilloUrl *url = a_Url_new(a_UIcmd_get_location_text(bw), NULL);
-   const char *title = a_History_get_title_by_url(url, 0);
-   a_Url_free(url);
-   return title;
+   // The history URL also carries POST data, which is part of its cache key.
+   int index = NAV_TOP_UIDX(bw);
+   const DilloUrl *url = index >= 0 ? a_History_get_url(index) : NULL;
+   return url ? a_History_get_title_by_url(url, 0) : NULL;
 }
 
 /*
@@ -1653,7 +1661,8 @@ void a_UIcmd_set_buttons_sens(BrowserWindow *bw)
    int sens;
 
    // Stop
-   sens = (dList_length(bw->ImageClients) || dList_length(bw->RootClients));
+   sens = (dList_length(bw->ImageClients) || dList_length(bw->RootClients) ||
+           dList_length(bw->StyleClients));
    BW2UI(bw)->button_set_sens(UI_STOP, sens);
    // Back
    sens = (a_Nav_stack_ptr(bw) > 0);
@@ -1666,13 +1675,24 @@ void a_UIcmd_set_buttons_sens(BrowserWindow *bw)
 
 int a_UIcmd_has_finished(BrowserWindow *bw)
 {
-   if (dList_length(bw->ImageClients) || dList_length(bw->RootClients))
+   if (a_Javascript_pending(bw)) return 0;
+   if (dList_length(bw->ImageClients) || dList_length(bw->RootClients) ||
+       dList_length(bw->StyleClients))
       return 0;
 
    if (a_Bw_expecting(bw))
       return 0;
 
    return 1;
+}
+
+void a_UIcmd_flush_render(BrowserWindow *bw)
+{
+   Layout *layout = (Layout *) bw->render_layout;
+   FltkPlatform *platform = (FltkPlatform *) layout->getPlatform();
+   platform->generalIdle();
+   layout->flushLayout();
+   Fl::flush();
 }
 
 void a_UIcmd_finish_loading(BrowserWindow *bw)
@@ -1685,10 +1705,7 @@ void a_UIcmd_finish_loading(BrowserWindow *bw)
        * flush the output of the render to the screen (in Fl::flush()).
        * Otherwise we risk dilloc wait to return before the screen has
        * the finished render result. */
-      Layout *layout = (Layout *) bw->render_layout;
-      FltkPlatform *platform = (FltkPlatform *) layout->getPlatform();
-      platform->generalIdle();
-      Fl::flush();
+      a_UIcmd_flush_render(bw);
 
       /* Now we are ready to notify any client */
       a_Control_notify_finish(bw);

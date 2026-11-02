@@ -41,6 +41,14 @@ void a_Html_input_delete(DilloHtmlInput* input);
 void a_Html_form_submit2(void *v_form);
 void a_Html_form_reset2(void *v_form);
 void a_Html_form_display_hiddens2(void *v_form, bool display);
+char *a_Html_control_text(DilloHtml *html, int node, const char *value);
+char *a_Html_control_state(DilloHtml *html, int node, const char *name, const char *value);
+void a_Html_sync_controls(DilloHtml *html);
+bool a_Html_controls_busy(DilloHtml *html);
+DilloUrl *a_Html_control_submit(DilloHtml *html, int node);
+int a_Html_control_focus(DilloHtml *html, int *start, int *end);
+void a_Html_control_restore_focus(DilloHtml *html, int node, int start, int end);
+char *a_Html_control_selection(DilloHtml *html, int node, const char *property, const char *value);
 
 
 /*

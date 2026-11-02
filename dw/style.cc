@@ -24,6 +24,7 @@
 
 #include "dlib/dlib.h"
 #include "core.hh"
+#include "paint.hh"
 #include "../lout/msg.h"
 
 using namespace lout;
@@ -68,6 +69,8 @@ void StyleAttrs::initValues ()
    valign = VALIGN_BASELINE;
    backgroundColor = NULL;
    backgroundImage = NULL;
+   memset(&gradient, 0, sizeof(gradient));
+   memset(&borderRadius, 0, sizeof(borderRadius));
    backgroundRepeat = BACKGROUND_REPEAT;
    backgroundAttachment = BACKGROUND_ATTACHMENT_SCROLL;
    backgroundPositionX = createPerLength (0);
@@ -79,9 +82,13 @@ void StyleAttrs::initValues ()
    clear = CLEAR_NONE;
    overflow = OVERFLOW_VISIBLE;
    position = POSITION_STATIC;
+   modernLayout = false;
+   hasTransform = false;
+   translateX = translateY = createAbsLength(0);
    top = bottom = left = right = LENGTH_AUTO;
    textIndent = 0;
    margin.setVal (0);
+   marginLeftAuto = marginRightAuto = false;
    borderWidth.setVal (0);
    padding.setVal (0);
    borderCollapse = BORDER_MODEL_SEPARATE;
@@ -92,6 +99,8 @@ void StyleAttrs::initValues ()
    wordSpacing = 0;
 
    display = DISPLAY_INLINE;
+   memset(&container, 0, sizeof(container));
+   container.shrink = 1; container.alignItems = ALIGN_STRETCH; container.alignContent = ALIGN_STRETCH;
    whiteSpace = WHITE_SPACE_NORMAL;
    cursor = CURSOR_DEFAULT;
    zIndex = Z_INDEX_AUTO;
@@ -111,10 +120,16 @@ void StyleAttrs::resetValues ()
    clear = CLEAR_NONE; /** \todo Correct? Check specification. */
    overflow = OVERFLOW_VISIBLE;
    position = POSITION_STATIC; /** \todo Correct? Check specification. */
+   zIndex = Z_INDEX_AUTO;
+   modernLayout = false;
+   hasTransform = false;
+   translateX = translateY = createAbsLength(0);
    top = bottom = left = right = LENGTH_AUTO; /** \todo Correct? Check
                                                   specification. */
    backgroundColor = NULL;
    backgroundImage = NULL;
+   memset(&gradient, 0, sizeof(gradient));
+   memset(&borderRadius, 0, sizeof(borderRadius));
    backgroundRepeat = BACKGROUND_REPEAT;
    backgroundAttachment = BACKGROUND_ATTACHMENT_SCROLL;
    backgroundPositionX = createPerLength (0);
@@ -125,6 +140,7 @@ void StyleAttrs::resetValues ()
    minWidth = maxWidth = minHeight = maxHeight = LENGTH_AUTO;
 
    margin.setVal (0);
+   marginLeftAuto = marginRightAuto = false;
    borderWidth.setVal (0);
    padding.setVal (0);
    setBorderColor (NULL);
@@ -133,6 +149,8 @@ void StyleAttrs::resetValues ()
    vBorderSpacing = 0;
 
    display = DISPLAY_INLINE;
+   memset(&container, 0, sizeof(container));
+   container.shrink = 1; container.alignItems = ALIGN_STRETCH; container.alignContent = ALIGN_STRETCH;
 }
 
 /**
@@ -162,6 +180,8 @@ bool StyleAttrs::equals (object::Object *other) {
        color == otherAttrs->color &&
        backgroundColor == otherAttrs->backgroundColor &&
        backgroundImage == otherAttrs->backgroundImage &&
+       !memcmp(&gradient, &otherAttrs->gradient, sizeof(gradient)) &&
+       !memcmp(&borderRadius, &otherAttrs->borderRadius, sizeof(borderRadius)) &&
        backgroundRepeat == otherAttrs->backgroundRepeat &&
        backgroundAttachment == otherAttrs->backgroundAttachment &&
        backgroundPositionX == otherAttrs->backgroundPositionX &&
@@ -174,6 +194,9 @@ bool StyleAttrs::equals (object::Object *other) {
        clear == otherAttrs->clear &&
        overflow == otherAttrs->overflow &&
        position == otherAttrs->position &&
+       modernLayout == otherAttrs->modernLayout &&
+       hasTransform == otherAttrs->hasTransform &&
+       translateX == otherAttrs->translateX && translateY == otherAttrs->translateY &&
        top == otherAttrs->top &&
        bottom == otherAttrs->bottom &&
        left == otherAttrs->left &&
@@ -191,6 +214,8 @@ bool StyleAttrs::equals (object::Object *other) {
        lineHeight == otherAttrs->lineHeight &&
        textIndent == otherAttrs->textIndent &&
        margin.equals (&otherAttrs->margin) &&
+       marginLeftAuto == otherAttrs->marginLeftAuto &&
+       marginRightAuto == otherAttrs->marginRightAuto &&
        borderWidth.equals (&otherAttrs->borderWidth) &&
        padding.equals (&otherAttrs->padding) &&
        borderCollapse == otherAttrs->borderCollapse &&
@@ -203,6 +228,7 @@ bool StyleAttrs::equals (object::Object *other) {
        borderStyle.bottom == otherAttrs->borderStyle.bottom &&
        borderStyle.left == otherAttrs->borderStyle.left &&
        display == otherAttrs->display &&
+       memcmp(&container, &otherAttrs->container, sizeof(container)) == 0 &&
        whiteSpace == otherAttrs->whiteSpace &&
        listStylePosition == otherAttrs->listStylePosition &&
        listStyleType == otherAttrs->listStyleType &&
@@ -216,11 +242,20 @@ bool StyleAttrs::equals (object::Object *other) {
 }
 
 int StyleAttrs::hashValue () {
-   return (intptr_t) font +
+   uint64_t decorations = 1469598103934665603ULL;
+   auto hashBytes = [&](const void *data, size_t size) {
+      const unsigned char *bytes = static_cast<const unsigned char *>(data);
+      for (size_t n = 0; n < size; ++n) decorations = (decorations ^ bytes[n]) * 1099511628211ULL;
+   };
+   hashBytes(&gradient, sizeof(gradient));
+   hashBytes(&borderRadius, sizeof(borderRadius));
+   return (uintptr_t) font +
       textDecoration +
       (intptr_t) color +
       (intptr_t) backgroundColor +
       (intptr_t) backgroundImage +
+      decorations +
+      hasTransform + translateX + translateY +
       backgroundRepeat +
       backgroundAttachment +
       backgroundPositionX +
@@ -250,6 +285,7 @@ int StyleAttrs::hashValue () {
       lineHeight +
       textIndent +
       margin.hashValue () +
+      marginLeftAuto + 2 * marginRightAuto +
       borderWidth.hashValue () +
       padding.hashValue () +
       borderCollapse +
@@ -350,6 +386,8 @@ void Style::copyAttrs (StyleAttrs *attrs)
    color = attrs->color;
    backgroundColor = attrs->backgroundColor;
    backgroundImage = attrs->backgroundImage;
+   gradient = attrs->gradient;
+   borderRadius = attrs->borderRadius;
    backgroundRepeat = attrs->backgroundRepeat;
    backgroundAttachment = attrs->backgroundAttachment;
    backgroundPositionX = attrs->backgroundPositionX;
@@ -362,6 +400,10 @@ void Style::copyAttrs (StyleAttrs *attrs)
    clear = attrs->clear;
    overflow = attrs->overflow;
    position = attrs->position;
+   modernLayout = attrs->modernLayout;
+   hasTransform = attrs->hasTransform;
+   translateX = attrs->translateX;
+   translateY = attrs->translateY;
    top = attrs->top;
    bottom = attrs->bottom;
    left = attrs->left;
@@ -379,12 +421,15 @@ void Style::copyAttrs (StyleAttrs *attrs)
    minHeight = attrs->minHeight;
    maxHeight = attrs->maxHeight;
    margin = attrs->margin;
+   marginLeftAuto = attrs->marginLeftAuto;
+   marginRightAuto = attrs->marginRightAuto;
    borderWidth = attrs->borderWidth;
    padding = attrs->padding;
    borderCollapse = attrs->borderCollapse;
    borderColor = attrs->borderColor;
    borderStyle = attrs->borderStyle;
    display = attrs->display;
+   container = attrs->container;
    whiteSpace = attrs->whiteSpace;
    listStylePosition = attrs->listStylePosition;
    listStyleType = attrs->listStyleType;
@@ -414,13 +459,13 @@ bool FontAttrs::equals(object::Object *other)
 
 int FontAttrs::hashValue()
 {
-   int h = object::String::hashValue (name);
+   unsigned int h = object::String::hashValue (name);
    h = (h << 5) - h + size;
    h = (h << 5) - h + weight;
    h = (h << 5) - h + style;
    h = (h << 5) - h + letterSpacing;
    h = (h << 5) - h + fontVariant;
-   return h;
+   return static_cast<int>(h);
 }
 
 Font::~Font ()
@@ -1173,6 +1218,8 @@ void drawBorder (View *view, Layout *layout, Rectangle *area,
                  int x, int y, int width, int height,
                  Style *style, bool inverse)
 {
+   if (drawRoundedBorder(view, layout, area, x, y, width, height, style, inverse))
+      return;
    /** \todo a lot! */
    int xb1, yb1, xb2, yb2;
 
@@ -1258,7 +1305,7 @@ void drawBackground (View *view, Layout *layout, Rectangle *area,
    // necessary to draw the background if background color and image
    // are not set (NULL), i. e. shining through.
 
-   if (hasBgColor || hasBgImage) {
+   if (hasBgColor || hasBgImage || style->gradient.count) {
       Rectangle bgArea, intersection;
       bgArea.x = x;
       bgArea.y = y;
@@ -1266,14 +1313,20 @@ void drawBackground (View *view, Layout *layout, Rectangle *area,
       bgArea.height = height;
 
       if (area->intersectsWith (&bgArea, &intersection)) {
-         if (hasBgColor)
+         if ((hasBgColor || style->gradient.count) &&
+             (hasRoundedCorners(style) || style->gradient.count))
+            drawBackgroundPaint(view, layout, &intersection, x, y, width, height, style, bgColor, inverse);
+         else if (hasBgColor)
             view->drawRectangle (bgColor,
                                  inverse ?
                                  Color::SHADING_INVERSE : Color::SHADING_NORMAL,
                                  true, intersection.x, intersection.y,
                                  intersection.width, intersection.height);
 
-         if (hasBgImage)
+         if (hasBgImage && hasRoundedCorners(style))
+            drawRoundedBackgroundImage(view, layout, &intersection, x, y, width, height,
+               xRef, yRef, widthRef, heightRef, style);
+         else if (hasBgImage)
             drawBackgroundImage (view, style->backgroundImage,
                                  style->backgroundRepeat,
                                  style->backgroundAttachment,

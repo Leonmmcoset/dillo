@@ -17,6 +17,8 @@ extern "C" {
 #define WEB_Image    2
 #define WEB_Stylesheet 4
 #define WEB_Download 8   /* Half implemented... */
+#define WEB_Script 16
+#define WEB_Request 32
 
 
 typedef struct _DilloWeb DilloWeb;
@@ -27,6 +29,8 @@ struct _DilloWeb {
                                **< NULL if user-initiated. */
   BrowserWindow *bw;          /**< The requesting browser window [reference] */
   int flags;                  /**< Additional info */
+  char *method, *extra_headers, *content_type; /**< Script HTTP request options */
+  int omit_credentials;
 
   DilloImage *Image;          /**< For image urls [reference] */
 

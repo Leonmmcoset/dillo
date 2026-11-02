@@ -53,12 +53,12 @@ StackingContextMgr::~StackingContextMgr ()
 void StackingContextMgr::addChildSCWidget (Widget *widget)
 {
    DBG_OBJ_ENTER ("common.scm", 0, "addChildSCWidget", "%p [z-index = %d]",
-                  widget, widget->getStyle()->zIndex);
+                  widget, stackingZIndex(widget));
 
-   int pos = findZIndex (widget->getStyle()->zIndex, true);
+   int pos = findZIndex (stackingZIndex(widget), true);
    DBG_OBJ_MSGF ("common.scm", 1, "pos = %d", pos);
    if (pos == -1) {
-      pos = findZIndex (widget->getStyle()->zIndex, false);
+      pos = findZIndex (stackingZIndex(widget), false);
       DBG_OBJ_MSGF ("common.scm", 1, "pos = %d", pos);
 
       numZIndices++;
@@ -72,7 +72,7 @@ void StackingContextMgr::addChildSCWidget (Widget *widget)
          DBG_OBJ_ARRSET_NUM ("zIndex", i, zIndices[i]);
       }
 
-      zIndices[pos] = widget->getStyle()->zIndex;
+      zIndices[pos] = stackingZIndex(widget);
       DBG_OBJ_ARRSET_NUM ("zIndex", pos, zIndices[pos]);
    }      
 
@@ -138,10 +138,10 @@ void StackingContextMgr::draw (View *view, Rectangle *area, int startZIndex,
          for (int i = 0; i < childSCWidgets->size (); i++) {
             Widget *child = childSCWidgets->get (i);
             DBG_OBJ_MSGF ("draw", 2, "widget %p has zIndex = %d",
-                          child, child->getStyle()->zIndex);
+                          child, stackingZIndex(child));
 
             Rectangle childArea;
-            if (child->getStyle()->zIndex == zIndices[zIndexIndex] &&
+            if (stackingZIndex(child) == zIndices[zIndexIndex] &&
                 child->intersects (widget, area, &childArea))
                child->draw (view, &childArea, context);
          }
@@ -176,8 +176,8 @@ Widget *StackingContextMgr::getWidgetAtPoint (int x, int y,
               widgetAtPoint == NULL && i >= 0; i--) {
             Widget *child = childSCWidgets->get (i);
             DBG_OBJ_MSGF ("events", 2, "widget %p has zIndex = %d",
-                          child, child->getStyle()->zIndex);
-            if (child->getStyle()->zIndex == zIndices[zIndexIndex])
+                          child, stackingZIndex(child));
+            if (stackingZIndex(child) == zIndices[zIndexIndex])
                widgetAtPoint = child->getWidgetAtPoint (x, y, context);
          }
          

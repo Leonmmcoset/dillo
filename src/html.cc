@@ -40,9 +40,11 @@
 #include "html.hh"
 #include "html_common.hh"
 #include "form.hh"
+#include "javascript.hh"
 #include "table.hh"
 
 #include "dw/textblock.hh"
+#include "dw/flexbox.hh"
 #include "dw/bullet.hh"
 #include "dw/listitem.hh"
 #include "dw/image.hh"
@@ -216,6 +218,12 @@ void *a_Html_text(const char *Type, void *P, CA_Callback_t *Call, void **Data)
 
    *Data = (void*)html;
    *Call = (CA_Callback_t)Html_callback;
+
+   html->javascript = a_Javascript_new(html);
+   if (html->javascript) {
+      *Data = html->javascript;
+      *Call = a_Javascript_callback;
+   }
 
    return (void*)html->dw;
 }
@@ -400,12 +408,16 @@ bool a_Html_tag_set_valign_attr(DilloHtml *html, const char *tag, int tagsize)
 static void Html_add_textblock(DilloHtml *html, bool addBreaks, int breakSpace,
                                bool addBreakOpt)
 {
-   Textblock *textblock = new Textblock (prefs.limit_text_width);
+   DisplayType display = html->style()->display;
+   bool modern = display == DISPLAY_FLEX || display == DISPLAY_INLINE_FLEX || display == DISPLAY_GRID || display == DISPLAY_INLINE_GRID;
+   Textblock *textblock = modern ? new Flexbox(prefs.limit_text_width) : new Textblock (prefs.limit_text_width);
+   textblock->setDomNode(S_TOP(html)->javascript_node);
+   HT2TB(html)->currentDomNode = S_TOP(html)->javascript_node;
    Style *style;
 
    if (addBreaks) {
       StyleAttrs attrs = *(html->style ());
-      attrs.display = DISPLAY_BLOCK;
+      if (!modern) attrs.display = DISPLAY_BLOCK;
       style = Style::create (&attrs);
    } else {
       style = html->style ();
@@ -439,6 +451,8 @@ static bool Html_must_add_breaks(DilloHtml *html)
 DilloHtml::DilloHtml(BrowserWindow *p_bw, const DilloUrl *url,
                      const char *content_type)
 {
+   javascript = NULL;
+   javascript_render = false;
    /* Init main variables */
    bw = p_bw;
    page_url = a_Url_dup(url);
@@ -475,6 +489,7 @@ DilloHtml::DilloHtml(BrowserWindow *p_bw, const DilloUrl *url,
 
    stack = new misc::SimpleVector <DilloHtmlState> (16);
    stack->increase();
+   stack->getRef(0)->javascript_node = 0;
    stack->getRef(0)->parse_mode = DILLO_HTML_PARSE_MODE_INIT;
    stack->getRef(0)->table_mode = DILLO_HTML_TABLE_MODE_NONE;
    stack->getRef(0)->table_border_mode = DILLO_HTML_TABLE_BORDER_SEPARATE;
@@ -532,6 +547,7 @@ void DilloHtml::initDw()
 
    /* Create the main widget */
    dw = stack->getRef(0)->textblock =  new Textblock (prefs.limit_text_width);
+   rootWidget = dw;
 
    bw->num_page_bugs = 0;
    dStr_truncate(bw->page_bugs, 0);
@@ -542,6 +558,7 @@ void DilloHtml::initDw()
  */
 DilloHtml::~DilloHtml()
 {
+   if (javascript) a_Javascript_delete(javascript, this);
    _MSG("::~DilloHtml(this=%p)\n", this);
 
    freeParseData();
@@ -665,7 +682,7 @@ void DilloHtml::finishParsing(int ClientKey)
    InFlags = IN_EOF;
 
    /* Remove this client from our active list */
-   a_Bw_close_client(bw, ClientKey);
+   if (ClientKey) a_Bw_close_client(bw, ClientKey);
 }
 
 /**
@@ -675,7 +692,7 @@ int DilloHtml::formNew(DilloHtmlMethod method, const DilloUrl *action,
                        DilloHtmlEnc enc, const char *charset)
 {
    // avoid data loss on repush after CSS stylesheets have been loaded
-   bool enabled = bw->NumPendingStyleSheets == 0;
+   bool enabled = javascript || bw->NumPendingStyleSheets == 0;
    DilloHtmlForm *form = a_Html_form_new (this, method, action,
                                           enc, charset, enabled);
    int nf = forms->size ();
@@ -1147,6 +1164,7 @@ static void Html_process_space_pre_line(DilloHtml *html, const char *space,
 static void Html_process_space(DilloHtml *html, const char *space,
                                int spacesize)
 {
+   HT2TB(html)->currentDomNode = S_TOP(html)->javascript_node;
    char *spc;
    int i, offset;
    DilloHtmlParseMode parse_mode = S_TOP(html)->parse_mode;
@@ -1232,6 +1250,7 @@ static void Html_process_space(DilloHtml *html, const char *space,
  */
 static void Html_process_word(DilloHtml *html, const char *word, int size)
 {
+   HT2TB(html)->currentDomNode = S_TOP(html)->javascript_node;
    int i, j, start;
    char *Pword;
    DilloHtmlParseMode parse_mode = S_TOP(html)->parse_mode;
@@ -1856,6 +1875,7 @@ static void Html_tag_open_body(DilloHtml *html, const char *tag, int tagsize)
    }
 
    html->dw->setStyle (html->style ());
+   html->dw->setDomNode(S_TOP(html)->javascript_node);
 
    bgColor = html->styleEngine->backgroundColor ();
    if (bgColor)
@@ -2151,6 +2171,7 @@ DilloImage *a_Html_image_new(DilloHtml *html, const char *tag, int tagsize)
    DilloImage *image;
 
    if (!(attrbuf = a_Html_get_attr(html, tag, tagsize, "src")) ||
+       !*attrbuf || strspn(attrbuf, " \t\r\n\f") == strlen(attrbuf) ||
        !(url = a_Html_url_new(html, attrbuf, NULL, 0)))
       return NULL;
 
@@ -2165,6 +2186,7 @@ DilloImage *a_Html_image_new(DilloHtml *html, const char *tag, int tagsize)
    }
 
    dw::Image *dw = new dw::Image(alt_ptr, prefs.mark_unloaded_images);
+   dw->setDomNode(S_TOP(html)->javascript_node);
    image =
       a_Image_new(html->dw->getLayout(), (void*)(dw::core::ImgRenderer*)dw, 0, 0);
    
@@ -3135,6 +3157,7 @@ static void Html_update_content_type(DilloHtml *html, const char *content)
  */
 static void Html_tag_open_meta(DilloHtml *html, const char *tag, int tagsize)
 {
+   if (html->javascript_render) return;
    const char meta_template[] =
 "<table width='100%%'><tr><td bgcolor='#ee0000'>Warning:</td>\n"
 " <td bgcolor='#8899aa' width='100%%'>\n"
@@ -3251,9 +3274,13 @@ static void Html_css_load_callback(int Op, CacheClient_t *Client)
    _MSG("Html_css_load_callback: Op=%d\n", Op);
    if (Op) { /* EOF */
       BrowserWindow *bw = ((DilloWeb *)Client->Web)->bw;
-      /* Repush when we've got them all */
-      if (--bw->NumPendingStyleSheets == 0)
-         a_UIcmd_repush(bw);
+      DilloHtml *html = static_cast<DilloHtml *>(a_Bw_get_current_doc(bw));
+      const DilloUrl *redirect = a_Cache_get_redirect_url(Client->Url);
+      if (html && Op == CA_Close && redirect)
+         a_Html_load_stylesheet(html, const_cast<DilloUrl *>(redirect));
+      a_Bw_close_client(bw, Client->Key);
+      if (html && html->javascript) a_Javascript_render(html->javascript);
+      else if (bw->NumPendingStyleSheets == 0) a_UIcmd_repush(bw);
    }
 }
 
@@ -3266,6 +3293,8 @@ void a_Html_load_stylesheet(DilloHtml *html, DilloUrl *url)
    int len;
 
    dReturn_if (url == NULL || ! prefs.load_stylesheets);
+   uint_t flags = a_Cache_get_flags_with_redirection(url);
+   dReturn_if (flags & (CA_NotFound | CA_Aborted | CA_RedirectLoop));
 
    _MSG("Html_load_stylesheet: ");
    if ((a_Capi_get_flags_with_redirection(url) & CAPI_Completed) &&
@@ -3290,15 +3319,15 @@ void a_Html_load_stylesheet(DilloHtml *html, DilloUrl *url)
       html->styleEngine->parse(html, url, data, len, CSS_ORIGIN_AUTHOR);
       a_Capi_unref_buf(url);
    } else {
+      if (a_Bw_stylesheet_requested(html->bw, url)) return;
       /* Fill a Web structure for the cache query */
       int ClientKey;
       DilloWeb *Web = a_Web_new(html->bw, url, html->page_url);
       Web->flags |= WEB_Stylesheet;
-      if ((ClientKey = a_Capi_open_url(Web, Html_css_load_callback, NULL))) {
-         ++html->bw->NumPendingStyleSheets;
-         a_Bw_add_client(html->bw, ClientKey, 0);
+      ClientKey = a_Capi_open_url(Web, Html_css_load_callback, NULL);
+      a_Bw_add_stylesheet_client(html->bw, ClientKey, url);
+      if (ClientKey) {
          a_Bw_add_url(html->bw, url);
-         MSG("NumPendingStyleSheets=%d\n", html->bw->NumPendingStyleSheets);
       }
    }
    _MSG("\n");
@@ -3919,6 +3948,11 @@ static void Html_parse_common_attrs(DilloHtml *html, char *tag, int tagsize)
    const char *attrbuf;
    char lang[3];
 
+   if (html->javascript_render) {
+      const char *node = a_Html_get_attr(html, tag, tagsize, "data-dillo-node");
+      S_TOP(html)->javascript_node = node ? atoi(node) : 0;
+   }
+
    /* Retain attributes for CSS matching, using the same entity decoding as
     * other HTML attributes. Skip quoted values while enumerating names. */
    if (prefs.parse_embedded_css || prefs.load_stylesheets) {
@@ -4084,6 +4118,7 @@ bool a_Html_should_display(DilloHtml *html)
 static void Html_process_tag(DilloHtml *html, char *tag, int tagsize)
 {
    int ti, ni;           /* stack tag index and new tag index */
+   Widget *parentBlock;
    char *start = tag + 1; /* discard the '<' */
    int IsCloseTag = (*start == '/');
 
@@ -4139,14 +4174,19 @@ static void Html_process_tag(DilloHtml *html, char *tag, int tagsize)
 
       /* Call the open function for this tag */
       _MSG("Html_process_tag Open : %s\n", Tags[ni].name);
+      parentBlock = html->dw;
       Tags[ni].open (html, tag, tagsize);
 
       if (! S_TOP(html)->display_none) {
          switch (html->style ()->display) {
             case DISPLAY_BLOCK:
+            case DISPLAY_FLEX:
+            case DISPLAY_GRID:
                Html_display_block(html);
                break;
             case DISPLAY_INLINE_BLOCK:
+            case DISPLAY_INLINE_FLEX:
+            case DISPLAY_INLINE_GRID:
                Html_display_inline_block(html);
                break;
             case DISPLAY_LIST_ITEM:
@@ -4156,7 +4196,17 @@ static void Html_process_tag(DilloHtml *html, char *tag, int tagsize)
                S_TOP(html)->display_none = true;
                break;
             case DISPLAY_INLINE:
-               if (html->style()->vloat != FLOAT_NONE)
+               if (html->style()->modernLayout &&
+                   (html->style()->position == POSITION_ABSOLUTE || html->style()->position == POSITION_FIXED) &&
+                   ni != a_Html_tag_index("img") && ni != a_Html_tag_index("input") && ni != a_Html_tag_index("textarea") && ni != a_Html_tag_index("select") &&
+                   html->dw == parentBlock)
+                  Html_display_inline_block(html);
+               else if (html->dw == parentBlock && parentBlock &&
+                   (parentBlock->getStyle()->display == DISPLAY_FLEX || parentBlock->getStyle()->display == DISPLAY_INLINE_FLEX ||
+                    parentBlock->getStyle()->display == DISPLAY_GRID || parentBlock->getStyle()->display == DISPLAY_INLINE_GRID) &&
+                   ni != a_Html_tag_index("img") && ni != a_Html_tag_index("input") && ni != a_Html_tag_index("textarea") && ni != a_Html_tag_index("select"))
+                  Html_add_textblock(html, false, 0, false);
+               else if (html->style()->vloat != FLOAT_NONE)
                   Html_display_block(html);
                break;
             default:
@@ -4183,6 +4233,36 @@ static void Html_process_tag(DilloHtml *html, char *tag, int tagsize)
 
       if (html->styleEngine->getId ())
          Html_add_anchor(html, html->styleEngine->getId ());
+
+      if (html->javascript_render && S_TOP(html)->javascript_node) {
+         dw::core::style::Style *s = html->style();
+         static const char *displays[] = {"block", "inline", "inline-block", "list-item", "none",
+            "table", "table-row-group", "table-header-group", "table-footer-group", "table-row", "table-cell", "flex", "inline-flex", "grid", "inline-grid"};
+         Dstr *css = dStr_new("");
+         dStr_sprintfa(css, "display:%s;position:%s;color:#%06x;",
+            S_TOP(html)->display_none ? "none" : displays[s->display],
+            s->position == dw::core::style::POSITION_ABSOLUTE ? "absolute" :
+            s->position == dw::core::style::POSITION_FIXED ? "fixed" :
+            s->position == dw::core::style::POSITION_RELATIVE ? "relative" : "static",
+            s->color ? s->color->getColor() : 0);
+         if (s->backgroundColor) dStr_sprintfa(css, "background-color:#%06x;", s->backgroundColor->getColor());
+         else dStr_append(css, "background-color:transparent;");
+         if (s->zIndex == dw::core::style::Z_INDEX_AUTO) dStr_append(css, "z-index:auto;");
+         else dStr_sprintfa(css, "z-index:%d;", s->zIndex);
+         static const char *overflows[] = {"visible", "hidden", "scroll", "auto"};
+         dStr_sprintfa(css, "overflow:%s;", overflows[s->overflow]);
+         if (s->font) dStr_sprintfa(css, "font-family:%s;font-size:%dpx;font-weight:%d;font-style:%s;",
+            s->font->name, s->font->size, s->font->weight,
+            s->font->style == dw::core::style::FONT_STYLE_NORMAL ? "normal" : "italic");
+         dStr_sprintfa(css, "margin-top:%dpx;margin-right:%dpx;margin-bottom:%dpx;margin-left:%dpx;"
+            "padding-top:%dpx;padding-right:%dpx;padding-bottom:%dpx;padding-left:%dpx;"
+            "border-top-width:%dpx;border-right-width:%dpx;border-bottom-width:%dpx;border-left-width:%dpx;",
+            s->margin.top, s->margin.right, s->margin.bottom, s->margin.left,
+            s->padding.top, s->padding.right, s->padding.bottom, s->padding.left,
+            s->borderWidth.top, s->borderWidth.right, s->borderWidth.bottom, s->borderWidth.left);
+         html->javascript_styles[S_TOP(html)->javascript_node] = css->str;
+         dStr_free(css, true);
+      }
 
       /* Request immediate close for elements with forbidden close tag. */
       /* TODO: XHTML always requires close tags. A simple implementation

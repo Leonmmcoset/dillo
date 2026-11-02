@@ -347,11 +347,10 @@ protected:
 
    virtual Embed *getEmbed () { return embed; }
    virtual void setEmbed (Embed *embed);
+   virtual bool activationIsClick () const { return true; }
 
-   inline void emitActivate () {
-      return activateEmitter.emitActivate (this); }
-   inline void emitClicked (EventButton *event) {
-      clickedEmitter.emitClicked (this, event); }
+   void emitActivate ();
+   void emitClicked (EventButton *event);
 
 public:
    inline Resource ()
@@ -387,6 +386,8 @@ public:
       activateEmitter.connectActivate (receiver); }
    inline void connectClicked (ClickedReceiver *receiver) {
       clickedEmitter.connectClicked (receiver); }
+   bool emitDomEvent (const char *type, const char *key = "", int keyCode = 0)
+   { return !embed || embed->emitDomEvent(embed->getDomNode(), type, key, keyCode); }
 };
 
 
@@ -515,6 +516,8 @@ class OptionMenuResource: public SelectionResource
 
 class TextResource: public Resource
 {
+protected:
+   bool activationIsClick () const { return false; }
 public:
    Iterator *iterator (Content::Type mask, bool atEnd);
 
@@ -522,6 +525,13 @@ public:
    virtual void setText (const char *text) = 0;
    virtual bool isEditable () = 0;
    virtual void setEditable (bool editable) = 0;
+   virtual bool hasFocus () { return false; }
+   virtual bool hasPendingPaste () { return false; }
+   virtual int selectionStart () { return 0; }
+   virtual int selectionEnd () { return 0; }
+   virtual void setSelection (int, int) {}
+   virtual void clearFocus () {}
+   virtual void restoreFocus (int, int) {}
 };
 
 class EntryResource: public TextResource

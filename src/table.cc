@@ -165,6 +165,7 @@ void Html_tag_content_table(DilloHtml *html, const char *tag, int tagsize)
 
    HT2TB(html)->addParbreak (0, html->wordStyle ());
    table = new dw::Table(prefs.limit_text_width);
+   table->setDomNode(S_TOP(html)->javascript_node);
    HT2TB(html)->addWidget (table, html->style ());
    HT2TB(html)->addParbreak (0, html->wordStyle ());
 
@@ -256,6 +257,7 @@ void Html_tag_content_td(DilloHtml *html, const char *tag, int tagsize)
  */
 void Html_tag_open_tbody(DilloHtml *html, const char *tag, int tagsize)
 {
+   html->styleEngine->inheritNonCssHints();
 }
 
 void Html_tag_content_tbody(DilloHtml *html, const char *tag, int tagsize)
@@ -267,6 +269,7 @@ void Html_tag_content_tbody(DilloHtml *html, const char *tag, int tagsize)
  */
 void Html_tag_open_tfoot(DilloHtml *html, const char *tag, int tagsize)
 {
+   html->styleEngine->inheritNonCssHints();
 }
 
 /*
@@ -274,6 +277,7 @@ void Html_tag_open_tfoot(DilloHtml *html, const char *tag, int tagsize)
  */
 void Html_tag_open_thead(DilloHtml *html, const char *tag, int tagsize)
 {
+   html->styleEngine->inheritNonCssHints();
 }
 
 /*
@@ -491,6 +495,7 @@ static void Html_tag_content_table_cell(DilloHtml *html,
       }
 
       ((dw::Table*)S_TOP(html)->table)->addCell (col_tb, colspan, rowspan);
+      col_tb->setDomNode(S_TOP(html)->javascript_node);
       S_TOP(html)->textblock = html->dw = col_tb;
       break;
 

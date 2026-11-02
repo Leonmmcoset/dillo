@@ -32,6 +32,8 @@ private:
    typedef enum { DRAW_PLAIN, DRAW_CLIPPED, DRAW_BUFFERED } DrawType;
 
    int bgColor;
+   core::style::Style *cssBackground;
+   void paintBackground(core::Rectangle *area);
    core::Region drawRegion;
    core::Rectangle *exposeArea;
    static BackBuffer *backBuffer;
@@ -74,6 +76,7 @@ public:
    void setCanvasSize (int width, int ascent, int descent);
    void setCursor (core::style::Cursor cursor);
    void setBgColor (core::style::Color *color);
+   void setCssBackground(core::style::Style *style);
 
    void startDrawing (core::Rectangle *area);
    void finishDrawing (core::Rectangle *area);

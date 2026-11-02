@@ -128,6 +128,8 @@ DilloWeb* a_Web_new(BrowserWindow *bw, const DilloUrl *url,
    web->requester = a_Url_dup(requester);
    web->bw = bw;
    web->flags = 0;
+   web->method = web->extra_headers = web->content_type = NULL;
+   web->omit_credentials = 0;
    web->Image = NULL;
    web->filename = NULL;
    web->stream = NULL;
@@ -154,6 +156,7 @@ void a_Web_free(DilloWeb *web)
    if (!web) return;
    a_Url_free(web->url);
    a_Url_free(web->requester);
+   dFree(web->method); dFree(web->extra_headers); dFree(web->content_type);
    a_Image_unref(web->Image);
    dFree(web->filename);
    dList_remove(ValidWebs, (void *)web);

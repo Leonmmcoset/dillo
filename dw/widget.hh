@@ -125,6 +125,9 @@ private:
     * \brief The parent widget, NULL for top-level widgets.
     */
    Widget *parent;
+   int domNode;
+   DomEventCallback domEventCallback;
+   void *domEventData;
 
    /**
     * \brief ...
@@ -434,6 +437,7 @@ private:
    DW_Callback_t deleteCallbackFunc;
 
 public:
+   virtual bool viewportPositionChanged() { return false; }
    inline void setDeleteCallback(DW_Callback_t func, void *data)
    { deleteCallbackFunc = func; deleteCallbackData = data; }
 
@@ -480,13 +484,22 @@ public:
    void setGenerator (Widget *generator) { this->generator = generator; }
 
    inline style::Style *getStyle () { return style; }
+   void setDomNode (int node) { domNode = node; }
+   int getDomNode () const { return domNode; }
+   void setDomEventHandler (DomEventCallback callback, void *data)
+   { domEventCallback = callback; domEventData = data; }
+   bool emitDomEvent (int node, const char *type, const char *key = "",
+                       int keyCode = 0);
    /** \todo I do not like this. */
    inline Allocation *getAllocation () { return &allocation; }
+   virtual bool getDomAllocation (int node, Allocation *result);
    inline bool inAllocation (int x, int y) {
       return wasAllocated () && x >= allocation.x && y >= allocation.y &&
          x <= allocation.x + allocation.width &&
          y <= allocation.y + getHeight ();
    }
+   bool isPointVisible(int x, int y);
+   virtual bool drawsOutsideAllocation() { return false; }
 
    inline int boxOffsetX ()
    { return extraSpace.left + getStyle()->boxOffsetX (); }
@@ -552,6 +565,7 @@ public:
    virtual bool isPossibleContainer ();
 
    void containerSizeChanged ();
+   void invalidateSizeRequest ();
 
    bool intersects (Widget *refWidget, Rectangle *area,
                     Rectangle *intersection);

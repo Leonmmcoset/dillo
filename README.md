@@ -12,6 +12,11 @@ Screenshot of the [Dillo Website][dillo] rendered in Dillo:
 
 To install Dillo follow the [installation guide](doc/install.md).
 
+This tree includes an initial QuickJS JavaScript integration with a persistent
+HTML5 DOM. JavaScript is enabled by default and can be disabled in Settings or
+with `--disable-javascript` at build time. See the [JavaScript guide](doc/javascript.md)
+for supported APIs, tests and the remaining modern layout/Baidu compatibility work.
+
 The user interface supports English and Simplified Chinese. Dillo chooses the
 language at startup from the first nonempty variable among `LC_ALL`,
 `LC_MESSAGES`, and `LANG`. Simplified Chinese locales (`zh_CN`, `zh_SG`,

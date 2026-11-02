@@ -17,6 +17,7 @@
 #include <sys/stat.h>
 #include "msg.h"
 #include "nav.h"
+#include "javascript.hh"
 #include "history.h"
 #include "web.hh"
 #include "uicmd.hh"
@@ -32,19 +33,32 @@
 typedef struct {
    int url_idx;
    int posx, posy;
+   unsigned long document_id;
+   char *state;
 } nav_stack_item;
 
+static unsigned long Nav_document_id;
+
+static void Nav_stack_item_free(nav_stack_item *item)
+{
+   dFree(item->state);
+   dFree(item);
+}
 
 
 /*
  * Free memory used by this module
- * TODO: this may be removed or called by a_Bw_free().
-  *      Currently is not called from anywhere.
  */
 void a_Nav_free(BrowserWindow *bw)
 {
-   a_Nav_cancel_expect(bw);
-   dFree(bw->nav_stack);
+   nav_stack_item *item;
+   a_Bw_cancel_expect(bw);
+   while ((item = dList_nth_data(bw->nav_stack, 0))) {
+      dList_remove_fast(bw->nav_stack, item);
+      Nav_stack_item_free(item);
+   }
+   dList_free(bw->nav_stack);
+   bw->nav_stack = NULL;
 }
 
 
@@ -113,7 +127,7 @@ static void Nav_stack_truncate(BrowserWindow *bw, int pos)
    while (pos < dList_length(bw->nav_stack)) {
       data = dList_nth_data(bw->nav_stack, pos);
       dList_remove_fast (bw->nav_stack, data);
-      dFree(data);
+      Nav_stack_item_free(data);
    }
 }
 
@@ -127,10 +141,11 @@ static void Nav_stack_append(BrowserWindow *bw, int url_idx)
    dReturn_if_fail (bw != NULL);
 
    /* Insert the new element */
-   nsi = dNew(nav_stack_item, 1);
+   nsi = dNew0(nav_stack_item, 1);
    nsi->url_idx = url_idx;
    nsi->posx = 0;
    nsi->posy = 0;
+   nsi->document_id = ++Nav_document_id;
    dList_append (bw->nav_stack, nsi);
 }
 
@@ -173,10 +188,12 @@ static void Nav_stack_clean(BrowserWindow *bw)
    dReturn_if_fail (bw != NULL);
 
    if ((i = a_Nav_stack_size(bw)) >= 2 &&
-       NAV_UIDX(bw,i - 2) == NAV_UIDX(bw,i - 1)) {
+       NAV_UIDX(bw,i - 2) == NAV_UIDX(bw,i - 1) &&
+       !((nav_stack_item *)dList_nth_data(bw->nav_stack, i-2))->state &&
+       !((nav_stack_item *)dList_nth_data(bw->nav_stack, i-1))->state) {
       void *data = dList_nth_data (bw->nav_stack, i - 1);
       dList_remove_fast (bw->nav_stack, data);
-      dFree(data);
+      Nav_stack_item_free(data);
       if (bw->nav_stack_ptr >= a_Nav_stack_size(bw))
          bw->nav_stack_ptr = a_Nav_stack_size(bw) - 1;
    }
@@ -219,6 +236,18 @@ static void Nav_open_url(BrowserWindow *bw, const DilloUrl *url,
    /* Update navigation-stack-pointer (offset may be zero) */
    Nav_stack_move_ptr(bw, offset);
 
+   if (offset && !ForceReload) {
+      nav_stack_item *old = dList_nth_data(bw->nav_stack, idx);
+      nav_stack_item *target = dList_nth_data(bw->nav_stack, bw->nav_stack_ptr);
+      if (old && target && old->document_id == target->document_id) {
+         a_UIcmd_set_scroll_xy(bw, target->posx, target->posy);
+         if (a_Javascript_history_traverse(bw, url)) {
+            a_UIcmd_set_buttons_sens(bw);
+            return;
+         }
+      }
+   }
+
    /* Page must be reloaded, if old and new url (considering anchor) differ */
    MustLoad = ForceReload || !old_url;
    if (old_url){
@@ -227,7 +256,8 @@ static void Nav_open_url(BrowserWindow *bw, const DilloUrl *url,
    }
 
    if (MustLoad) {
-      a_Bw_stop_clients(bw, BW_Root + BW_Img);
+      a_Javascript_stop(bw);
+      a_Bw_stop_clients(bw, BW_Root + BW_Img + BW_Stylesheet);
       a_Bw_cleanup(bw);
 
       // a_Menu_pagemarks_new(bw);
@@ -357,6 +387,59 @@ void a_Nav_push(BrowserWindow *bw, const DilloUrl *url,
    a_Bw_expect(bw, url);
    Nav_open_url(bw, url, requester, 0);
    a_UIcmd_set_location_text(bw, URL_STR(url));
+}
+
+/* Replace the current history entry for location.replace(). */
+void a_Nav_replace(BrowserWindow *bw, const DilloUrl *url,
+                   const DilloUrl *requester)
+{
+   if (a_Nav_stack_ptr(bw) >= 0) {
+      int pos = a_Nav_stack_ptr(bw);
+      Nav_stack_truncate(bw, pos);
+      bw->nav_stack_ptr = pos - 1;
+   }
+   a_Nav_push(bw, url, requester);
+}
+
+/* Same-document history changes do not open a cache client or replace the DOM.
+ * State is an opaque, bounded QuickJS structured-clone encoding. */
+int a_Nav_history_update(BrowserWindow *bw, const DilloUrl *url,
+                         const char *state, int replace)
+{
+   nav_stack_item *item = dList_nth_data(bw->nav_stack, bw->nav_stack_ptr);
+   unsigned long document_id;
+   size_t bytes = strlen(state);
+   int i, x, y;
+   if (!item || bytes > 1024 * 1024 || (!replace && a_Nav_stack_size(bw) >= 1000))
+      return 0;
+   for (i = 0; i < a_Nav_stack_size(bw); ++i) {
+      nav_stack_item *entry = dList_nth_data(bw->nav_stack, i);
+      if (entry->state) bytes += strlen(entry->state);
+   }
+   if (bytes > 16 * 1024 * 1024) return 0;
+   a_UIcmd_get_scroll_xy(bw, &x, &y);
+   document_id = item->document_id;
+   if (!replace) {
+      item->posx = x; item->posy = y;
+      Nav_stack_truncate(bw, bw->nav_stack_ptr + 1);
+      Nav_stack_append(bw, a_History_add_url((DilloUrl *)url));
+      ++bw->nav_stack_ptr;
+      item = dList_nth_data(bw->nav_stack, bw->nav_stack_ptr);
+      item->document_id = document_id;
+   } else {
+      item->url_idx = a_History_add_url((DilloUrl *)url);
+   }
+   item->posx = x; item->posy = y;
+   dFree(item->state); item->state = dStrdup(state);
+   a_UIcmd_set_location_text(bw, URL_STR(url));
+   a_UIcmd_set_buttons_sens(bw);
+   return 1;
+}
+
+const char *a_Nav_history_state(BrowserWindow *bw)
+{
+   nav_stack_item *item = dList_nth_data(bw->nav_stack, bw->nav_stack_ptr);
+   return item && item->state ? item->state : "";
 }
 
 /*

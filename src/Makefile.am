@@ -35,6 +35,11 @@ dillo_LDADD = \
 	@LIBICONV_LIBS@ @LIBPTHREAD_LIBS@ @LIBX11_LIBS@ \
 	@BROTLI_LIBS@
 
+if ENABLE_JAVASCRIPT
+AM_CPPFLAGS += -I$(top_srcdir)/vendor/quickjs -I$(top_srcdir)/vendor/lexbor/source
+dillo_LDADD += $(top_builddir)/vendor/libquickjs.a $(top_builddir)/vendor/liblexbor.a -lm
+endif
+
 dillo_SOURCES = \
 	dillo.cc \
 	version.cc \
@@ -115,6 +120,8 @@ dillo_SOURCES = \
 	cssmedia.hh \
 	css.hh \
 	cssparser.cc \
+	cssvariables.cc \
+	cssvariables.hh \
 	cssparser.hh \
 	doctree.hh \
 	styleengine.cc \
@@ -124,6 +131,13 @@ dillo_SOURCES = \
 	html.hh \
 	html_charrefs.h \
 	html_common.hh \
+	javascript.cc \
+	javascript.hh \
+	jsengine.cc \
+	jsengine.hh \
+	jsstorage.cc \
+	jsstorage.hh \
+	js-dom.inc \
 	form.cc \
 	form.hh \
 	table.cc \

@@ -100,6 +100,7 @@ typedef struct {
    int ismap_url_len;             /**< Used by server side image maps */
    int illegal_chars;             /**< number of illegal chars */
    int illegal_chars_spc;         /**< number of illegal space chars */
+   unsigned long request_id;      /**< Private cache partition; never sent */
 } DilloUrl;
 
 
@@ -112,6 +113,7 @@ DilloUrl* a_Url_dup(const DilloUrl *u);
 int a_Url_cmp(const DilloUrl *A, const DilloUrl *B);
 void a_Url_set_flags(DilloUrl *u, int flags);
 void a_Url_set_data(DilloUrl *u, Dstr **data);
+void a_Url_set_unique(DilloUrl *u);
 void a_Url_set_ismap_coords(DilloUrl *u, char *coord_str);
 char *a_Url_decode_hex_str(const char *str);
 char *a_Url_encode_hex_str(const char *str);

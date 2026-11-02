@@ -6,6 +6,9 @@ endif
 
 if ENABLE_DILLOC_TESTS
 SUBDIRS += dilloc
+if ENABLE_JAVASCRIPT
+SUBDIRS += javascript
+endif
 endif
 
 EXTRA_DIST = \

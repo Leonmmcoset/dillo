@@ -6,6 +6,7 @@ EXTRA_DIST = \
 	dillo.1.in \
 	user_help.in.html \
 	i18n.md \
+	javascript.md \
 	install.md
 
 dillo.1: $(srcdir)/dillo.1.in Makefile

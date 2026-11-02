@@ -33,11 +33,17 @@ private:
 public:
    StackingContextMgr (Widget *widget);
    ~StackingContextMgr ();
+   static int stackingZIndex(Widget *widget) {
+      return widget->getStyle()->zIndex == style::Z_INDEX_AUTO ? 0 : widget->getStyle()->zIndex;
+   }
 
    inline static bool isEstablishingStackingContext (Widget *widget) {
       return IMPL_POS &&
-         widget->getStyle()->position != style::POSITION_STATIC &&
-         widget->getStyle()->zIndex != style::Z_INDEX_AUTO;
+         widget->getStyle()->modernLayout &&
+         ((widget->getStyle()->position != style::POSITION_STATIC &&
+           widget->getStyle()->zIndex != style::Z_INDEX_AUTO) ||
+          widget->getStyle()->hasTransform ||
+          widget->getStyle()->position == style::POSITION_FIXED);
    }
 
    inline static bool handledByStackingContextMgr  (Widget *widget) {

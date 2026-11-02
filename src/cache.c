@@ -69,6 +69,7 @@ typedef struct {
    int TransferSize;         /**< Actual length of the HTTP transfer */
    uint_t Flags;             /**< See Flag Defines in cache.h */
    int Hits;                 /**< Counter of hits for the entry */
+   bool_t NoBody;             /**< HEAD, 204 and 304 response framing */
 } CacheEntry_t;
 
 
@@ -218,6 +219,7 @@ static void Cache_entry_init(CacheEntry_t *NewEntry, const DilloUrl *Url)
    NewEntry->TransferSize = 0;
    NewEntry->Flags = CA_IsEmpty | CA_InProgress | CA_KeepAlive;
    NewEntry->Hits = 0;
+   NewEntry->NoBody = FALSE;
 }
 
 /**
@@ -501,6 +503,7 @@ int a_Cache_open_url(void *web, CA_Callback_t Call, void *CbData)
       /* URL not cached: create an entry, send our client to the queue,
        * and open a new connection */
       entry = Cache_entry_add(Url);
+      entry->NoBody = Web->method && !strcmp(Web->method, "HEAD");
 
       /* URL is an internal call, populate */
       if (isInternal) {
@@ -532,6 +535,18 @@ uint_t a_Cache_get_flags_with_redirection(const DilloUrl *url)
 {
    CacheEntry_t *entry = Cache_entry_search_with_redirect(url);
    return (entry ? entry->Flags : 0);
+}
+
+const DilloUrl *a_Cache_get_redirect_url(const DilloUrl *url)
+{
+   CacheEntry_t *entry = Cache_entry_search(url);
+   return entry && (entry->Flags & CA_Redirect) ? entry->Location : NULL;
+}
+
+const DilloUrl *a_Cache_get_final_url(const DilloUrl *url)
+{
+   CacheEntry_t *entry = Cache_entry_search_with_redirect(url);
+   return entry ? entry->Url : NULL;
 }
 
 /**
@@ -690,6 +705,13 @@ Dstr *a_Cache_get_header(const DilloUrl *Url)
    return entry->Header;
 }
 
+/* Callbacks for subresources need the response for this exact hop. */
+Dstr *a_Cache_get_header_direct(const DilloUrl *Url)
+{
+   CacheEntry_t *entry = Cache_entry_search(Url);
+   return entry ? entry->Header : NULL;
+}
+
 /**
  * Unreference the data buffer when no longer using it.
  */
@@ -797,6 +819,8 @@ static void Cache_parse_header(CacheEntry_t *entry)
    _MSG("Cache_parse_header\n");
 
    if (entry->Header->len > 12) {
+      if (!strncmp(header + 9, "204", 3) || !strncmp(header + 9, "304", 3))
+         entry->NoBody = TRUE;
       if (header[9] == '1' && header[10] == '0' && header[11] == '0') {
          /* 100: Continue. The "real" header has not come yet. */
          MSG("An actual 100 Continue header!\n");
@@ -894,6 +918,7 @@ static void Cache_parse_header(CacheEntry_t *entry)
       for (i = 0; (client = dList_nth_data(ClientQueue, i)); ++i) {
          if (client->Url == entry->Url) {
             DilloWeb *web = client->Web;
+            if (web->omit_credentials) continue;
 
             /* Only set cookies if any of:
              * - User made request (requester == NULL)
@@ -1067,6 +1092,7 @@ bool_t a_Cache_process_dbuf(int Op, const char *buf, size_t buf_size,
       if (entry->Flags & CA_GotHeader) {
          str = buf + offset;
          len = buf_size - offset;
+         if (entry->NoBody) len = 0;
          entry->TransferSize += len;
          dstr1 = dstr2 = dstr3 = NULL;
 
@@ -1098,6 +1124,7 @@ bool_t a_Cache_process_dbuf(int Op, const char *buf, size_t buf_size,
              (entry->TransferSize >= entry->ExpectedSize)) {
             done = TRUE;
          }
+         if (entry->NoBody) done = TRUE;
          if (!(entry->Flags & CA_KeepAlive)) {
             /* Let IOClose finish it later */
             done = FALSE;
@@ -1119,10 +1146,15 @@ bool_t a_Cache_process_dbuf(int Op, const char *buf, size_t buf_size,
          int i;
          CacheClient_t *Client;
 
+         entry->Flags &= ~CA_InProgress;
+
          for (i = 0; (Client = dList_nth_data(ClientQueue, i)); ++i) {
             if (Client->Url == entry->Url) {
                DilloWeb *web = (DilloWeb *)Client->Web;
 
+               if (Client->Callback &&
+                   (web->flags & (WEB_Script | WEB_Request | WEB_Stylesheet)))
+                  Client->Callback(CA_Abort, Client);
                a_Bw_remove_client(web->bw, Client->Key);
                Cache_client_dequeue(Client);
                --i; /* Keep the index value in the next iteration */
@@ -1389,7 +1421,8 @@ static CacheEntry_t *Cache_process_queue(CacheEntry_t *entry)
             }
          } else {
             /* For non root URLs, ignore redirections and 404 answers */
-            if (entry->Flags & CA_Redirect || entry->Flags & CA_NotFound)
+            if (!(ClientWeb->flags & (WEB_Script | WEB_Request | WEB_Stylesheet)) &&
+                (entry->Flags & CA_Redirect || entry->Flags & CA_NotFound))
                Client->Callback = Cache_null_client;
          }
 

@@ -20,6 +20,8 @@
 #include "list.h"
 #include "capi.h"
 #include "uicmd.hh"
+#include "javascript.hh"
+#include "nav.h"
 
 
 /*
@@ -66,6 +68,8 @@ BrowserWindow *a_Bw_new(void)
 
    bw->RootClients = dList_new(8);
    bw->ImageClients = dList_new(8);
+   bw->StyleClients = dList_new(8);
+   bw->StyleUrls = dList_new(8);
    bw->NumImages = 0;
    bw->NumImagesGot = 0;
    bw->NumPendingStyleSheets = 0;
@@ -89,6 +93,7 @@ BrowserWindow *a_Bw_new(void)
 void a_Bw_free(BrowserWindow *bw)
 {
    int i, j;
+   a_Javascript_forget_window(bw);
 
    for (i = 0; i < num_bws; i++) {
       if (bws[i] == bw) {
@@ -96,16 +101,17 @@ void a_Bw_free(BrowserWindow *bw)
 
          dList_free(bw->RootClients);
          dList_free(bw->ImageClients);
+         dList_free(bw->StyleClients);
+         for (j = 0; j < dList_length(bw->StyleUrls); ++j)
+            a_Url_free(dList_nth_data(bw->StyleUrls, j));
+         dList_free(bw->StyleUrls);
          dList_free(bw->Docs);
 
-         a_Url_free(bw->nav_expect_url);
          for (j = 0; j < dList_length(bw->PageUrls); ++j)
             a_Url_free(dList_nth_data(bw->PageUrls, j));
          dList_free(bw->PageUrls);
 
-         for (j = 0; j < dList_length(bw->nav_stack); ++j)
-            dFree(dList_nth_data(bw->nav_stack, j));
-         dList_free(bw->nav_stack);
+         a_Nav_free(bw);
 
          a_Url_free(bw->meta_refresh_url);
 
@@ -137,8 +143,25 @@ void a_Bw_add_client(BrowserWindow *bw, int Key, int Root)
       /* --Images progress-bar stuff-- */
       a_UIcmd_set_img_prog(bw, bw->NumImagesGot, bw->NumImages, 1);
    }
-   if (dList_length(bw->RootClients) + dList_length(bw->ImageClients) == 1)
+   if (dList_length(bw->RootClients) + dList_length(bw->ImageClients) +
+       dList_length(bw->StyleClients) == 1)
       a_UIcmd_set_buttons_sens(bw);
+}
+
+void a_Bw_add_stylesheet_client(BrowserWindow *bw, int Key, const DilloUrl *url)
+{
+   dList_append(bw->StyleUrls, a_Url_dup(url));
+   if (!Key) return;
+   dList_append(bw->StyleClients, INT2VOIDP(Key));
+   ++bw->NumPendingStyleSheets;
+   a_UIcmd_set_buttons_sens(bw);
+}
+
+int a_Bw_stylesheet_requested(BrowserWindow *bw, const DilloUrl *url)
+{
+   /* Also bound chains of redirects and repeated dynamic insertions. */
+   return dList_length(bw->StyleUrls) >= 1024 ||
+      dList_find_custom(bw->StyleUrls, url, (dCompareFunc)a_Url_cmp) != NULL;
 }
 
 /**
@@ -155,6 +178,9 @@ int a_Bw_remove_client(BrowserWindow *bw, int ClientKey)
    } else if ((data = dList_find(bw->ImageClients, INT2VOIDP(ClientKey)))) {
       dList_remove_fast(bw->ImageClients, data);
       ++bw->NumImagesGot;
+   } else if ((data = dList_find(bw->StyleClients, INT2VOIDP(ClientKey)))) {
+      dList_remove_fast(bw->StyleClients, data);
+      --bw->NumPendingStyleSheets;
    }
    return data ? 0 : 1;
 }
@@ -199,6 +225,13 @@ void a_Bw_stop_clients(BrowserWindow *bw, int flags)
          a_Capi_stop_client(VOIDP2INT(data), (flags & BW_Force));
          dList_remove_fast(bw->ImageClients, data);
       }
+   }
+   if (flags & BW_Stylesheet) {
+      while ((data = dList_nth_data(bw->StyleClients, 0))) {
+         a_Capi_stop_client(VOIDP2INT(data), (flags & BW_Force));
+         dList_remove_fast(bw->StyleClients, data);
+      }
+      bw->NumPendingStyleSheets = 0;
    }
 }
 
@@ -287,6 +320,12 @@ void a_Bw_cleanup(BrowserWindow *bw)
    /* Remove image clients */
    while ((data = dList_nth_data(bw->ImageClients, 0))) {
       dList_remove_fast(bw->ImageClients, data);
+   }
+   while ((data = dList_nth_data(bw->StyleClients, 0)))
+      dList_remove_fast(bw->StyleClients, data);
+   while ((data = dList_nth_data(bw->StyleUrls, 0))) {
+      a_Url_free(data);
+      dList_remove_fast(bw->StyleUrls, data);
    }
    /* Remove PageUrls */
    while ((data = dList_nth_data(bw->PageUrls, 0))) {

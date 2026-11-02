@@ -307,8 +307,11 @@ public:
    inline bool getUsesViewport () { return usesViewport; }
    inline int getWidthViewport () { return viewportWidth; }
    inline int getHeightViewport ()  { return viewportHeight; }
+   inline int getContentWidthViewport() { return viewportWidth - currVScrollbarThickness(); }
+   inline int getContentHeightViewport() { return viewportHeight - currHScrollbarThickness(); }
    inline int getScrollPosX ()  { return scrollX; }
    inline int getScrollPosY ()  { return scrollY; }
+   void flushLayout () { if (resizeIdleId != -1) resizeIdle(); }
 
    /* public */
 
@@ -360,6 +363,7 @@ public:
    void leaveNotify (View *view, ButtonState state);
 
    void scrollPosChanged (View *view, int x, int y);
+   void updateFixedWidgets();
    void viewportSizeChanged (View *view, int width, int height);
 
    inline Platform *getPlatform ()
@@ -444,6 +448,8 @@ public:
    {
       selectionState.copy(destination);
    }
+   inline char *getSelectionText() { return selectionState.getText(); }
+   inline void clearSelection() { selectionState.reset(); }
 
    inline ui::ResourceFactory *getResourceFactory ()
    {

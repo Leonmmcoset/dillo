@@ -23,6 +23,7 @@
 #include "fltkcore.hh"
 #include "fltkflatview.hh"
 #include "fltkcomplexbutton.hh"
+#include "fltktext.hh"
 #include "dlib/dlib.h" /* dTolower */
 #include "../lout/msg.h"
 #include "../lout/misc.hh"
@@ -37,6 +38,8 @@
 #include <FL/Fl_Browser.H>
 
 #include <stdio.h>
+#include <string>
+#include <chrono>
 
 //----------------------------------------------------------------------------
 
@@ -54,8 +57,24 @@ static Fl_Color fltkui_dimmed(Fl_Color c, Fl_Color bg)
  * Used to show optional placeholder text and to enable CTRL+{a,e,d,k} in
  * form inputs (for start,end,del,cut)
  */
-class CustInput2 : public Fl_Input {
+class NativePasteState {
+   std::chrono::steady_clock::time_point deadline;
+protected:
+   void clipboardEvent(int event, int key) {
+      if (event == FL_PASTE) deadline = std::chrono::steady_clock::time_point();
+      else if ((event == FL_KEYBOARD &&
+                ((key == 'v' && Fl::event_state(FL_CTRL)) ||
+                 (key == FL_Insert && Fl::event_state(FL_SHIFT)))) ||
+               (event == FL_PUSH && Fl::event_button() == 2))
+         deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+   }
 public:
+   bool hasPendingPaste() const { return std::chrono::steady_clock::now() < deadline; }
+};
+
+class CustInput2 : public Fl_Input, public NativePasteState {
+public:
+   dw::core::ui::Resource *domResource;
    CustInput2 (int x, int y, int w, int h, const char* l=0);
    ~CustInput2 () { if (placeholder) free(placeholder); };
    void set_placeholder(const char *str);
@@ -79,6 +98,7 @@ CustInput2::CustInput2 (int x, int y, int w, int h, const char* l) :
    Fl_Input(x,y,w,h,l)
 {
    placeholder = NULL;
+   domResource = NULL;
    showing_placeholder = false;
    usual_color = FL_BLACK;      /* just init until widget style is set */
 }
@@ -185,6 +205,20 @@ const char* CustInput2::value()
 int CustInput2::handle(int e)
 {
    int rc, k = Fl::event_key();
+   std::string oldValue;
+   if (domResource) {
+      if (e == FL_KEYBOARD || e == FL_KEYUP) {
+         const char *key = k == FL_Enter || k == FL_KP_Enter ? "Enter" :
+            k == FL_BackSpace ? "Backspace" : k == FL_Tab ? "Tab" :
+            k == FL_Escape ? "Escape" : Fl::event_text();
+         int code = k == FL_Enter || k == FL_KP_Enter ? 13 :
+            k == FL_BackSpace ? 8 : k == FL_Tab ? 9 : k;
+         if (!domResource->emitDomEvent(e == FL_KEYUP ? "keyup" : "keydown", key, code)) return 1;
+      }
+      if (e == FL_UNFOCUS) { domResource->emitDomEvent("change"); domResource->emitDomEvent("blur"); }
+      if (e == FL_RELEASE) domResource->emitDomEvent("click");
+      oldValue = value();
+   }
 
    _MSG("CustInput2::handle event=%d\n", e);
 
@@ -219,21 +253,25 @@ int CustInput2::handle(int e)
       }
    }
 
+   clipboardEvent(e, k);
    rc = Fl_Input::handle(e);
 
    if (rc && e == FL_FOCUS) {
       // Nonzero return from handle() should mean that focus was accepted.
       if (showing_placeholder)
          show_normal("");
+      if (domResource) domResource->emitDomEvent("focus");
    }
+   if (domResource && oldValue != value()) domResource->emitDomEvent("input");
    return rc;
 }
 
 /*
  * Used to show optional placeholder text.
  */
-class CustTextEditor : public Fl_Text_Editor {
+class CustTextEditor : public Fl_Text_Editor, public NativePasteState {
 public:
+   dw::core::ui::Resource *domResource;
    CustTextEditor (int x, int y, int w, int h, const char* l=0);
    ~CustTextEditor ();
    void set_placeholder(const char *str);
@@ -253,6 +291,7 @@ private:
 CustTextEditor::CustTextEditor (int x, int y, int w, int h, const char* l) :
                                Fl_Text_Editor(x,y,w,h,l)
 {
+   domResource = NULL;
    placeholder = NULL;
    showing_placeholder = false;
    buffer(new Fl_Text_Buffer());
@@ -345,7 +384,20 @@ char* CustTextEditor::value()
 
 int CustTextEditor::handle(int e)
 {
-   int rc;
+   int rc, k = Fl::event_key();
+   std::string oldValue = value();
+   if (domResource) {
+      if (e == FL_KEYBOARD || e == FL_KEYUP) {
+         const char *key = k == FL_Enter || k == FL_KP_Enter ? "Enter" :
+            k == FL_BackSpace ? "Backspace" : k == FL_Tab ? "Tab" :
+            k == FL_Escape ? "Escape" : Fl::event_text();
+         int code = k == FL_Enter || k == FL_KP_Enter ? 13 :
+            k == FL_BackSpace ? 8 : k == FL_Tab ? 9 : k;
+         if (!domResource->emitDomEvent(e == FL_KEYUP ? "keyup" : "keydown", key, code)) return 1;
+      }
+      if (e == FL_UNFOCUS) { domResource->emitDomEvent("change"); domResource->emitDomEvent("blur"); }
+      if (e == FL_RELEASE) domResource->emitDomEvent("click");
+   }
 
    if (e == FL_UNFOCUS) {
       if (placeholder && buffer()->length() == 0) {
@@ -353,12 +405,17 @@ int CustTextEditor::handle(int e)
       }
    }
 
+   clipboardEvent(e, k);
    rc = Fl_Text_Editor::handle(e);
 
    if (rc && e == FL_FOCUS) {
       // Nonzero return from handle() should mean that focus was accepted.
       if (showing_placeholder)
          show_normal("");
+   }
+   if (domResource) {
+      if (rc && e == FL_FOCUS) domResource->emitDomEvent("focus");
+      if (oldValue != value()) domResource->emitDomEvent("input");
    }
    return rc;
 }
@@ -419,6 +476,20 @@ enum { RELIEF_X_THICKNESS = 3, RELIEF_Y_THICKNESS = 3 };
 
 using namespace lout::object;
 using namespace lout::container::typed;
+
+static Fl_Font controlFont(core::style::Style *style)
+{
+   FltkFont *font = static_cast<FltkFont *>(style->font);
+#ifdef HAVE_PANGO_CAIRO
+   if (style->modernLayout) {
+      std::string family = nativeControlFontFamily(font);
+      if (!family.empty() && FltkFont::fontExists(family.c_str()))
+         return FltkFont::get(family.c_str(), (font->weight >= 500 ? FL_BOLD : 0) |
+            (font->style != core::style::FONT_STYLE_NORMAL ? FL_ITALIC : 0));
+   }
+#endif
+   return font->font;
+}
 
 FltkResource::FltkResource (FltkPlatform *platform)
 {
@@ -658,6 +729,15 @@ FltkLabelButtonResource::~FltkLabelButtonResource ()
    free((char *)label);
 }
 
+void FltkLabelButtonResource::setWidgetStyle(Fl_Widget *widget, core::style::Style *style)
+{
+   FltkResource::setWidgetStyle(widget, style);
+   if (style->modernLayout) {
+      widget->box(FL_NO_BOX);
+      if (style->color) widget->labelcolor(((FltkColor *)style->color)->colors[FltkColor::SHADING_NORMAL]);
+   }
+}
+
 Fl_Widget *FltkLabelButtonResource::createNewWidget (core::Allocation
                                                      *allocation)
 {
@@ -881,6 +961,19 @@ Fl_Widget *FltkComplexButtonResource::createNewWidget (core::Allocation
    return button;
 }
 
+void FltkComplexButtonResource::setWidgetStyle (Fl_Widget *widget,
+                                               core::style::Style *style)
+{
+   FltkResource::setWidgetStyle(widget, style);
+   if (style->modernLayout) {
+      if (getEmbed()->getLayout()) layout->setBgColor(getEmbed()->getBgColor());
+      if (flatView) {
+         static_cast<FltkFlatView *>(flatView)->setCssBackground(style);
+         static_cast<FltkFlatView *>(flatView)->setCenteredContent(true);
+      }
+   }
+}
+
 // ----------------------------------------------------------------------
 
 FltkEntryResource::FltkEntryResource (FltkPlatform *platform, int size,
@@ -917,6 +1010,7 @@ Fl_Widget *FltkEntryResource::createNewWidget (core::Allocation
         new CustInput2(allocation->x, allocation->y, allocation->width,
                       allocation->ascent + allocation->descent);
    input->input_type(password ? FL_SECRET_INPUT : FL_NORMAL_INPUT);
+   input->domResource = this;
    input->callback (widgetCallback, this);
    input->when (FL_WHEN_ENTER_KEY_ALWAYS);
 
@@ -942,7 +1036,8 @@ void FltkEntryResource::setWidgetStyle (Fl_Widget *widget,
    in->textcolor(widget->labelcolor());
    in->cursor_color(widget->labelcolor());
    in->textsize(in->labelsize());
-   in->textfont(in->labelfont());
+   in->textfont(controlFont(style));
+   if (style->modernLayout) in->box(FL_FLAT_BOX);
 
    if (label) {
       int h;
@@ -1023,6 +1118,40 @@ void FltkEntryResource::setText (const char *text)
    ((CustInput2*)widget)->value (initText);
 }
 
+bool FltkEntryResource::hasFocus () { return widget && Fl::focus() == widget; }
+bool FltkEntryResource::hasPendingPaste ()
+{ return widget && static_cast<CustInput2 *>(widget)->hasPendingPaste(); }
+int FltkEntryResource::selectionStart ()
+{ return widget ? lout::misc::min(((CustInput2*)widget)->d_position(), ((CustInput2*)widget)->mark()) : 0; }
+int FltkEntryResource::selectionEnd ()
+{ return widget ? lout::misc::max(((CustInput2*)widget)->d_position(), ((CustInput2*)widget)->mark()) : 0; }
+void FltkEntryResource::setSelection (int start, int end)
+{
+   if (!widget) return;
+   CustInput2 *input = (CustInput2*)widget;
+#if FL_API_VERSION < 10400
+   input->position(end, start);
+#else
+   input->insert_position(end); input->mark(start);
+#endif
+}
+void FltkEntryResource::restoreFocus (int start, int end)
+{
+   if (!widget) return;
+   CustInput2 *input = (CustInput2*)widget;
+   core::ui::Resource *saved = input->domResource; input->domResource = NULL;
+   input->take_focus(); setSelection(start, end);
+   input->domResource = saved;
+}
+void FltkEntryResource::clearFocus ()
+{
+   if (!hasFocus()) return;
+   CustInput2 *input = (CustInput2*)widget;
+   core::ui::Resource *saved = input->domResource; input->domResource = NULL;
+   Fl::focus(NULL);
+   input->domResource = saved;
+}
+
 bool FltkEntryResource::isEditable ()
 {
    return editable;
@@ -1093,6 +1222,7 @@ Fl_Widget *FltkMultiLineTextResource::createNewWidget (core::Allocation
    CustTextEditor *text =
       new CustTextEditor (allocation->x, allocation->y, allocation->width,
                           allocation->ascent + allocation->descent);
+   text->domResource = this;
    text->wrap_mode(Fl_Text_Display::WRAP_AT_BOUNDS, 0);
    text->remove_key_binding(FL_BackSpace, FL_TEXT_EDITOR_ANY_STATE);
    text->add_key_binding(FL_BackSpace, 0, Fl_Text_Editor::kf_backspace);
@@ -1112,7 +1242,8 @@ void FltkMultiLineTextResource::setWidgetStyle (Fl_Widget *widget,
    ed->textcolor(widget->labelcolor());
    ed->cursor_color(widget->labelcolor());
    ed->textsize(ed->labelsize());
-   ed->textfont(ed->labelfont());
+   ed->textfont(controlFont(style));
+   if (style->modernLayout) ed->box(FL_FLAT_BOX);
 }
 
 void FltkMultiLineTextResource::sizeRequest (core::Requisition *requisition)
@@ -1151,6 +1282,46 @@ const char *FltkMultiLineTextResource::getText ()
 void FltkMultiLineTextResource::setText (const char *text)
 {
    ((CustTextEditor*)widget)->value (text);
+}
+
+bool FltkMultiLineTextResource::hasFocus () { return widget && Fl::focus() == widget; }
+bool FltkMultiLineTextResource::hasPendingPaste ()
+{ return widget && static_cast<CustTextEditor *>(widget)->hasPendingPaste(); }
+int FltkMultiLineTextResource::selectionStart ()
+{
+   int start = 0, end = 0;
+   if (widget && ((CustTextEditor*)widget)->buffer()->selection_position(&start, &end)) return start;
+   return widget ? ((CustTextEditor*)widget)->insert_position() : 0;
+}
+int FltkMultiLineTextResource::selectionEnd ()
+{
+   int start = 0, end = 0;
+   if (widget && ((CustTextEditor*)widget)->buffer()->selection_position(&start, &end)) return end;
+   return selectionStart();
+}
+void FltkMultiLineTextResource::setSelection (int start, int end)
+{
+   if (!widget) return;
+   CustTextEditor *input = (CustTextEditor*)widget;
+   input->insert_position(end);
+   if (start != end) input->buffer()->select(start, end);
+   else input->buffer()->unselect();
+}
+void FltkMultiLineTextResource::restoreFocus (int start, int end)
+{
+   if (!widget) return;
+   CustTextEditor *input = (CustTextEditor*)widget;
+   core::ui::Resource *saved = input->domResource; input->domResource = NULL;
+   input->take_focus(); setSelection(start, end);
+   input->domResource = saved;
+}
+void FltkMultiLineTextResource::clearFocus ()
+{
+   if (!hasFocus()) return;
+   CustTextEditor *input = (CustTextEditor*)widget;
+   core::ui::Resource *saved = input->domResource; input->domResource = NULL;
+   Fl::focus(NULL);
+   input->domResource = saved;
 }
 
 bool FltkMultiLineTextResource::isEditable ()

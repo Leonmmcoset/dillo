@@ -28,13 +28,36 @@ CssPropertyList::CssPropertyList (const CssPropertyList &p, bool deep) :
 {
    refCount = 0;
    safe = p.safe;
+   customProperties = p.customProperties;
    if (deep) {
       for (int i = 0; i < size (); i++) {
          CssProperty *p = getRef(i);
          switch (p->type) {
             case CSS_TYPE_STRING:
             case CSS_TYPE_SYMBOL:
+            case CSS_TYPE_URI:
+            case CSS_TYPE_DEFERRED:
+            case CSS_TYPE_COMPONENTS:
                p->value.strVal = dStrdup (p->value.strVal);
+               break;
+            case CSS_TYPE_BACKGROUND_POSITION:
+            case CSS_TYPE_CORNER_RADIUS:
+               {
+                  CssBackgroundPosition *position = (CssBackgroundPosition *)dMalloc(sizeof(CssBackgroundPosition));
+                  *position = *p->value.posVal; p->value.posVal = position;
+               }
+               break;
+            case CSS_TYPE_TRANSFORM:
+               {
+                  CssTransform *transform = (CssTransform *)dMalloc(sizeof(CssTransform));
+                  *transform = *p->value.transformVal; p->value.transformVal = transform;
+               }
+               break;
+            case CSS_TYPE_GRADIENT:
+               {
+                  CssGradient *gradient = (CssGradient *)dMalloc(sizeof(CssGradient));
+                  *gradient = *p->value.gradientVal; p->value.gradientVal = gradient;
+               }
                break;
             default:
                break;
@@ -85,13 +108,29 @@ void CssPropertyList::set (CssPropertyName name, CssValueType type,
  * \brief Merge properties into argument property list.
  */
 void CssPropertyList::apply (CssPropertyList *props) {
+   for (std::map<std::string, std::string>::const_iterator it = customProperties.begin(); it != customProperties.end(); ++it)
+      props->customProperties[it->first] = it->second;
    for (int i = 0; i < size (); i++) {
       CssPropertyValue value = getRef (i)->value;
 
       if (props->ownerOfStrings &&
           (getRef (i)->type == CSS_TYPE_STRING ||
-           getRef (i)->type == CSS_TYPE_SYMBOL))
+           getRef (i)->type == CSS_TYPE_SYMBOL || getRef(i)->type == CSS_TYPE_URI ||
+           getRef(i)->type == CSS_TYPE_DEFERRED || getRef(i)->type == CSS_TYPE_COMPONENTS))
          value.strVal = dStrdup(value.strVal);
+      if (props->ownerOfStrings && (getRef(i)->type == CSS_TYPE_BACKGROUND_POSITION ||
+                                   getRef(i)->type == CSS_TYPE_CORNER_RADIUS)) {
+         value.posVal = (CssBackgroundPosition *)dMalloc(sizeof(CssBackgroundPosition));
+         *value.posVal = *getRef(i)->value.posVal;
+      }
+      if (props->ownerOfStrings && getRef(i)->type == CSS_TYPE_TRANSFORM) {
+         value.transformVal = (CssTransform *)dMalloc(sizeof(CssTransform));
+         *value.transformVal = *getRef(i)->value.transformVal;
+      }
+      if (props->ownerOfStrings && getRef(i)->type == CSS_TYPE_GRADIENT) {
+         value.gradientVal = (CssGradient *)dMalloc(sizeof(CssGradient));
+         *value.gradientVal = *getRef(i)->value.gradientVal;
+      }
 
       props->set ((CssPropertyName) getRef (i)->name,
                   (CssValueType) getRef (i)->type,
@@ -678,7 +717,7 @@ void CssContext::apply (CssPropertyList *props, Doctree *docTree,
 void CssContext::addRule (CssSelector *sel, CssPropertyList *props,
                           CssPrimaryOrder order) {
 
-   if (props->size () > 0) {
+   if (!props->empty()) {
       CssRule *rule = new CssRule (sel, props, pos++);
 
       if ((order == CSS_PRIMARY_AUTHOR ||

@@ -381,6 +381,19 @@ static Dstr *Http_make_content_type(const DilloUrl *url)
 /**
  * Make the http query string
  */
+static bool_t Http_has_script_header(const DilloWeb *web, const char *name)
+{
+   const char *line = web->extra_headers;
+   size_t len = strlen(name);
+   while (line && *line) {
+      if (!dStrnAsciiCasecmp(line, name, len) && line[len] == ':')
+         return TRUE;
+      line = strstr(line, "\r\n");
+      if (line) line += 2;
+   }
+   return FALSE;
+}
+
 static Dstr *Http_make_query_str(DilloWeb *web, bool_t use_proxy, bool_t use_tls)
 {
    char *ptr, *cookies, *referer, *auth;
@@ -390,10 +403,14 @@ static Dstr *Http_make_query_str(DilloWeb *web, bool_t use_proxy, bool_t use_tls
         *proxy_auth = dStr_new("");
 
    /* BUG: dillo doesn't actually understand application/xml yet */
-   const char *accept_hdr_value =
+   const char *accept_hdr_value = web->method ? "*/*" :
       web->flags & WEB_Image ? "image/png,image/*;q=0.8,*/*;q=0.5" :
       web->flags & WEB_Stylesheet ? "text/css,*/*;q=0.1" :
       "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
+   Dstr *accept = dStr_new("");
+   if (!Http_has_script_header(web, "Accept"))
+      dStr_sprintfa(accept, "Accept: %s\r\n", accept_hdr_value);
+   const char *language = Http_has_script_header(web, "Accept-Language") ? "" : HTTP_Language_hdr;
 
    const char *connection_hdr_val =
       (prefs.http_persistent_conns == TRUE) ? "keep-alive" : "close";
@@ -414,17 +431,18 @@ static Dstr *Http_make_query_str(DilloWeb *web, bool_t use_proxy, bool_t use_tls
                     URL_QUERY(url));
    }
 
-   cookies = a_Cookies_get_query(url, web->requester, web->flags & WEB_RootUrl);
-   auth = a_Auth_get_auth_str(url, request_uri->str);
+   cookies = web->omit_credentials ? dStrdup("") : a_Cookies_get_query(url, web->requester, web->flags & WEB_RootUrl);
+   auth = web->omit_credentials || Http_has_script_header(web, "Authorization") ?
+      NULL : a_Auth_get_auth_str(url, request_uri->str);
    referer = Http_get_referer(url);
    if (URL_FLAGS(url) & URL_Post) {
       Dstr *content_type = Http_make_content_type(url);
       dStr_sprintfa(
          query,
-         "POST %s HTTP/1.1\r\n"
+         "%s %s HTTP/1.1\r\n"
          "Host: %s\r\n"
          "User-Agent: %s\r\n"
-         "Accept: %s\r\n"
+         "%s" /* accept */
          "%s" /* language */
          "Accept-Encoding: gzip, deflate"
 #ifdef ENABLE_BROTLI
@@ -439,20 +457,21 @@ static Dstr *Http_make_query_str(DilloWeb *web, bool_t use_proxy, bool_t use_tls
          "Content-Type: %s\r\n"
          "Content-Length: %ld\r\n"
          "%s" /* cookies */
+         "%s" /* script headers */
          "\r\n",
-         request_uri->str, URL_AUTHORITY(url), prefs.http_user_agent,
-         accept_hdr_value, HTTP_Language_hdr, auth ? auth : "",
-         proxy_auth->str, referer, connection_hdr_val, content_type->str,
-         (long)URL_DATA(url)->len, cookies);
+         web->method ? web->method : "POST", request_uri->str, URL_AUTHORITY(url), prefs.http_user_agent,
+         accept->str, language, auth ? auth : "",
+         proxy_auth->str, referer, connection_hdr_val, web->content_type ? web->content_type : content_type->str,
+         (long)URL_DATA(url)->len, cookies, web->extra_headers ? web->extra_headers : "");
       dStr_append_l(query, URL_DATA(url)->str, URL_DATA(url)->len);
       dStr_free(content_type, TRUE);
    } else {
       dStr_sprintfa(
          query,
-         "GET %s HTTP/1.1\r\n"
+         "%s %s HTTP/1.1\r\n"
          "Host: %s\r\n"
          "User-Agent: %s\r\n"
-         "Accept: %s\r\n"
+         "%s" /* accept */
          "%s" /* language */
          "Accept-Encoding: gzip, deflate"
 #ifdef ENABLE_BROTLI
@@ -466,13 +485,14 @@ static Dstr *Http_make_query_str(DilloWeb *web, bool_t use_proxy, bool_t use_tls
          "Connection: %s\r\n"
          "%s" /* cache control */
          "%s" /* cookies */
+         "%s" /* script headers */
          "\r\n",
-         request_uri->str, URL_AUTHORITY(url), prefs.http_user_agent,
-         accept_hdr_value, HTTP_Language_hdr, auth ? auth : "",
+         web->method ? web->method : "GET", request_uri->str, URL_AUTHORITY(url), prefs.http_user_agent,
+         accept->str, language, auth ? auth : "",
          proxy_auth->str, referer, connection_hdr_val,
          (URL_FLAGS(url) & URL_E2EQuery) ?
             "Pragma: no-cache\r\nCache-Control: no-cache\r\n" : "",
-         cookies);
+         cookies, web->extra_headers ? web->extra_headers : "");
    }
    dFree(referer);
    dFree(cookies);
@@ -480,6 +500,7 @@ static Dstr *Http_make_query_str(DilloWeb *web, bool_t use_proxy, bool_t use_tls
 
    dStr_free(request_uri, TRUE);
    dStr_free(proxy_auth, TRUE);
+   dStr_free(accept, TRUE);
    _MSG("Query: {%s}\n", dStr_printable(query, 8192));
    return query;
 }

@@ -1,0 +1,5 @@
+Source: https://bellard.org/quickjs/quickjs-2026-06-04.tar.xz
+Archive SHA-256: b376e839b322978313d929fd20663b11ba58b75df5a46c126dd19ea2fa70ad2a
+
+Local change: pack the M4 optimizer opcode pattern with unsigned shifts to avoid
+signed-shift undefined behavior reported by UBSan. The resulting bits are unchanged.

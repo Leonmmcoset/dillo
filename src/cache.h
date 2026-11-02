@@ -77,11 +77,14 @@ int a_Cache_open_url(void *Web, CA_Callback_t Call, void *CbData);
 int a_Cache_get_buf(const DilloUrl *Url, char **PBuf, int *BufSize);
 void a_Cache_unref_buf(const DilloUrl *Url);
 Dstr *a_Cache_get_header(const DilloUrl *Url);
+Dstr *a_Cache_get_header_direct(const DilloUrl *Url);
 const char *a_Cache_get_content_type(const DilloUrl *url);
 const char *a_Cache_set_content_type(const DilloUrl *url, const char *ctype,
                                      const char *from);
 uint_t a_Cache_get_flags(const DilloUrl *url);
 uint_t a_Cache_get_flags_with_redirection(const DilloUrl *url);
+const DilloUrl *a_Cache_get_redirect_url(const DilloUrl *url);
+const DilloUrl *a_Cache_get_final_url(const DilloUrl *url);
 bool_t a_Cache_process_dbuf(int Op, const char *buf, size_t buf_size,
                           const DilloUrl *Url);
 int a_Cache_download_enabled(const DilloUrl *url);

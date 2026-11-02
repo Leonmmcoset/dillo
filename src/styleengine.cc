@@ -16,6 +16,7 @@
 #include "misc.h"
 #include "html_common.hh"
 #include "styleengine.hh"
+#include "cssvariables.hh"
 #include "web.hh"
 #include "capi.h"
 #include "uicmd.hh"
@@ -123,7 +124,7 @@ StyleEngine::~StyleEngine () {
 
 void StyleEngine::stackPush () {
    static const Node emptyNode = {
-      NULL, NULL, NULL, NULL, NULL, NULL, false, false, NULL
+      NULL, NULL, NULL, NULL, NULL, NULL, false, false, NULL, NULL
    };
 
    stack->setSize (stack->size () + 1, emptyNode);
@@ -135,6 +136,7 @@ void StyleEngine::stackPop () {
    delete n->styleAttrProperties;
    delete n->styleAttrPropertiesImportant;
    delete n->nonCssProperties;
+   delete n->customProperties;
    if (n->style)
       n->style->unref ();
    if (n->wordStyle)
@@ -524,25 +526,90 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
 
    attrs->font = Font::create (layout, &fontAttrs);
 
+   // currentColor inside a gradient uses the cascaded foreground, even if
+   // the color declaration follows background-image in the stylesheet.
+   for (int j = 0; j < props->size(); ++j)
+      if (props->getRef(j)->name == CSS_PROPERTY_COLOR)
+         attrs->color = Color::create(layout, props->getRef(j)->value.intVal);
+
    for (int j = 0; j < props->size (); j++) {
       CssProperty *p = props->getRef (j);
 
       switch (p->name) {
+         case CSS_PROPERTY_ALIGN_CONTENT: attrs->container.alignContent = p->value.intVal; break;
+         case CSS_PROPERTY_ALIGN_ITEMS: attrs->container.alignItems = p->value.intVal; break;
+         case CSS_PROPERTY_ALIGN_SELF: attrs->container.alignSelf = p->value.intVal; break;
+         case CSS_PROPERTY_JUSTIFY_CONTENT: attrs->container.justify = p->value.intVal; break;
+         case CSS_PROPERTY_FLEX_DIRECTION: attrs->container.direction = p->value.intVal; break;
+         case CSS_PROPERTY_FLEX_WRAP: attrs->container.wrap = p->value.intVal; break;
+         case CSS_PROPERTY_FLEX_GROW:
+            if (p->value.lenVal.type == CSS_LENGTH_TYPE_NONE) attrs->container.grow = MAX(0, MIN(10000, p->value.lenVal.f));
+            break;
+         case CSS_PROPERTY_FLEX_SHRINK:
+            if (p->value.lenVal.type == CSS_LENGTH_TYPE_NONE) attrs->container.shrink = MAX(0, MIN(10000, p->value.lenVal.f));
+            break;
+         case CSS_PROPERTY_FLEX_BASIS: computeLength(&attrs->container.basis, p->value.lenVal, attrs->font); break;
+         case CSS_PROPERTY_COLUMN_GAP: computeValue(&attrs->container.columnGap, p->value.lenVal, attrs->font); break;
+         case CSS_PROPERTY_ROW_GAP: computeValue(&attrs->container.rowGap, p->value.lenVal, attrs->font); break;
+         case CSS_PROPERTY_ORDER: attrs->container.order = p->value.intVal; break;
+         case CSS_PROPERTY_GRID_TEMPLATE_COLUMNS:
+            attrs->container.columns = 0;
+            if (!computeTracks(p->value.strVal, attrs->container.columnTracks, &attrs->container.columns, attrs->font)) attrs->container.columns = 0;
+            break;
+         case CSS_PROPERTY_GRID_TEMPLATE_ROWS:
+            attrs->container.rows = 0;
+            if (!computeTracks(p->value.strVal, attrs->container.rowTracks, &attrs->container.rows, attrs->font)) attrs->container.rows = 0;
+            break;
          /* \todo missing cases */
          case CSS_PROPERTY_BACKGROUND_ATTACHMENT:
             attrs->backgroundAttachment =
                (BackgroundAttachment) p->value.intVal;
             break;
          case CSS_PROPERTY_BACKGROUND_COLOR:
-            if (prefs.allow_white_bg || p->value.intVal != 0xffffff)
+            if (p->value.intVal == -1) attrs->backgroundColor = NULL;
+            else if (prefs.allow_white_bg || p->value.intVal != 0xffffff)
                attrs->backgroundColor = Color::create(layout, p->value.intVal);
             else
                attrs->backgroundColor =
                   Color::create(layout, prefs.white_bg_replacement);
             break;
          case CSS_PROPERTY_BACKGROUND_IMAGE:
-            // p->value.strVal should be absolute, so baseUrl is not needed
-            imgUrl = a_Url_new (p->value.strVal, NULL);
+            attrs->backgroundImage = NULL;
+            memset(&attrs->gradient, 0, sizeof(attrs->gradient));
+            if (p->type == CSS_TYPE_GRADIENT) {
+               const CssGradient &g = *p->value.gradientVal;
+               attrs->gradient.count = g.count;
+               attrs->gradient.angle = g.angle;
+               attrs->gradient.cornerX = g.cornerX;
+               attrs->gradient.cornerY = g.cornerY;
+               attrs->gradient.repeating = g.repeating;
+               for (unsigned n = 0; n < g.count; ++n) {
+                  attrs->gradient.stops[n].rgba = g.stops[n].currentColor ?
+                     ((unsigned)attrs->color->getColor() << 8) | 255 : g.stops[n].rgba;
+                  attrs->gradient.stops[n].positioned = g.stops[n].positioned;
+                  if (g.stops[n].positioned)
+                     computeLength(&attrs->gradient.stops[n].position, g.stops[n].position, attrs->font);
+               }
+            } else if (p->value.strVal) {
+               // URI properties are already absolute.
+               imgUrl = a_Url_new(p->value.strVal, NULL);
+            }
+            break;
+         case CSS_PROPERTY_BORDER_TOP_LEFT_RADIUS:
+         case CSS_PROPERTY_BORDER_TOP_RIGHT_RADIUS:
+         case CSS_PROPERTY_BORDER_BOTTOM_RIGHT_RADIUS:
+         case CSS_PROPERTY_BORDER_BOTTOM_LEFT_RADIUS: {
+            unsigned corner = p->name == CSS_PROPERTY_BORDER_TOP_LEFT_RADIUS ? 0 :
+               p->name == CSS_PROPERTY_BORDER_TOP_RIGHT_RADIUS ? 1 :
+               p->name == CSS_PROPERTY_BORDER_BOTTOM_RIGHT_RADIUS ? 2 : 3;
+            computeLength(&attrs->borderRadius.x[corner], p->value.posVal->posX, attrs->font);
+            computeLength(&attrs->borderRadius.y[corner], p->value.posVal->posY, attrs->font);
+            break;
+         }
+         case CSS_PROPERTY_TRANSFORM:
+            attrs->hasTransform = p->value.transformVal->active;
+            computeLength(&attrs->translateX, p->value.transformVal->x, attrs->font);
+            computeLength(&attrs->translateY, p->value.transformVal->y, attrs->font);
             break;
          case CSS_PROPERTY_BACKGROUND_POSITION:
             computeLength (&attrs->backgroundPositionX, p->value.posVal->posX,
@@ -653,11 +720,13 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
                attrs->margin.bottom = 0;
             break;
          case CSS_PROPERTY_MARGIN_LEFT:
+            attrs->marginLeftAuto = p->value.lenVal.type == CSS_LENGTH_TYPE_AUTO;
             computeValue (&attrs->margin.left, p->value.lenVal, attrs->font);
             if (attrs->margin.left < 0) // \todo fix negative margins in dw/*
                attrs->margin.left = 0;
             break;
          case CSS_PROPERTY_MARGIN_RIGHT:
+            attrs->marginRightAuto = p->value.lenVal.type == CSS_LENGTH_TYPE_AUTO;
             computeValue (&attrs->margin.right, p->value.lenVal, attrs->font);
             if (attrs->margin.right < 0) // \todo fix negative margins in dw/*
                attrs->margin.right = 0;
@@ -743,7 +812,7 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
             computeLength (&attrs->maxHeight, p->value.lenVal, attrs->font);
             break;
          case CSS_PROPERTY_Z_INDEX:
-            if (p->type == CSS_LENGTH_TYPE_AUTO)
+            if (p->type == CSS_TYPE_AUTO)
                attrs->zIndex = dw::core::style::Z_INDEX_AUTO;
             else
                attrs->zIndex = p->value.intVal;
@@ -801,8 +870,62 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
 /**
  * \brief Resolve relative lengths to absolute values.
  */
+bool StyleEngine::computeTracks(const std::string &text, Length *tracks, unsigned *count,
+                                Font *font, unsigned depth)
+{
+   if (depth > 8 || text.size() > 65536) return false;
+   size_t pos = 0;
+   while (pos < text.size()) {
+      while (pos < text.size() && dIsspace(text[pos])) ++pos;
+      if (pos == text.size()) break;
+      size_t start = pos; unsigned nesting = 0;
+      do {
+         if (text[pos] == '(') ++nesting;
+         if (text[pos] == ')' && nesting) --nesting;
+         ++pos;
+      } while (pos < text.size() && (nesting || !dIsspace(text[pos])));
+      std::string token = text.substr(start, pos - start);
+      if (token == "none") return *count == 0;
+      if (token.compare(0, 7, "repeat(") == 0 && token.back() == ')') {
+         size_t comma = token.find(',');
+         if (comma == std::string::npos) return false;
+         char *end; long repeat = strtol(token.c_str() + 7, &end, 10);
+         while (dIsspace(*end)) ++end;
+         if (end != token.c_str() + comma || repeat < 1 || repeat > 32) return false;
+         std::string inner = token.substr(comma + 1, token.size() - comma - 2);
+         for (long i = 0; i < repeat; ++i) if (!computeTracks(inner, tracks, count, font, depth + 1)) return false;
+      } else {
+         if (*count >= 32) return false;
+         Length track = LENGTH_AUTO;
+         if (token.size() > 2 && token.compare(token.size() - 2, 2, "fr") == 0) {
+            char *end; double fraction = strtod(token.c_str(), &end);
+            if (end != token.c_str() + token.size() - 2 || fraction < 0 || fraction > 1000) return false;
+            track = createRelLength(fraction);
+         } else if (token != "auto" && token != "min-content" && token != "max-content") {
+            CssPropertyList value(true);
+            std::string declaration = "width:" + token;
+            CssParser::parseDeclarationBlock(baseUrl, declaration.c_str(), declaration.size(), &value, NULL);
+            if (value.size() != 1 || value.getRef(0)->type == CSS_TYPE_DEFERRED ||
+                !computeLength(&track, value.getRef(0)->value.lenVal, font)) return false;
+         }
+         tracks[(*count)++] = track;
+      }
+   }
+   return true;
+}
+
 bool StyleEngine::computeValue (int *dest, CssLength value, Font *font) {
    switch (CSS_LENGTH_TYPE (value)) {
+      case CSS_LENGTH_TYPE_CALC: {
+         if (value.terms[CSS_LENGTH_TYPE_PERCENTAGE] != 0) return false;
+         double sum = 0;
+         for (int i = 1; i < CSS_LENGTH_TYPE_PERCENTAGE; ++i) if (value.terms[i]) {
+            int term = 0;
+            if (!computeValue(&term, CSS_CREATE_LENGTH(value.terms[i], (CssLengthType)i), font)) return false;
+            sum += term;
+         }
+         *dest = roundInt(MAX(-10000000.0, MIN(10000000.0, sum))); return true;
+      }
       case CSS_LENGTH_TYPE_PX:
          *dest = roundInt (CSS_LENGTH_VALUE (value) * zoom);
          return true;
@@ -859,6 +982,12 @@ bool StyleEngine::computeValue (int *dest, CssLength value, Font *font) {
 
 bool StyleEngine::computeValue (int *dest, CssLength value, Font *font,
                                 int percentageBase) {
+   if (CSS_LENGTH_TYPE(value) == CSS_LENGTH_TYPE_CALC) {
+      float fraction = value.terms[CSS_LENGTH_TYPE_PERCENTAGE];
+      value.terms[CSS_LENGTH_TYPE_PERCENTAGE] = 0;
+      if (!computeValue(dest, value, font)) return false;
+      *dest += roundInt(fraction * percentageBase); return true;
+   }
    if (CSS_LENGTH_TYPE (value) == CSS_LENGTH_TYPE_PERCENTAGE) {
       *dest = roundInt (CSS_LENGTH_VALUE (value) * percentageBase);
       return true;
@@ -870,7 +999,12 @@ bool StyleEngine::computeLength (dw::core::style::Length *dest,
                                  CssLength value, Font *font) {
    int v;
 
-   if (CSS_LENGTH_TYPE (value) == CSS_LENGTH_TYPE_PERCENTAGE) {
+   if (CSS_LENGTH_TYPE(value) == CSS_LENGTH_TYPE_CALC) {
+      float fraction = value.terms[CSS_LENGTH_TYPE_PERCENTAGE];
+      value.terms[CSS_LENGTH_TYPE_PERCENTAGE] = 0;
+      if (!computeValue(&v, value, font)) return false;
+      *dest = createCalcLength(v, fraction); return true;
+   } else if (CSS_LENGTH_TYPE (value) == CSS_LENGTH_TYPE_PERCENTAGE) {
       *dest = createPerLength (CSS_LENGTH_VALUE (value));
       return true;
    } else if (CSS_LENGTH_TYPE (value) == CSS_LENGTH_TYPE_AUTO) {
@@ -946,6 +1080,9 @@ Style * StyleEngine::style0 (int i, BrowserWindow *bw) {
    // reset values that are not inherited according to CSS
    attrs.resetValues ();
    preprocessAttrs (&attrs);
+#ifdef ENABLE_JAVASCRIPT
+   attrs.modernLayout = prefs.javascript_enabled;
+#endif
 
    styleAttrProperties = stack->getRef (i)->styleAttrProperties;
    styleAttrPropertiesImportant = stack->getRef(i)->styleAttrPropertiesImportant;
@@ -956,8 +1093,37 @@ Style * StyleEngine::style0 (int i, BrowserWindow *bw) {
                       styleAttrProperties, styleAttrPropertiesImportant,
                       nonCssProperties);
 
-   // apply style
-   apply (i, &attrs, &props, bw);
+   std::map<std::string, std::string> variables;
+   if (stack->getRef(i - 1)->customProperties) variables = *stack->getRef(i - 1)->customProperties;
+   for (std::map<std::string, std::string>::const_iterator it = props.customProperties.begin(); it != props.customProperties.end(); ++it) {
+      std::string value = it->second;
+      size_t first = value.find_first_not_of(" \t\r\n\f"), last = value.find_last_not_of(" \t\r\n\f");
+      std::string keyword = first == std::string::npos ? "" : value.substr(first, last - first + 1);
+      if (!dStrAsciiCasecmp(keyword.c_str(), "initial")) variables.erase(it->first);
+      else if (dStrAsciiCasecmp(keyword.c_str(), "inherit") && dStrAsciiCasecmp(keyword.c_str(), "unset")) variables[it->first] = value;
+   }
+   CssVariables resolver(variables);
+   delete stack->getRef(i)->customProperties;
+   stack->getRef(i)->customProperties = new std::map<std::string, std::string>(resolver.computed());
+   CssPropertyList computed(true);
+   for (int j = 0; j < props.size(); ++j) {
+      CssProperty *p = props.getRef(j);
+      if (p->type == CSS_TYPE_DEFERRED) {
+         std::string declaration;
+         if (resolver.substitute(p->value.strVal, declaration)) {
+            CssPropertyList expanded(true);
+            CssParser::parseDeclarationBlock(baseUrl, declaration.c_str(), declaration.size(), &expanded, NULL);
+            for (int k = 0; k < expanded.size(); ++k) if (expanded.getRef(k)->name == p->name && expanded.getRef(k)->type != CSS_TYPE_DEFERRED) {
+               CssPropertyList selected;
+               selected.increase(); *selected.getRef(0) = *expanded.getRef(k); selected.apply(&computed); break;
+            }
+         }
+      } else {
+         CssPropertyList selected;
+         selected.increase(); *selected.getRef(0) = *p; selected.apply(&computed);
+      }
+   }
+   apply (i, &attrs, &computed, bw);
 
    postprocessAttrs (&attrs);
 
@@ -1069,6 +1235,7 @@ void StyleEngine::init () {
       "big {font-size: 1.17em}"
       "blockquote, dd {margin-left: 40px; margin-right: 40px}"
       "center {text-align: center}"
+      "button {text-align: center}"
       "dt {font-weight: bolder}"
       ":link {color: blue; text-decoration: underline; cursor: pointer}"
       ":visited {color: #800080; text-decoration: underline; cursor: pointer}"

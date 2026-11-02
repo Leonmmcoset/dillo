@@ -91,6 +91,7 @@ void a_Prefs_init(void)
    prefs.page_actions = dList_new(16);
    prefs.panel_size = P_medium;
    prefs.parse_embedded_css=TRUE;
+   prefs.javascript_enabled=TRUE;
    prefs.save_dir = dStrdup(PREFS_SAVE_DIR);
    prefs.scroll_step = 100;
    prefs.scroll_page_overlap = 50;

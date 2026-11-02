@@ -423,7 +423,7 @@ void SelectionState::highlight0 (bool fl, DeepIterator *from, int fromChar,
    }
 }
 
-void SelectionState::copy(int selection)
+char *SelectionState::getText()
 {
    if (from && to) {
       Iterator *si;
@@ -495,7 +495,17 @@ void SelectionState::copy(int selection)
          delete i;
       }
 
-      layout->copySelection(strbuf.getChars(), selection);
+      return strdup(strbuf.getChars());
+   }
+   return strdup("");
+}
+
+void SelectionState::copy(int selection)
+{
+   if (from && to) {
+      char *text = getText();
+      layout->copySelection(text, selection);
+      free(text);
    }
 }
 

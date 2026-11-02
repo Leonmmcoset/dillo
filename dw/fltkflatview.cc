@@ -33,6 +33,7 @@ FltkFlatView::FltkFlatView (int x, int y, int w, int h, const char *label):
    FltkWidgetView (x, y, w, h, label)
 {
    DBG_OBJ_CREATE ("dw::fltk::FltkFlatView");
+   centeredContent = false;
 }
 
 FltkFlatView::~FltkFlatView ()
@@ -41,6 +42,7 @@ FltkFlatView::~FltkFlatView ()
 
 void FltkFlatView::setCanvasSize (int width, int ascent, int descent)
 {
+   FltkWidgetView::setCanvasSize(width, ascent, descent);
    /**
     * \bug It has to be clarified, who is responsible for setting the
     *      FLTK widget size. In the only used context (complex buttons),
@@ -92,7 +94,7 @@ int FltkFlatView::translateViewXToCanvasX (int X)
 
 int FltkFlatView::translateViewYToCanvasY (int Y)
 {
-   return Y - y ();
+   return Y - y () - contentOffsetY();
 }
 
 int FltkFlatView::translateCanvasXToViewX (int X)
@@ -102,7 +104,7 @@ int FltkFlatView::translateCanvasXToViewX (int X)
 
 int FltkFlatView::translateCanvasYToViewY (int Y)
 {
-   return Y + y ();
+   return Y + y () + contentOffsetY();
 }
 
 

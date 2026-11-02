@@ -19,6 +19,8 @@
  */
 
 #include <stdio.h>
+#include "config.h"
+#include "fltktext.hh"
 
 #include "dlib/dlib.h"
 #include "../lout/msg.h"
@@ -126,6 +128,9 @@ FltkFont::FltkFont (core::style::FontAttrs *attrs)
    zeroWidth = (int) fl_width("0");
    descent = fl_descent();
    ascent = fl_height() - descent;
+#ifdef HAVE_PANGO_CAIRO
+   shapedFontMetrics(this);
+#endif
 }
 
 FltkFont::~FltkFont ()
@@ -520,6 +525,9 @@ void FltkPlatform::detachView (core::View *view)
 int FltkPlatform::textWidth (core::style::Font *font, const char *text,
                              int len)
 {
+#ifdef HAVE_PANGO_CAIRO
+   return shapedTextWidth(font, text, len);
+#endif
    char chbuf[4];
    int c, cu;
    int width = 0;

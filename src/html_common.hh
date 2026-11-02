@@ -27,6 +27,8 @@
 #include "form.hh"
 
 #include "styleengine.hh"
+#include <map>
+#include <string>
 
 /*
  * Macros
@@ -116,6 +118,7 @@ typedef struct {
 } DilloHtmlImage;
 
 typedef struct {
+   int javascript_node;
    DilloHtmlParseMode parse_mode;
    DilloHtmlTableMode table_mode;
    DilloHtmlTableBorderMode table_border_mode;
@@ -158,6 +161,10 @@ private:
 
 public:  //BUG: for now everything is public
 
+   class JavascriptDocument *javascript;
+   bool javascript_render;
+   dw::core::Widget *rootWidget;
+
    BrowserWindow *bw;
    DilloUrl *page_url, *base_url;
    dw::core::Widget *dw;    /* this is duplicated in the stack */
@@ -180,6 +187,7 @@ public:  //BUG: for now everything is public
 
    lout::misc::SimpleVector<DilloHtmlState> *stack;
    StyleEngine *styleEngine;
+   std::map<int, std::string> javascript_styles;
 
    int InFlags; /**< tracks which elements we are in */
 

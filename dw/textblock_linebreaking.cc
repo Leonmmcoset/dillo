@@ -435,8 +435,21 @@ Textblock::Line *Textblock::addLine (int firstWord, int lastWord,
    // zero height, which may cause endless loops. For this reasons,
    // the height should be positive (assuming the caller passed
    // minHeight > 0).
-   line->borderAscent = max (line->borderAscent, minHeight);
-   line->marginAscent = max (line->marginAscent, minHeight);
+   bool positionedOnly = firstWord <= lastWord;
+   for (int i = firstWord; positionedOnly && i <= lastWord; ++i) {
+      Word *word = words->getRef(i);
+      if (word->content.type != core::Content::BREAK &&
+          !(word->content.type == core::Content::TEXT && !word->content.text[0] &&
+            word->size.width == 0 && word->size.ascent == 0 && word->size.descent == 0) &&
+          !(word->content.type == core::Content::WIDGET_OOF_REF &&
+            (testWidgetAbsolutelyPositioned(word->content.widgetReference->widget) ||
+             testWidgetFixedlyPositioned(word->content.widgetReference->widget))))
+         positionedOnly = false;
+   }
+   if (!positionedOnly) {
+      line->borderAscent = max (line->borderAscent, minHeight - line->borderDescent);
+      line->marginAscent = max (line->marginAscent, minHeight - line->marginDescent);
+   }
 
    DBG_OBJ_ARRATTRSET_NUM ("lines", lineIndex, "borderAscent",
                            line->borderAscent);

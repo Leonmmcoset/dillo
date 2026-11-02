@@ -59,10 +59,13 @@ TESTS = \
 XFAIL_TESTS = \
 	render/div-100-percent-with-padding.html \
 	render/float-img-justify.html \
-	render/margin-auto.html \
 	render/margin-rounding.html \
 	render/max-width-html.html \
 	render/min-width-html.html \
 	render/multiple-floats.html \
 	render/span-padding.html \
 	render/table-td-width-percent.html
+
+if !ENABLE_JAVASCRIPT
+XFAIL_TESTS += render/margin-auto.html
+endif

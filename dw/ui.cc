@@ -66,7 +66,18 @@ void Embed::getExtremesSimpl (Extremes *extremes)
 
 void Embed::sizeAllocateImpl (Allocation *allocation)
 {
-   resource->sizeAllocate (allocation);
+   if (getStyle()->modernLayout) {
+      // Native controls occupy the content box. Allocating the entire CSS
+      // box let their opaque backgrounds cover the border and padding.
+      Allocation content = *allocation;
+      content.x += boxOffsetX(); content.y += boxOffsetY();
+      content.width = misc::max(0, content.width - boxDiffWidth());
+      int height = misc::max(0, content.ascent + content.descent - boxDiffHeight());
+      content.ascent = misc::min(height, misc::max(0, content.ascent - boxOffsetY()));
+      content.descent = height - content.ascent;
+      resource->sizeAllocate(&content);
+   } else
+      resource->sizeAllocate (allocation);
 }
 
 int Embed::getAvailWidthOfChild (Widget *child, bool forceValue)
@@ -140,8 +151,11 @@ void Embed::setEnabled (bool enabled)
 
 void Embed::draw (View *view, Rectangle *area, DrawingContext *context)
 {
-   drawWidgetBox (view, area, false);
-   resource->draw (view, area, context);
+   View *clipped = view->getClippingView(allocation.x + area->x,
+      allocation.y + area->y, area->width, area->height);
+   drawWidgetBox (clipped, area, false);
+   resource->draw (clipped, area, context);
+   view->mergeClippingView(clipped);
 }
 
 Iterator *Embed::iterator (Content::Type mask, bool atEnd)
@@ -151,8 +165,8 @@ Iterator *Embed::iterator (Content::Type mask, bool atEnd)
 
 void Embed::setStyle (style::Style *style)
 {
-   resource->setStyle (style);
    Widget::setStyle (style);
+   resource->setStyle (style);
 }
 
 // ----------------------------------------------------------------------
@@ -212,6 +226,20 @@ Resource::~Resource ()
 void Resource::setEmbed (Embed *embed)
 {
    this->embed = embed;
+}
+
+void Resource::emitActivate ()
+{
+   // Enter in a text field submits its form without synthesizing a click.
+   if (activationIsClick() && !emitDomEvent("click")) return;
+   activateEmitter.emitActivate(this);
+}
+
+void Resource::emitClicked (EventButton *event)
+{
+   // Dispatch even when the control has no enclosing form/receiver.
+   if (event->button == 1 && !emitDomEvent("click")) return;
+   clickedEmitter.emitClicked(this, event);
 }
 
 void Resource::getExtremes (Extremes *extremes)

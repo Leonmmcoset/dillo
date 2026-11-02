@@ -85,6 +85,7 @@ Widget::Widget ()
 
    flags = (Flags)(NEEDS_RESIZE | EXTREMES_CHANGED);
    parent = quasiParent = generator = container = NULL;
+   domNode = 0; domEventCallback = NULL; domEventData = NULL;
    setWidgetReference (NULL);
    DBG_OBJ_SET_PTR ("container", container);
 
@@ -141,7 +142,7 @@ Widget::~Widget ()
 
 /**
  * \brief Calculates the intersection of the visible allocation
- *    (i. e. the intersection with the visible parent allocation) and
+ *    (respecting ancestors that actually clip their overflow) and
  *    "area" (in widget coordinates referring to "refWidget"),
  *    returned in intersection (in widget coordinates).
  *
@@ -161,27 +162,46 @@ bool Widget::intersects (Widget *refWidget, Rectangle *area,
       intersection->y += refWidget->allocation.y;
       
       r = true;
-      // "RefWidget" is excluded; it is assumed that "area" its already within
-      // its allocation.
-      for (Widget *widget = this; r && widget != refWidget;
-           widget = widget->parent) {
-         assert (widget != NULL); // refWidget must be ancestor.
+      bool skipping = false;
+      Widget *resume = NULL;
+      for (Widget *widget = this; r && widget; widget = widget->parent) {
+         if (widget == resume) skipping = false;
+         bool clip = widget == this ? !drawsOutsideAllocation() :
+            !skipping && widget->getStyle()->overflow != style::OVERFLOW_VISIBLE;
+         if (clip) {
+            Rectangle widgetArea, newIntersection;
+            if (widget == this) {
+               widgetArea.x = widget->allocation.x;
+               widgetArea.y = widget->allocation.y;
+               widgetArea.width = widget->allocation.width;
+               widgetArea.height = widget->getHeight();
+            } else {
+               widget->getPaddingArea(&widgetArea.x, &widgetArea.y,
+                                      &widgetArea.width, &widgetArea.height);
+            }
 
-         Rectangle widgetArea, newIntersection;
-         widgetArea.x = widget->allocation.x;
-         widgetArea.y = widget->allocation.y;
-         widgetArea.width = widget->allocation.width;
-         widgetArea.height = widget->getHeight ();
-
-         if (intersection->intersectsWith (&widgetArea, &newIntersection)) {
-            DBG_OBJ_MSGF ("draw", 1, "new intersection: %d, %d, %d * %d",
-                          newIntersection.x, newIntersection.y,
-                          newIntersection.width, newIntersection.height);
-            *intersection = newIntersection;
-         } else {
-            DBG_OBJ_MSG ("draw", 1, "no new intersection");
-            r = false;
+            if (intersection->intersectsWith (&widgetArea, &newIntersection)) {
+               DBG_OBJ_MSGF ("draw", 1, "new intersection: %d, %d, %d * %d",
+                             newIntersection.x, newIntersection.y,
+                             newIntersection.width, newIntersection.height);
+               *intersection = newIntersection;
+            } else {
+               DBG_OBJ_MSG ("draw", 1, "no new intersection");
+               r = false;
+            }
          }
+         // Absolute/fixed boxes escape overflow on ancestors between them
+         // and the block that establishes their positioning coordinates.
+         if (widget->style->position == style::POSITION_ABSOLUTE ||
+             widget->style->position == style::POSITION_FIXED) {
+            resume = widget->parent;
+            while (resume && resume->parent && !resume->style->hasTransform &&
+                   (widget->style->position == style::POSITION_FIXED ||
+                    resume->style->position == style::POSITION_STATIC))
+               resume = resume->parent;
+            skipping = resume != NULL;
+         }
+         if (widget == refWidget) break;
       }
 
       if (r) {
@@ -220,12 +240,20 @@ void Widget::drawInterruption (View *view, Rectangle *area,
    context->addWidgetProcessedAsInterruption (this);
 }
 
+bool Widget::isPointVisible(int x, int y)
+{
+   if (!layout || !wasAllocated()) return false;
+   Widget *root = layout->topLevel;
+   Rectangle point(x - root->allocation.x, y - root->allocation.y, 1, 1), intersection;
+   return intersects(root, &point, &intersection);
+}
+
 Widget *Widget::getWidgetAtPoint (int x, int y,
                                   GettingWidgetAtPointContext *context)
 {
    // Suitable for simple widgets, without children.
 
-   if (inAllocation (x, y))
+   if (inAllocation (x, y) && isPointVisible(x, y))
       return this;
    else
       return NULL;
@@ -415,6 +443,21 @@ void Widget::queueResize (int ref, bool extremesChanged, bool fast)
    leaveQueueResize ();
 
    DBG_OBJ_LEAVE ();
+}
+
+void Widget::invalidateSizeRequest ()
+{
+   // A flex/grid formatting pass can try several sizes before choosing one.
+   // Invalidate descendants locally; queueing another global resize for every
+   // trial would keep the layout idle loop running indefinitely.
+   flags = (Flags)(flags | NEEDS_RESIZE);
+   Iterator *it = iterator(Content::ANY_WIDGET, false);
+   while (it->next()) {
+      Content *content = it->getContent();
+      Widget *child = content->type == Content::WIDGET_OOF_REF ? content->widgetReference->widget : content->widget;
+      if (child && child != this && child->getParent() == this) child->invalidateSizeRequest();
+   }
+   it->unref();
 }
 
 void Widget::containerSizeChanged ()
@@ -1216,6 +1259,45 @@ void Widget::sizeAllocate (Allocation *allocation)
    assert (!getExtremesEntered ());
    assert (resizeIdleEntered ());
 
+   Allocation shifted = *allocation;
+   if (parent && style->modernLayout && style->marginLeftAuto &&
+       style->display == style::DISPLAY_BLOCK && style->vloat == style::FLOAT_NONE &&
+       (style->position == style::POSITION_STATIC || style->position == style::POSITION_RELATIVE) &&
+       parent->getStyle()->display != style::DISPLAY_FLEX &&
+       parent->getStyle()->display != style::DISPLAY_INLINE_FLEX &&
+       parent->getStyle()->display != style::DISPLAY_GRID &&
+       parent->getStyle()->display != style::DISPLAY_INLINE_GRID) {
+      int space = misc::max(0, parent->getAvailWidth(true) - parent->boxDiffWidth() - shifted.width);
+      shifted.x += style->marginRightAuto ? space / 2 : space;
+      allocation = &shifted;
+   }
+   if (parent && style->modernLayout && style->position == style::POSITION_RELATIVE) {
+      int refWidth = parent->getAvailWidth(true) - parent->boxDiffWidth();
+      int refHeight = parent->getAvailHeight(false);
+      if (refHeight >= 0) refHeight -= parent->boxDiffHeight();
+      auto offset = [](style::Length value, int reference) {
+         return style::isAbsLength(value) ? style::absLengthVal(value) :
+            style::isPerLength(value) && reference >= 0 ? style::multiplyWithPerLength(reference, value) : 0;
+      };
+      shifted.x += style->left == style::LENGTH_AUTO ? -offset(style->right, refWidth) : offset(style->left, refWidth);
+      shifted.y += style->top == style::LENGTH_AUTO ? -offset(style->bottom, refHeight) : offset(style->top, refHeight);
+      allocation = &shifted;
+   }
+   if (style->hasTransform) {
+      // Translation percentages refer to this element's border box, not its
+      // containing block. Shift the allocation before allocating descendants
+      // so painting, native controls, hit testing and DOM rectangles agree.
+      int width = misc::max(0, shifted.width - style->margin.left - style->margin.right);
+      int height = misc::max(0, shifted.ascent + shifted.descent - style->margin.top - style->margin.bottom);
+      auto offset = [](style::Length value, int reference) {
+         return style::isAbsLength(value) ? style::absLengthVal(value) :
+            style::isPerLength(value) ? style::multiplyWithPerLengthRounded(reference, value) : 0;
+      };
+      shifted.x += offset(style->translateX, width);
+      shifted.y += offset(style->translateY, height);
+      allocation = &shifted;
+   }
+
    DBG_OBJ_ENTER ("resize", 0, "sizeAllocate", "%d, %d; %d * (%d + %d)",
                   allocation->x, allocation->y, allocation->width,
                   allocation->ascent, allocation->descent);
@@ -1287,6 +1369,13 @@ void Widget::sizeAllocate (Allocation *allocation)
 bool Widget::buttonPress (EventButton *event)
 {
    return buttonPressImpl (event);
+}
+
+bool Widget::emitDomEvent (int node, const char *type, const char *key,
+                            int keyCode)
+{
+   if (domEventCallback) return domEventCallback(domEventData, node, type, key, keyCode);
+   return parent ? parent->emitDomEvent(node, type, key, keyCode) : true;
 }
 
 bool Widget::buttonRelease (EventButton *event)
@@ -2273,6 +2362,26 @@ void splitHeightPreserveDescent (int height, int *ascent, int *descent)
    }
 
    DBG_OBJ_LEAVE_VAL_S ("%d, %d", *ascent, *descent);
+}
+
+bool Widget::getDomAllocation (int node, Allocation *result)
+{
+   if (node == domNode) {
+      *result = allocation;
+      return true;
+   }
+   Iterator *it = iterator(Content::ANY_WIDGET, false);
+   bool found = false;
+   while (it->next()) {
+      Content *content = it->getContent();
+      Widget *child = content->type == Content::WIDGET_OOF_REF ?
+         content->widgetReference->widget : content->widget;
+      if (child && child != this && child->getDomAllocation(node, result)) {
+         found = true; break;
+      }
+   }
+   it->unref();
+   return found;
 }
 
 } // namespace core

@@ -8,6 +8,9 @@
 namespace dw {
 namespace core {
 
+typedef bool (*DomEventCallback)(void *data, int node, const char *type,
+                                 const char *key, int keyCode);
+
 /**
  * \brief Platform independent representation.
  */

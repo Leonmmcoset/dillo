@@ -13,7 +13,7 @@
 namespace dw {
 
 /** Used (temporally) for code related to positioned elements. */
-enum { IMPL_POS = false };
+enum { IMPL_POS = true };
 
 /**
  * \brief The core of Dw is defined in this namespace.

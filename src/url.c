@@ -500,6 +500,7 @@ DilloUrl* a_Url_dup(const DilloUrl *ori)
    url->ismap_url_len        = ori->ismap_url_len;
    url->illegal_chars        = ori->illegal_chars;
    url->illegal_chars_spc    = ori->illegal_chars_spc;
+   url->request_id           = ori->request_id;
    url->data                 = dStr_sized_new(URL_DATA(ori)->len);
    dStr_append_l(url->data, URL_DATA(ori)->str, URL_DATA(ori)->len);
    return url;
@@ -522,6 +523,9 @@ int a_Url_cmp(const DilloUrl *A, const DilloUrl *B)
 
    dReturn_val_if_fail(A && B, 1);
 
+   if (A->request_id != B->request_id)
+      return A->request_id < B->request_id ? -1 : 1;
+
    if (A == B ||
        ((st = URL_STR_FIELD_I_CMP(A->authority, B->authority)) == 0 &&
         (st = strcmp(A->path ? A->path + (*A->path == '/') : "",
@@ -541,6 +545,17 @@ void a_Url_set_flags(DilloUrl *u, int flags)
 {
    if (u)
       u->flags = flags;
+}
+
+/* Isolate script HTTP transactions with differing methods, headers or
+ * credentials from each other and from the ordinary document cache. */
+void a_Url_set_unique(DilloUrl *u)
+{
+   static unsigned long next_id;
+   if (u) {
+      if (++next_id == 0) ++next_id;
+      u->request_id = next_id;
+   }
 }
 
 /**

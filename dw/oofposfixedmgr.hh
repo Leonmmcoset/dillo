@@ -10,6 +10,10 @@ namespace oof {
 class OOFPosFixedMgr: public OOFPosAbsLikeMgr
 {
 protected:
+   bool viewportRelative();
+   int referenceWidth(bool forceValue);
+   int referenceHeight(bool forceValue);
+   void sizeAllocateChildren();
    int containerBoxOffsetX ();
    int containerBoxOffsetY ();
    int containerBoxRestWidth ();
@@ -18,6 +22,7 @@ protected:
 public:
    OOFPosFixedMgr (OOFAwareWidget *container);
    ~OOFPosFixedMgr ();
+   void viewportPositionChanged();
 };
 
 } // namespace oof

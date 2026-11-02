@@ -34,6 +34,12 @@ class CssParser {
       bool tokenMatchesProperty(CssPropertyName prop, CssValueType * type);
       bool parseValue(CssPropertyName prop, CssValueType type,
                       CssPropertyValue * val);
+      bool parseCalcSum(CssLength *value, unsigned depth);
+      bool parseCalcProduct(CssLength *value, unsigned depth);
+      bool parseCalcAtom(CssLength *value, unsigned depth);
+      bool parseTransform(CssTransform *value);
+      bool parseGradient(CssGradient *value);
+      bool parseGradientColor(unsigned *rgba);
       bool parseWeight();
       bool parseRgbColorComponent(int32_t *cc, int *percentage);
       bool parseRgbColor(int32_t *c);

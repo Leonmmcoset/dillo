@@ -41,6 +41,7 @@ class StyleEngine : public dw::core::Layout::Receiver {
          bool inheritBackgroundColor;
          bool displayNone;
          DoctreeNode *doctreeNode;
+         std::map<std::string, std::string> *customProperties;
       };
 
       dw::core::Layout *layout;
@@ -81,6 +82,8 @@ class StyleEngine : public dw::core::Layout::Receiver {
                           dw::core::style::Font *font);
       void computeBorderWidth (int *dest, CssProperty *p,
                                dw::core::style::Font *font);
+      bool computeTracks(const std::string &text, dw::core::style::Length *tracks,
+                         unsigned *count, dw::core::style::Font *font, unsigned depth = 0);
 
    public:
       static void init ();

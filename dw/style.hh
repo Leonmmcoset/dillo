@@ -286,8 +286,19 @@ enum DisplayType {
    DISPLAY_TABLE_HEADER_GROUP,
    DISPLAY_TABLE_FOOTER_GROUP,
    DISPLAY_TABLE_ROW,
-   DISPLAY_TABLE_CELL
+   DISPLAY_TABLE_CELL,
+   DISPLAY_FLEX,
+   DISPLAY_INLINE_FLEX,
+   DISPLAY_GRID,
+   DISPLAY_INLINE_GRID
 };
+
+enum FlexDirection { FLEX_ROW, FLEX_ROW_REVERSE, FLEX_COLUMN, FLEX_COLUMN_REVERSE };
+enum BoxAlignment { ALIGN_NORMAL, ALIGN_STRETCH, ALIGN_FLEX_START, ALIGN_FLEX_END,
+   ALIGN_CENTER, ALIGN_BASELINE, ALIGN_SPACE_BETWEEN, ALIGN_SPACE_AROUND,
+   ALIGN_SPACE_EVENLY, ALIGN_START, ALIGN_END, ALIGN_SELF_START, ALIGN_SELF_END };
+
+
 
 enum LineType {
    LINE_NORMAL,
@@ -426,10 +437,25 @@ enum {
  *
  * "auto" lengths are represented as dw::core::style::LENGTH_AUTO.
  */
-typedef int Length;
+typedef int64_t Length;
 
 /** \brief Returns a length of \em n pixels. */
-inline Length createAbsLength(int n) { return (n << 2) | 1; }
+inline Length createAbsLength(int n) { return static_cast<Length>(n) * 4 + 1; }
+
+/* A mixed percentage/absolute calc() keeps both terms until used layout.
+ * Nonzero values tagged 00 use signed 32-bit pixels and a signed 30-bit
+ * fraction with 26 fractional bits; 0 remains the auto sentinel. */
+inline bool isCalcLength(Length l) { return l != 0 && (l & 3) == 0; }
+inline Length createCalcLength(int pixels, double fraction) {
+   if (fraction == 0) return createAbsLength(pixels);
+   double fixed = fraction * (1 << 26);
+   fixed = lout::misc::max(-536870912.0, lout::misc::min(536870911.0, fixed));
+   int64_t per = static_cast<int64_t>(round(fixed));
+   if (per == 0) return createAbsLength(pixels);
+   return static_cast<Length>((static_cast<uint64_t>(static_cast<uint32_t>(pixels)) << 32) |
+      ((static_cast<uint64_t>(per) & 0x3fffffff) << 2));
+}
+inline int calcLengthPixels(Length l) { return static_cast<int32_t>(static_cast<uint64_t>(l) >> 32); }
 
 /** \brief Returns a percentage, \em v is relative to 1, not to 100. */
 inline Length createPerLength(double v) {
@@ -443,7 +469,7 @@ inline Length createRelLength(double v) {
 inline bool isAbsLength(Length l) { return (l & 3) == 1; }
 
 /** \brief Returns true if \em l is a percentage. */
-inline bool isPerLength(Length l) { return (l & 3) == 2; }
+inline bool isPerLength(Length l) { return (l & 3) == 2 || isCalcLength(l); }
 
 /** \brief Returns true if \em l is a relative length. */
 inline bool isRelLength(Length l) { return (l & 3) == 3; }
@@ -457,7 +483,14 @@ inline int absLengthVal(Length l) { return l >> 2; }
  * soon. Instead, use multiplyWithPerLength or multiplyWithPerLengthRounded.
  */
 inline double perLengthVal_useThisOnlyForDebugging(Length l)
-{ return (double)(l & ~3) / (1 << 18); }
+{
+   if (isCalcLength(l)) {
+      int64_t fraction = (static_cast<uint64_t>(l) >> 2) & 0x3fffffff;
+      if (fraction & 0x20000000) fraction -= 0x40000000;
+      return static_cast<double>(fraction) / (1 << 26);
+   }
+   return (double)(l & ~3) / (1 << 18);
+}
 
 /** \brief Returns the value of a relative length, as a float.
  *
@@ -472,7 +505,8 @@ inline double relLengthVal(Length l) { return (double)(l & ~3) / (1 << 18); }
  * Use this instead of perLengthVal, when possible.
  */
 inline int multiplyWithPerLength(int x, Length l) {
-   return (int) round((double) x * perLengthVal_useThisOnlyForDebugging (l));
+   return (int) round((double) x * perLengthVal_useThisOnlyForDebugging (l)) +
+      (isCalcLength(l) ? calcLengthPixels(l) : 0);
 }
 
 /**
@@ -482,7 +516,8 @@ inline int multiplyWithPerLength(int x, Length l) {
  * (This function exists for backward compatibility.)
  */
 inline int multiplyWithPerLengthRounded(int x, Length l) {
-   return lout::misc::roundInt (x * perLengthVal_useThisOnlyForDebugging (l));
+   return lout::misc::roundInt (x * perLengthVal_useThisOnlyForDebugging (l)) +
+      (isCalcLength(l) ? calcLengthPixels(l) : 0);
 }
 
 inline int multiplyWithRelLength(int x, Length l) {
@@ -527,6 +562,30 @@ class StyleImage;
 /**
  * \sa dw::core::style
  */
+struct ContainerStyle {
+   int direction, wrap, justify, alignItems, alignSelf, alignContent;
+   int order, rowGap, columnGap;
+   float grow, shrink;
+   Length basis;
+   unsigned columns, rows;
+   Length columnTracks[32], rowTracks[32];
+};
+
+// Inline, value-owned decorations keep shared styles immutable and avoid
+// allocating a paint resource for every DOM node.
+struct Gradient {
+   double angle;
+   int cornerX, cornerY;
+   bool repeating;
+   unsigned count;
+   struct Stop { unsigned rgba; Length position; bool positioned; } stops[32];
+};
+
+struct BorderRadius {
+   // Clockwise: top-left, top-right, bottom-right, bottom-left.
+   Length x[4], y[4];
+};
+
 class StyleAttrs : public lout::object::Object
 {
 public:
@@ -535,6 +594,8 @@ public:
                         * TextDecoration <-> int */
    Color *color, *backgroundColor;
    StyleImage *backgroundImage;
+   Gradient gradient;
+   BorderRadius borderRadius;
    BackgroundRepeat backgroundRepeat;
    BackgroundAttachment backgroundAttachment;
    Length backgroundPositionX; // "left" defined by "0%" etc. (see CSS spec)
@@ -551,7 +612,10 @@ public:
    Overflow overflow;
 
    Position position;
+   bool modernLayout;
    Length top, bottom, left, right;
+   bool hasTransform;
+   Length translateX, translateY;
 
    int hBorderSpacing, vBorderSpacing, wordSpacing;
    Length width, height, lineHeight, textIndent;
@@ -559,11 +623,13 @@ public:
    enum BoxSizing { CONTENT_BOX, BORDER_BOX } boxSizing;
 
    Box margin, borderWidth, padding;
+   bool marginLeftAuto, marginRightAuto;
    BorderCollapse borderCollapse;
    struct { Color *top, *right, *bottom, *left; } borderColor;
    struct { BorderStyle top, right, bottom, left; } borderStyle;
 
    DisplayType display;
+   ContainerStyle container;
    WhiteSpace whiteSpace;
    ListStylePosition listStylePosition;
    ListStyleType listStyleType;
@@ -611,7 +677,7 @@ public:
    }
 
    inline bool hasBackground ()
-   { return backgroundColor != NULL || backgroundImage != NULL; }
+   { return backgroundColor != NULL || backgroundImage != NULL || gradient.count; }
 
    bool equals (lout::object::Object *other);
    int hashValue ();

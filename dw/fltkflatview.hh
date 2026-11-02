@@ -10,6 +10,8 @@ namespace fltk {
 
 class FltkFlatView: public FltkWidgetView
 {
+   bool centeredContent;
+   int contentOffsetY() const { return centeredContent && h() > canvasHeight ? (h() - canvasHeight) / 2 : 0; }
 protected:
    int translateViewXToCanvasX (int x);
    int translateViewYToCanvasY (int y);
@@ -19,6 +21,7 @@ protected:
 public:
    FltkFlatView (int x, int y, int w, int h, const char *label = 0);
    ~FltkFlatView ();
+   void setCenteredContent(bool centered) { centeredContent = centered; }
 
    void setCanvasSize (int width, int ascent, int descent);
 

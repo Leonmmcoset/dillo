@@ -1,0 +1,203 @@
+# JavaScript integration
+
+QuickJS executes classic page scripts in a separate runtime for each document.
+Lexbor owns the HTML5 DOM for that document. JavaScript is built and enabled by
+default. Disable it in Tools → Settings → Enable JavaScript, or set
+`javascript_enabled=NO` in `~/.dillo/dillorc`. Disabling it stops active page
+scripts; reload a page after enabling it again.
+
+## Build and test
+
+The pinned engine sources are included under `vendor/`, so building needs no
+network access. QuickJS is built as GNU C11; Dillo's C++ code remains C++11.
+
+```sh
+./autogen.sh
+mkdir build
+cd build
+../configure --enable-html-tests
+make -j4
+make check # See below for the installed DPI plugins needed by file/HTML tests.
+```
+
+Use `../configure --disable-javascript` to omit both QuickJS and Lexbor from the
+executable. On Linux, Pango/Cairo text shaping is selected automatically when
+`pkg-config pangocairo` is available. Install `libpango1.0-dev` and a Chinese font
+such as `fonts-noto-cjk` on Debian/Ubuntu. `--enable-modern-text` requires this
+backend; `--disable-modern-text` retains FLTK text rendering.
+
+The engine unit tests run without a display. Browser integration tests need
+Python 3 and Xvfb; install xdotool to exercise real mouse and keyboard events,
+and xsel for the Chinese clipboard regression.
+The existing file/HTML tests additionally need installed `dpid` and DPI plugins;
+configure an installation prefix, run `make install`, and put its `bin` directory
+on PATH before running those tests. To run only the HTTP integration test:
+
+```sh
+DILLO_TEST_BINDIR="$PWD/src" python3 ../test/javascript/integration.py
+```
+
+The offline renderer suite also needs ImageMagick's `import`, `convert` and
+`identify`, plus xdotool. It checks screenshots, element rectangles and real
+native input without contacting a public website. Run it from the source root:
+
+```sh
+DILLO_TEST_BINDIR="$PWD/build/src" \
+  DILLO_RENDER_OUTPUT=/tmp/dillo-rendering \
+  python3 test/javascript/rendering.py
+```
+
+`DILLO_RENDER_OUTPUT` is optional; when set, screenshots, browser logs, geometry
+and `results.json` are retained there. Otherwise successful runs clean up their
+temporary files, and failed runs retain artifacts. The suite uses an isolated
+HOME and enables background images in its test configuration. Missing screenshot
+tools cause the suite to skip with exit status 77.
+
+`dilloc domdump` prints the current DOM including script changes. `dilloc dump`
+continues to show the downloaded source. `dilloc eval EXPRESSION` evaluates
+JavaScript in the active document and prints its string value. For structured
+output, use, for example, `dilloc eval 'JSON.stringify({url:location.href})'`.
+
+## Implemented behavior
+
+- Incremental HTML5 parsing, blocking classic scripts, external async/defer
+  scripts, dynamically inserted scripts, document.write and lifecycle events.
+- Persistent node identity, DOM queries and mutation, inline style reflection,
+  collections, attributes, classList, dataset and MutationObserver.
+- Event listeners, capture/bubbling, cancellation, inline handlers, native
+  text input/textarea keyboard, input/focus events, buttons outside forms,
+  form submission and link clicks. UTF-16 selection offsets map to native
+  UTF-8 controls. Clipboard replies survive DOM changes made in key handlers.
+- Timers, Promise jobs, requestAnimationFrame, console and navigation.
+- Same-document history.pushState/replaceState, history.state/length and
+  back/forward/go share Dillo's navigation stack. Traversing these entries
+  preserves the document and sends popstate/hashchange events. State is cloned,
+  including cyclic plain objects, Date and typed arrays. Functions, Map, Set
+  and other unsupported clone types raise DataCloneError.
+- Asynchronous fetch and XMLHttpRequest, text/JSON responses, request headers,
+  CORS/preflight checks, credential modes, redirects, cancellation and timeout.
+  Script requests use Dillo's network stack and user agent. Mixed active content
+  follows its existing restrictions. Each script/API transaction has a private
+  cache key so methods, request headers and credential modes cannot share data.
+- document.cookie uses the normal cookie policy and jar, hiding HttpOnly cookies
+  and preventing scripts from overwriting them. Secure/path/domain checks apply.
+- localStorage is stored per scheme/host/port under `~/.dillo/web-storage`;
+  sessionStorage is scoped to the tab and origin and survives navigation.
+- Element rectangles and common computed styles come from Dillo's rendered
+  widgets. Linux text uses Pango font fallback/shaping and Cairo painting when
+  available, so Chinese text no longer depends on one FLTK font having every glyph.
+- Stylesheet load/error events, document.styleSheets, style/link.sheet and a
+  CSSStyleSheet subset. Inline sheets support insertRule/deleteRule/replaceSync;
+  external sheets expose readable rules only for the document's origin,
+  including after redirects. Rule objects are snapshots; complete live CSSOM
+  mutation and grouping rules are not implemented.
+- getSelection() exposes selected text and clearing for native page/control
+  selections. It does not implement DOM Range creation or editing.
+- CSS custom properties and var() fallbacks/cycle detection, calc() arithmetic
+  on supported units, box-sizing and automatic horizontal block margins.
+  Flex containers support direction, wrap, grow/shrink, basis, order, gaps and
+  common alignment. Grid supports automatic row placement, fixed/percentage/fr
+  tracks, integer repeat() and gaps. These are subsets of Flexbox and Grid;
+  intrinsic track sizing, minmax(), named lines, spans and automatic flex
+  margins are not complete.
+- Overflow-visible descendants paint and receive clicks outside small ancestor
+  allocations. Overflow-hidden ancestors clip painting and native controls at
+  the padding box; absolute/fixed descendants escape intermediate clipping
+  ancestors according to their containing block.
+- Viewport-fixed boxes stay anchored during horizontal/vertical scrolling and
+  resizing, including documents shorter than the viewport. A transformed
+  ancestor establishes the containing block for absolute/fixed descendants.
+- Translation transforms: translate(), translateX(), translateY() and
+  translate3d(x,y,0), including lists, percentages, negative lengths and calc().
+  Percentages use the border box. Transforms preserve normal flow, establish a
+  stacking context, and affect painting, native controls, hit testing and element
+  rectangles together.
+- Single-layer linear-gradient() and repeating-linear-gradient() backgrounds,
+  including angle/directional syntax, up to 32 color stops, double-position
+  stops, length/percentage/calc() positions and alpha interpolation. Colors
+  include RGB/RGBA, named colors, currentColor and 3/4/6/8-digit hex.
+- Elliptical border-radius shorthand and corner longhands, with percentages,
+  calc(), overlap normalization, rounded backgrounds and solid borders. Native
+  form controls leave their CSS border/background visible; styled buttons
+  retain gradients and centered labels.
+- Immediate window.scroll(), scrollTo() and scrollBy(), using numeric arguments
+  or options with left/top.
+
+## Architecture and limits
+
+`src/jsengine.cc` contains the GUI-independent QuickJS/Lexbor binding and
+`src/js-dom.inc` supplies browser objects. `src/javascript.cc` owns document
+lifetime, resource scheduling, native events and the connection to Dw.
+`src/jsstorage.cc` owns Web Storage persistence. Navigation, Stop and disabling
+JavaScript cancel document timers and requests before the document is destroyed.
+The QuickJS libc/OS modules are not linked or exposed to pages.
+
+The runtime limits each task to about one second of JavaScript execution, the
+JS heap to 128 MiB and the JS stack to 1 MiB. Native layout work does not consume
+the JavaScript deadline. Long microtask checkpoints yield back to the GUI and
+resume, with a total limit of 10,000 jobs per checkpoint. Native events that
+reenter JavaScript share the outer task's checkpoint. It also limits DOM
+allocations, input, resource sizes and session request counts. History state is
+limited to 512 KiB per serialized value and 16 MiB of encoded state per tab.
+These limits are safeguards within
+one process; this implementation does not add browser process isolation.
+
+The persistent DOM is serialized to Dillo's existing parser when a visual update
+is needed. The native widget tree is currently rebuilt, preserving text/control
+state, input focus, selection and scroll. This is not the incremental unified
+render tree envisioned for a later renderer. Measurement during an active native
+event handler uses the last committed tree to avoid deleting the control that
+is still delivering the event.
+
+This is an initial browser API subset. It does not provide modules, workers,
+WebSockets, IndexedDB, Canvas/WebGL, service workers, iframe browsing contexts,
+streaming/binary fetch bodies, synchronous XHR or full HTML/CSSOM conformance.
+Assigning a location fragment still uses full navigation; the same-document
+history support above applies to pushState/replaceState and their traversal.
+Media-query evaluation covers a subset and does not yet emit change
+notifications. Storage events and tab cloning are not implemented.
+Meta charset/refresh handling on the JavaScript path needs further integration.
+Rendering remains a subset. Transforms do not implement scale, rotation,
+perspective or general 3D; translate3d() requires a zero z component. Gradients
+do not implement radial/conic shapes, HSL colors or multiple background layers.
+Rounded solid borders are supported; other border styles retain the legacy
+square-border fallback. Background-image corner clipping uses row spans rather
+than an antialiased image mask. Overflow clipping is rectangular: rounded corners
+do not yet clip descendant content. Internal overflow scroll containers,
+overflow-x/y, background-size and shadows remain unsupported. Scroll APIs are
+immediate, without smooth scrolling or new scroll event notifications.
+
+## Baidu acceptance status and remaining renderer work
+
+Live checks with Dillo's unchanged default user agent have reached rendered
+Baidu results using English Enter submission and English/Chinese button
+submission. A live Chinese button search also passed clicking Next, opening
+a result URL and using the browser Back button to return to the second result
+page. Native typing, Chinese clipboard input and the site's script-driven
+navigation are exercised. The homepage may redirect itself from HTTPS to HTTP.
+Some live acceptance runs have been redirected to Baidu's CAPTCHA page; the
+full four-case search matrix has not passed in a single run. Opening a result
+checks navigation, not complete compatibility with the destination site.
+The offline integration test also covers those native
+navigation actions, scripts, storage, CORS, stylesheet redirects, history and
+control state without depending on the public site's availability.
+
+Run the optional public-site test separately from make check:
+
+```sh
+DILLO_TEST_BINDIR="$PWD/build/src" python3 test/javascript/baidu.py \
+  --navigation --output /tmp/dillo-baidu-acceptance
+```
+
+It records the user agent, DOM snapshots, screenshots when ImageMagick is
+available, the browser log and results.json. It requires Xvfb, xdotool and xsel.
+Use `--query 'QuickJS 引擎' --submit button` to run one case. A CAPTCHA redirect
+is reported as an external acceptance blocker rather than a successful search.
+
+Page appearance remains visibly different from Chrome. The offline renderer
+suite covers the clipping, fixed positioning, translation, gradient, radius and
+native-control behavior described above. It does not establish complete live
+Baidu compatibility. Remaining layout differences, font icons and unsupported
+decorative CSS still affect real sites. Further renderer work and incremental
+DOM-to-render updates are needed before claiming the planned Chrome-like visual
+compatibility goal.

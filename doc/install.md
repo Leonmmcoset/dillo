@@ -35,7 +35,7 @@ packages to build Dillo:
 ```sh
 $ sudo apt install gcc g++ autoconf automake make zlib1g-dev \
     libfltk1.3-dev libssl-dev libc6-dev \
-    libpng-dev libjpeg-dev libwebp-dev libbrotli-dev
+    libpng-dev libjpeg-dev libwebp-dev libbrotli-dev libpango1.0-dev fonts-noto-cjk
 ```
 
 If you prefer to use mbedTLS, replace `libssl-dev` with

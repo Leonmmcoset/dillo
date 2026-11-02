@@ -36,6 +36,7 @@
 #include "prefsrc.hh"
 #include "settings.hh"
 #include "uicmd.hh"
+#include "javascript.hh"
 
 namespace {
 
@@ -66,6 +67,10 @@ static const Setting settings[] = {
     &prefs.load_stylesheets, 0, 0},
    {"parse_embedded_css", N_("Use embedded CSS"), GENERAL, CHECK,
     &prefs.parse_embedded_css, 0, 0},
+#ifdef ENABLE_JAVASCRIPT
+   {"javascript_enabled", N_("Enable JavaScript"), GENERAL, CHECK,
+    &prefs.javascript_enabled, 0, 0},
+#endif
    {"font_sans_serif", N_("Sans-serif font"), FONTS, FONT,
     &prefs.font_sans_serif, 0, 0},
    {"font_serif", N_("Serif font"), FONTS, FONT, &prefs.font_serif, 0, 0},
@@ -444,6 +449,7 @@ void SettingsWindow::apply(const PrefsUpdate *updates)
          break;
       }
    }
+   if (!prefs.javascript_enabled) a_Javascript_disable_all();
 }
 
 void SettingsWindow::save()

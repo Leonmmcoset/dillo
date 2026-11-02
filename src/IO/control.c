@@ -16,6 +16,7 @@
  */
 
 #include "control.h"
+#include "../javascript.hh"
 
 #include "config.h"
 
@@ -220,6 +221,8 @@ static void Control_req_prepare_reply(struct control_req *req)
       dStr_sprintfa(r, " title         Print the title of page in the current tab\n");
       dStr_sprintfa(r, " status [MSG]  Set the status bar to MSG\n");
       dStr_sprintfa(r, " dump          Print the content of the current tab\n");
+      dStr_sprintfa(r, " domdump       Print the current DOM after JavaScript mutations\n");
+      dStr_sprintfa(r, " eval SCRIPT   Evaluate JavaScript in the current document\n");
       dStr_sprintfa(r, " hdump         Print the HTTP headers of the current tab\n");
       dStr_sprintfa(r, " load          Replace the content in the current tab by stdin\n");
       dStr_sprintfa(r, " rawload       Replace the HTTP headers and content of the current\n");
@@ -241,7 +244,9 @@ static void Control_req_prepare_reply(struct control_req *req)
       a_UIcmd_open_urlstr(bw, cmd+5);
       dStr_sprintfa(r, "0\n");
    } else if (strcmp(cmd, "url") == 0) {
-      dStr_sprintfa(r, "0\n%s\n", a_UIcmd_get_location_text(bw));
+      char *location = a_UIcmd_get_location_text(bw);
+      dStr_sprintfa(r, "0\n%s\n", location);
+      dFree(location);
    } else if (strcmp(cmd, "title") == 0) {
       const char *title = a_UIcmd_get_page_title(bw);
       if (title)
@@ -255,15 +260,27 @@ static void Control_req_prepare_reply(struct control_req *req)
          a_UIcmd_set_msg(bw, "");
       dStr_sprintfa(r, "0\n");
    } else if (strcmp(cmd, "dump") == 0) {
-      DilloUrl *url = a_Url_new(a_UIcmd_get_location_text(bw), NULL);
+      char *location = a_UIcmd_get_location_text(bw);
+      DilloUrl *url = a_Url_new(location, NULL);
+      dFree(location);
       char *buf;
       int size;
       dStr_sprintfa(r, "0\n");
       if (a_Capi_get_buf(url, &buf, &size))
          dStr_append_l(r, buf, size);
       a_Url_free(url);
+   } else if (strcmp(cmd, "domdump") == 0) {
+      char *dom = a_Javascript_dump(bw);
+      if (dom) { dStr_sprintfa(r, "0\n%s", dom); dFree(dom); }
+      else dStr_sprintfa(r, "1\nNo JavaScript document\n");
+   } else if (strncmp(cmd, "eval ", 5) == 0) {
+      char *result = a_Javascript_evaluate(bw, cmd + 5);
+      if (result) { dStr_sprintfa(r, "0\n%s\n", result); dFree(result); }
+      else dStr_sprintfa(r, "1\nNo active JavaScript document\n");
    } else if (strcmp(cmd, "hdump") == 0) {
-      DilloUrl *url = a_Url_new(a_UIcmd_get_location_text(bw), NULL);
+      char *location = a_UIcmd_get_location_text(bw);
+      DilloUrl *url = a_Url_new(location, NULL);
+      dFree(location);
       Dstr *header = a_Cache_get_header(url);
       if (header == NULL) {
          dStr_sprintfa(r, "1\nCurrent url not cached");
@@ -273,7 +290,9 @@ static void Control_req_prepare_reply(struct control_req *req)
       }
       a_Url_free(url);
    } else if (strcmp(cmd, "load") == 0) {
-      DilloUrl *url = a_Url_new(a_UIcmd_get_location_text(bw), NULL);
+      char *location = a_UIcmd_get_location_text(bw);
+      DilloUrl *url = a_Url_new(location, NULL);
+      dFree(location);
       if (url) {
          a_Cache_entry_inject(url, req->body->str, req->body->len,
                CA_GotHeader | CA_GotLength);
@@ -284,7 +303,9 @@ static void Control_req_prepare_reply(struct control_req *req)
          dStr_sprintfa(r, "1\ncannot get current url");
       }
    } else if (strcmp(cmd, "rawload") == 0) {
-      DilloUrl *url = a_Url_new(a_UIcmd_get_location_text(bw), NULL);
+      char *location = a_UIcmd_get_location_text(bw);
+      DilloUrl *url = a_Url_new(location, NULL);
+      dFree(location);
       if (url) {
          a_Cache_entry_inject(url, req->body->str, req->body->len, 0);
          a_UIcmd_repush(bw);
@@ -306,6 +327,7 @@ static void Control_req_prepare_reply(struct control_req *req)
       if (cmd[4] == ' ')
          timeout = atof(&cmd[5]);
       if (a_UIcmd_has_finished(bw)) {
+         a_UIcmd_flush_render(bw);
          dStr_sprintfa(r, "0\n");
       } else {
          if (bw_waiting) {

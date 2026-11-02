@@ -1,0 +1,2 @@
+# Fontconfig process caches, also filtered by test/html/leakfilter.awk.
+leak:libfontconfig.so

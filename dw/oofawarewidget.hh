@@ -191,6 +191,8 @@ protected:
    virtual bool adjustExtraSpaceWhenCorrectingRequisitionByOOF ();
 
 public:
+   bool viewportPositionChanged();
+   bool drawsOutsideAllocation() { return true; }
    enum {
       SL_START, SL_BACKGROUND, SL_SC_BOTTOM, SL_IN_FLOW, SL_OOF_REF,
       SL_OOF_CONT, SL_SC_TOP, SL_END };
@@ -206,11 +208,11 @@ public:
    { return style->vloat != core::style::FLOAT_NONE; }
 
    static inline bool testStyleAbsolutelyPositioned (core::style::Style *style)
-   { return IMPL_POS && style->position == core::style::POSITION_ABSOLUTE; }
+   { return IMPL_POS && style->modernLayout && style->position == core::style::POSITION_ABSOLUTE; }
    static inline bool testStyleFixedlyPositioned (core::style::Style *style)
-   { return IMPL_POS && style->position == core::style::POSITION_FIXED; }
+   { return IMPL_POS && style->modernLayout && style->position == core::style::POSITION_FIXED; }
    static inline bool testStyleRelativelyPositioned (core::style::Style *style)
-   { return IMPL_POS && style->position == core::style::POSITION_RELATIVE; }
+   { return IMPL_POS && style->modernLayout && style->position == core::style::POSITION_RELATIVE; }
 
    static inline bool testStylePositioned (core::style::Style *style)
    { return testStyleAbsolutelyPositioned (style) ||
@@ -218,10 +220,8 @@ public:
          testStyleFixedlyPositioned (style); }
 
    static inline bool testStyleOutOfFlow (core::style::Style *style)
-   {  // Second part is equivalent to testStylePositioned(), but we still keep
-      // the two separately.
+   {
       return testStyleFloat (style) || testStyleAbsolutelyPositioned (style)
-         || testStyleRelativelyPositioned (style)
          || testStyleFixedlyPositioned (style); }
    
    static inline bool testWidgetFloat (Widget *widget)

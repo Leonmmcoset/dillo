@@ -36,22 +36,64 @@ OOFPosFixedMgr::~OOFPosFixedMgr ()
 
 int OOFPosFixedMgr::containerBoxOffsetX ()
 {
-   return 0;
+   return container->getParent() ? container->boxOffsetX() - container->getStyle()->padding.left : 0;
 }
 
 int OOFPosFixedMgr::containerBoxOffsetY ()
 {
-   return 0;
+   return container->getParent() ? container->boxOffsetY() - container->getStyle()->padding.top : 0;
 }
 
 int OOFPosFixedMgr::containerBoxRestWidth ()
 {
-   return 0;
+   return container->getParent() ? container->boxRestWidth() - container->getStyle()->padding.right : 0;
 }
 
 int OOFPosFixedMgr::containerBoxRestHeight ()
 {
-   return 0;
+   return container->getParent() ? container->boxRestHeight() - container->getStyle()->padding.bottom : 0;
+}
+
+bool OOFPosFixedMgr::viewportRelative()
+{
+   return !container->getParent() && !container->getStyle()->hasTransform;
+}
+
+int OOFPosFixedMgr::referenceWidth(bool forceValue)
+{
+   return viewportRelative() ? container->getLayout()->getContentWidthViewport() :
+      OOFPosAbsLikeMgr::referenceWidth(forceValue);
+}
+
+int OOFPosFixedMgr::referenceHeight(bool forceValue)
+{
+   return viewportRelative() ? container->getLayout()->getContentHeightViewport() :
+      OOFPosAbsLikeMgr::referenceHeight(forceValue);
+}
+
+void OOFPosFixedMgr::sizeAllocateChildren()
+{
+   if (!viewportRelative()) {
+      OOFPosAbsLikeMgr::sizeAllocateChildren();
+      return;
+   }
+   dw::core::Layout *layout = container->getLayout();
+   for (int i = 0; i < children->size(); ++i) {
+      Child *child = children->get(i);
+      dw::core::Allocation allocation;
+      int x, y;
+      calcPosAndSizeChildOfChild(child, referenceWidth(true), referenceHeight(true),
+         &x, &y, &allocation.width, &allocation.ascent, &allocation.descent);
+      allocation.x = layout->getScrollPosX() + x;
+      allocation.y = layout->getScrollPosY() + y;
+      child->widget->sizeAllocate(&allocation);
+   }
+}
+
+void OOFPosFixedMgr::viewportPositionChanged()
+{
+   if (viewportRelative() && containerAllocationState == WAS_ALLOCATED)
+      sizeAllocateChildren();
 }
 
 } // namespace oof

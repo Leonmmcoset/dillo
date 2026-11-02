@@ -283,6 +283,7 @@
    {"URL:", "地址："},
    {"Unknown certificate error(s): flag value 0x%04x", "未知证书错误：标志值 0x%04x"},
    {"Use embedded CSS", "使用内嵌 CSS"},
+   {"Enable JavaScript", "启用 JavaScript"},
    {"Use remote CSS", "使用外部 CSS"},
    {"User", "用户名"},
    {"User agent", "用户代理（User-Agent）"},

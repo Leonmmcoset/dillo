@@ -11,7 +11,9 @@ LDADD = \
 
 TESTS = \
 	containers \
+	cookies-script \
 	css-media \
+	css-variables \
 	disposition \
 	identity \
 	i18n \
@@ -20,6 +22,13 @@ TESTS = \
 	prefsrc \
 	shapes \
 	unicode_test
+
+if ENABLE_JAVASCRIPT
+TESTS += javascript
+javascript_SOURCES = javascript_test.cc $(top_srcdir)/src/jsengine.cc
+javascript_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/vendor/quickjs -I$(top_srcdir)/vendor/lexbor/source
+javascript_LDADD = $(top_builddir)/vendor/libquickjs.a $(top_builddir)/vendor/liblexbor.a -lm
+endif
 
 # Some test are broken, so only build them
 check_PROGRAMS = $(TESTS) \
@@ -33,6 +42,8 @@ EXTRA_DIST = \
 containers_SOURCES = containers.cc
 css_media_SOURCES = css_media_test.cc $(top_srcdir)/src/cssmedia.cc
 css_media_LDADD = $(top_builddir)/dlib/libDlib.a
+css_variables_SOURCES = css_variables_test.cc $(top_srcdir)/src/cssvariables.cc
+css_variables_LDADD =
 i18n_SOURCES = i18n.c
 i18n_LDADD = $(top_builddir)/dlib/libDlib.a
 prefsrc_SOURCES = prefsrc_test.cc $(top_srcdir)/src/prefsrc.cc
@@ -50,6 +61,8 @@ identity_LDADD = \
 	$(top_builddir)/lout/liblout.a \
 	$(top_builddir)/dlib/libDlib.a
 cookies_SOURCES = cookies.c
+cookies_script_SOURCES = cookies_script_test.c $(top_srcdir)/dpi/dpiutil.c
+cookies_script_LDADD = $(top_builddir)/dpip/libDpip.a $(top_builddir)/dlib/libDlib.a
 cookies_LDADD = \
 	$(top_builddir)/dpip/libDpip.a \
 	$(top_builddir)/dlib/libDlib.a

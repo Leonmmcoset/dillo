@@ -9,6 +9,8 @@ noinst_LIBRARIES = \
 	libDw-widgets.a
 
 libDw_core_a_SOURCES = \
+	paint.cc \
+	paint.hh \
 	core.hh \
 	events.hh \
 	findtext.cc \
@@ -50,6 +52,8 @@ libDw_fltk_a_SOURCES = \
 	fltkmisc.hh \
 	fltkplatform.cc \
 	fltkplatform.hh \
+	fltktext.cc \
+	fltktext.hh \
 	fltkpreview.hh \
 	fltkpreview.cc \
 	fltkui.cc \
@@ -62,6 +66,8 @@ libDw_fltk_a_SOURCES = \
 libDw_fltk_a_CXXFLAGS = @FLTK_CXXFLAGS@
 
 libDw_widgets_a_SOURCES = \
+	flexbox.cc \
+	flexbox.hh \
 	alignedtablecell.cc \
 	alignedtablecell.hh \
 	alignedtextblock.cc \

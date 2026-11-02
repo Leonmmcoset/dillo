@@ -42,6 +42,9 @@
 # (While browsing, this can be changed from the tools/settings menu.)
 #parse_embedded_css=YES
 
+# Execute page JavaScript (requires a build with QuickJS).
+#javascript_enabled=YES
+
 # Change the buffering scheme for drawing
 # 0 no double buffering - useful for debugging
 # 1 light buffering using a single back buffer for all windows

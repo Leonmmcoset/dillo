@@ -46,8 +46,8 @@ void OOFPosAbsLikeMgr::sizeAllocateChildren ()
 {
    DBG_OBJ_ENTER0 ("resize.oofm", 0, "sizeAllocateChildren");
 
-   int refWidth = container->getAvailWidth (true) - containerBoxDiffWidth ();
-   int refHeight = container->getAvailHeight (true) - containerBoxDiffHeight ();
+   int refWidth = referenceWidth (true) - containerBoxDiffWidth ();
+   int refHeight = referenceHeight (true) - containerBoxDiffHeight ();
 
    for (int i = 0; i < children->size(); i++) {
       Child *child = children->get (i);
@@ -78,8 +78,8 @@ void OOFPosAbsLikeMgr::getSize (Requisition *containerReq, int *oofWidth,
 
    *oofWidth = *oofHeight = 0;
 
-   int refWidth = container->getAvailWidth (true);
-   int refHeight = container->getAvailHeight (true);
+   int refWidth = referenceWidth (true);
+   int refHeight = referenceHeight (true);
 
    for (int i = 0; i < children->size(); i++) {
       Child *child = children->get(i);
@@ -168,18 +168,18 @@ int OOFPosAbsLikeMgr::getAvailWidthOfChild (Widget *child, bool forceValue)
       // TODO Is "boxDiffWidth()" correct here?
       DBG_OBJ_MSG ("resize.oofm", 1, "no specification");
       if (forceValue) {
-         int availWidth = container->getAvailWidth (true), left, right;
+         int availWidth = referenceWidth (true) - containerBoxDiffWidth(), left, right;
 
          // Regard undefined values as 0:
          if (!getPosLeft (child, availWidth, &left)) left = 0;
          if (!getPosRight (child, availWidth, &right)) right = 0;
 
-         width = max (availWidth - containerBoxDiffWidth () - left - right, 0);
+         width = max (availWidth - left - right, 0);
       } else
          width = -1;
    } else {
       if (forceValue) {
-         int availWidth = container->getAvailWidth (true);
+         int availWidth = referenceWidth (true);
          child->calcFinalWidth (child->getStyle(),
                                 availWidth - containerBoxDiffWidth (), NULL,
                                 0, true, &width);
@@ -211,19 +211,19 @@ int OOFPosAbsLikeMgr::getAvailHeightOfChild (Widget *child, bool forceValue)
       // TODO Is "boxDiffHeight()" correct here?
       DBG_OBJ_MSG ("resize.oofm", 1, "no specification");
       if (forceValue) {
-         int availHeight = container->getAvailHeight (true), top, bottom;
+         int availHeight = referenceHeight (true) - containerBoxDiffHeight(), top, bottom;
 
          // Regard undefined values as 0:
          if (!getPosTop (child, availHeight, &top)) top = 0;
          if (!getPosBottom (child, availHeight, &bottom)) bottom = 0;
 
          height =
-            max (availHeight - containerBoxDiffHeight () - top - bottom, 0);
+            max (availHeight - top - bottom, 0);
       } else
          height = -1;
    } else {
       if (forceValue) {
-         int availHeight = container->getAvailHeight (true);
+         int availHeight = referenceHeight (true);
          height = child->calcHeight (child->getStyle()->height, true,
                                      availHeight - containerBoxDiffHeight (),
                                      NULL, true);
@@ -325,16 +325,16 @@ void OOFPosAbsLikeMgr::calcHPosAndSizeChildOfChild (Child *child, int refWidth,
 
    if (xPtr) {
       if (!leftDefined && !rightDefined)
-         *xPtr = generatorPosX (child) + child->x;
+         *xPtr = generatorPosX (child) + child->x - containerBoxOffsetX();
       else {
          if (!leftDefined && rightDefined)
-            *xPtr = refWidth - width - right - containerBoxRestWidth ();
+            *xPtr = refWidth - width - right;
          else if (leftDefined && !rightDefined)
-            *xPtr = left + containerBoxOffsetX ();
+            *xPtr = left;
          else {
             *xPtr = left;
             if (!widthDefined) {
-               width = refWidth - (left + right + containerBoxDiffWidth ());
+               width = max(0, refWidth - left - right);
                DBG_OBJ_MSGF ("resize.oofm", 0, "=> width (corrected) = %d",
                              width);
             }
@@ -391,18 +391,17 @@ void OOFPosAbsLikeMgr::calcVPosAndSizeChildOfChild (Child *child, int refHeight,
 
    if (yPtr) {
       if (!topDefined && !bottomDefined)
-         *yPtr = generatorPosY (child) + child->y;
+         *yPtr = generatorPosY (child) + child->y - containerBoxOffsetY();
       else {
          if (!topDefined && bottomDefined)
-            *yPtr = refHeight - (ascent + descent) - bottom
-               - containerBoxDiffHeight ();
+            *yPtr = refHeight - (ascent + descent) - bottom;
          else if (topDefined && !bottomDefined)
-            *yPtr = top + containerBoxOffsetY ();
+            *yPtr = top;
          else {
             *yPtr = top;
             if (!heightDefined) {
                int height =
-                  refHeight - (top + bottom + containerBoxDiffHeight ());
+                  max(0, refHeight - top - bottom);
                splitHeightPreserveAscent (height, &ascent, &descent);
                DBG_OBJ_MSGF ("resize.oofm", 0,
                              "=> ascent + descent (corrected) = %d + %d",

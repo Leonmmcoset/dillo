@@ -1,0 +1,75 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Renderer ready</title>
+<style>
+html,body { margin:0; padding:0; background:white; color:black }
+#origin { position:fixed; left:0; top:0; width:8px; height:8px; background:#12a0b0; z-index:1000 }
+.case { position:absolute; box-sizing:border-box }
+#visible,#hidden { top:30px; width:60px; height:60px; background:#ddd }
+#visible { left:20px; overflow:visible }
+#hidden { left:160px; overflow:hidden }
+.wrapper { width:10px; height:10px }
+.leaf { position:absolute; left:45px; top:35px; width:50px; height:20px; display:block; background:#e02030 }
+#escape { left:300px; top:30px; width:100px; height:80px }
+#escape .wrapper { overflow:hidden }
+#escape .leaf { left:50px; top:35px }
+#translate { left:20px; top:150px; width:200px; height:80px; background:#ddd }
+#translated { position:absolute; left:50%; top:50%; width:80px; height:40px; transform:translate(-50%,-50%); background:#008050 }
+#chain { left:260px; top:150px; width:80px; height:40px; transform:translateX(10px) translateY(10px) translate(-25%,calc(50% - 5px)); background:#008050 }
+#contained { left:450px; top:150px; width:150px; height:80px; border:4px solid #111; padding:5px; transform:translateX(10px) }
+#contained-fixed { position:fixed; left:10px; top:10px; width:30px; height:20px; background:#805000 }
+#fixed { position:fixed; right:20px; top:20px; width:50px; height:30px; background:#2040d0; z-index:5 }
+#fixed-bottom { position:fixed; left:20px; bottom:20px; width:50px; height:30px; background:#2040d0; z-index:5 }
+#fixed-wrapper { left:650px; top:160px; width:10px; height:10px; overflow:hidden }
+#escaped-fixed { position:fixed; right:20px; top:80px; width:50px; height:30px; background:#208040; z-index:5 }
+.gradient { top:280px; width:120px; height:50px }
+#horizontal { left:20px; background:linear-gradient(to right,#f00,#00f) }
+#vertical { left:160px; background-image:linear-gradient(red,blue) }
+#repeat { left:300px; background:repeating-linear-gradient(90deg,red 0px 10px,blue 10px 20px) }
+#alpha { left:440px; background:#20a040; background-image:linear-gradient(to right,rgba(255,255,255,1),transparent) }
+#diagonal { left:580px; background:linear-gradient(to bottom right,red,blue) }
+.rounded { top:370px; width:80px; height:60px; background:#e02030 }
+#round { left:20px; border-radius:20px }
+#border { left:120px; border:4px solid #102030; border-radius:20px }
+#ellipse { left:220px; border-radius:50% }
+#asymmetric { left:320px; border-radius:0 25px 0 25px / 0 15px 0 15px }
+#oversized { left:420px; border-radius:1000px }
+#gradient-round { left:520px; border-radius:20px; background:linear-gradient(90deg,red,blue) }
+#cascade { left:620px; border-radius:20px; border-radius:-10px; background:linear-gradient(red,blue); background-image:linear-gradient(red) }
+#image-round { left:720px; border-radius:20px; background:url(tile.svg) no-repeat }
+#textclip { left:720px; top:280px; width:90px; height:20px; overflow:hidden }
+#textclip span { font-size:28px; line-height:40px; color:red }
+#search { left:20px; top:480px; display:flex; width:420px; height:44px }
+#query { box-sizing:border-box; width:300px; height:44px; border:2px solid #4e6ef2; border-radius:12px 0 0 12px; padding:8px; background:white }
+#search button { box-sizing:border-box; width:120px; height:44px; border:0; border-radius:0 12px 12px 0; background:linear-gradient(90deg,#4e6ef2,#315efb); color:white }
+#flow { left:500px; top:480px; width:140px; height:70px }
+#flow-first { width:40px; height:20px; transform:translate(80px,20px); background:#e02030 }
+#flow-second { width:40px; height:20px; background:#008050 }
+#spacer { width:1500px; height:2000px }
+</style>
+<div id=origin></div>
+<div id=visible class=case><div class=wrapper><a id=visible-leaf class=leaf href=#clicked></a></div></div>
+<div id=hidden class=case><div class=wrapper><a id=hidden-leaf class=leaf href=#hidden-click></a></div></div>
+<div id=escape class=case><div class=wrapper><a id=escape-leaf class=leaf href=#escape-click></a></div></div>
+<div id=translate class=case><div id=translated></div></div>
+<div id=chain class=case></div>
+<div id=contained class=case><div id=contained-fixed></div></div>
+<div id=fixed></div><div id=fixed-bottom></div>
+<div id=fixed-wrapper class=case><div id=escaped-fixed></div></div>
+<div id=horizontal class="case gradient"></div><div id=vertical class="case gradient"></div>
+<div id=repeat class="case gradient"></div><div id=alpha class="case gradient"></div>
+<div id=diagonal class="case gradient"></div>
+<div id=round class="case rounded"></div><div id=border class="case rounded"></div>
+<div id=ellipse class="case rounded"></div><div id=asymmetric class="case rounded"></div>
+<div id=oversized class="case rounded"></div><div id=gradient-round class="case rounded"></div>
+<div id=cascade class="case rounded"></div>
+<div id=image-round class="case rounded"></div>
+<div id=textclip class=case><span>MMMMM</span></div>
+<form id=search class=case><input id=query placeholder="离线搜索测试"><button id=search-button type=submit>百度一下</button></form>
+<div id=flow class=case><div id=flow-first></div><div id=flow-second></div></div>
+<div id=spacer></div>
+<script>
+for (const id of ['visible-leaf','hidden-leaf','escape-leaf'])
+ document.getElementById(id).onclick=e=>{e.preventDefault();document.title='Clicked '+id};
+search.onsubmit=e=>{e.preventDefault();document.title='Search '+query.value};
+</script>

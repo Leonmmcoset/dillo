@@ -101,10 +101,9 @@ void OOFPositionedMgr::sizeAllocateEnd (OOFAwareWidget *caller)
    if (caller == container) {
       sizeAllocateChildren ();
 
-      bool extremesChanged = !allChildrenConsideredForExtremes ();
-      if (extremesChanged || doChildrenExceedContainer () ||
-          !allChildrenConsideredForSize ())
-         container->oofSizeChanged (extremesChanged);
+      // Positioned descendants may overflow their containing block, but that
+      // overflow does not increase its CSS size or intrinsic width. Relative
+      // descendants already reserve their unshifted size in normal flow.
       
       containerAllocationState = WAS_ALLOCATED;
    }

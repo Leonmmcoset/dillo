@@ -203,6 +203,7 @@ void PrefsParser::parse(FILE *fp)
       { "no_proxy", &prefs.no_proxy, PREFS_STRING, 0 },
       { "panel_size", &prefs.panel_size, PREFS_PANEL_SIZE, 0 },
       { "parse_embedded_css", &prefs.parse_embedded_css, PREFS_BOOL, 0 },
+      { "javascript_enabled", &prefs.javascript_enabled, PREFS_BOOL, 0 },
       { "save_dir", &prefs.save_dir, PREFS_STRING, 0 },
       { "scroll_step", &prefs.scroll_step, PREFS_INT32, 0 },
       { "scroll_page_overlap", &prefs.scroll_page_overlap, PREFS_INT32, 0 },

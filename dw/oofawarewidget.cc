@@ -165,7 +165,8 @@ bool OOFAwareWidget::isOOFContainer (Widget *widget, int oofmIndex)
    case OOFM_ABSOLUTE:
       return widget->instanceOf (OOFAwareWidget::CLASS_ID) &&
          (widget->getParent() == NULL ||
-          OOFAwareWidget::testWidgetPositioned (widget));
+          OOFAwareWidget::testWidgetPositioned (widget) ||
+          widget->getStyle()->hasTransform);
 
       
    case OOFM_FIXED:
@@ -173,7 +174,8 @@ bool OOFAwareWidget::isOOFContainer (Widget *widget, int oofmIndex)
       // toplevel (canvas; actually the viewport). (The toplevel
       // widget should always be a textblock; at least this is the
       // case in dillo.)
-      return widget->getParent() == NULL;
+      return widget->getParent() == NULL ||
+         (widget->instanceOf(OOFAwareWidget::CLASS_ID) && widget->getStyle()->hasTransform);
 
    default:
       // compiler happiness
@@ -244,7 +246,7 @@ void OOFAwareWidget::correctRequisitionByOOF (Requisition *requisition,
    requisitionWithoutOOF = *requisition;
 
    for (int i = 0; i < NUM_OOFM; i++) {
-      if (outOfFlowMgr[i]) {
+      if (outOfFlowMgr[i] && i == OOFM_FLOATS) {
          DBG_OBJ_MSGF ("resize", 1, "OOFM for %s", OOFM_NAME[i]);
          DBG_OBJ_MSG_START ();
 
@@ -310,7 +312,7 @@ void OOFAwareWidget::correctExtremesByOOF (Extremes *extremes)
                   extremes->maxWidth, extremes->maxWidthIntrinsic);
 
    for (int i = 0; i < NUM_OOFM; i++) {
-      if (outOfFlowMgr[i]) {
+      if (outOfFlowMgr[i] && i == OOFM_FLOATS) {
          DBG_OBJ_MSGF ("resize", 1, "OOFM for %s", OOFM_NAME[i]);
          DBG_OBJ_MSG_START ();
 
@@ -354,6 +356,15 @@ void OOFAwareWidget::sizeAllocateEnd ()
          oofContainer[i]->outOfFlowMgr[i]->sizeAllocateEnd (this);
 }
 
+bool OOFAwareWidget::viewportPositionChanged()
+{
+   if (outOfFlowMgr[OOFM_FIXED] && outOfFlowMgr[OOFM_FIXED]->getNumWidgets()) {
+      static_cast<OOFPosFixedMgr *>(outOfFlowMgr[OOFM_FIXED])->viewportPositionChanged();
+      return !getParent() && !getStyle()->hasTransform;
+   }
+   return false;
+}
+
 void OOFAwareWidget::containerSizeChangedForChildrenOOF ()
 {
    for (int i = 0; i < NUM_OOFM; i++)
@@ -388,8 +399,22 @@ void OOFAwareWidget::draw (View *view, Rectangle *area, DrawingContext *context)
    DBG_OBJ_ENTER ("draw", 0, "draw", "%d, %d, %d * %d",
                   area->x, area->y, area->width, area->height);
 
-   for (int level = SL_START + 1; level < SL_END; level++)
-      drawLevel (view, area, level, context);
+   View *clipped = view->getClippingView(allocation.x + area->x,
+      allocation.y + area->y, area->width, area->height);
+   for (int level = SL_START + 1; level < SL_END; level++) {
+      if (level == SL_IN_FLOW && getStyle()->overflow != OVERFLOW_VISIBLE) {
+         Rectangle padding, visible;
+         getPaddingArea(&padding.x, &padding.y, &padding.width, &padding.height);
+         padding.x -= allocation.x; padding.y -= allocation.y;
+         if (area->intersectsWith(&padding, &visible)) {
+            View *content = clipped->getClippingView(allocation.x + visible.x,
+               allocation.y + visible.y, visible.width, visible.height);
+            drawLevel(content, &visible, level, context);
+            clipped->mergeClippingView(content);
+         }
+      } else drawLevel(clipped, area, level, context);
+   }
+   view->mergeClippingView(clipped);
 
    DBG_OBJ_LEAVE ();
 }
@@ -459,7 +484,7 @@ Widget *OOFAwareWidget::getWidgetAtPoint (int x, int y,
    DBG_OBJ_ENTER ("events", 0, "getWidgetAtPoint", "%d, %d", x, y);
    Widget *widgetAtPoint = NULL;
 
-   if (inAllocation (x, y)) {
+   if (wasAllocated() && isPointVisible(x, y)) {
       for (int level = SL_END - 1; widgetAtPoint == NULL && level > SL_START;
            level--)
          widgetAtPoint = getWidgetAtPointLevel (x, y, level, context);

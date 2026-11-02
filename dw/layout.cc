@@ -635,6 +635,7 @@ void Layout::scrollIdle ()
 
    if (xChanged || yChanged) {
       adjustScrollPos ();
+      updateFixedWidgets();
       view->scrollTo (scrollX, scrollY);
       if (drawAfterScrollReq) {
          drawAfterScrollReq = false;
@@ -711,14 +712,16 @@ void Layout::draw (View *view, Rectangle *area)
       /* scroll is pending, defer draw until after scrollIdle() */
       drawAfterScrollReq = true;
 
-   } else if (topLevel) {
+   } else if (topLevel && topLevel->wasAllocated()) {
       /* Draw the top level widget. */
       widgetArea.x = topLevel->allocation.x;
       widgetArea.y = topLevel->allocation.y;
       widgetArea.width = topLevel->allocation.width;
       widgetArea.height = topLevel->getHeight ();
 
-      if (area->intersectsWith (&widgetArea, &intersection)) {
+      bool overflow = topLevel->drawsOutsideAllocation();
+      if (overflow) intersection = *area;
+      if (overflow || area->intersectsWith (&widgetArea, &intersection)) {
          view->startDrawing (&intersection);
 
          /* Intersection in widget coordinates. */
@@ -727,7 +730,7 @@ void Layout::draw (View *view, Rectangle *area)
          widgetDrawArea.width = intersection.width;
          widgetDrawArea.height = intersection.height;
 
-         DrawingContext context (&widgetArea);
+         DrawingContext context (&widgetDrawArea);
          topLevel->draw (view, &widgetDrawArea, &context);
 
          view->finishDrawing (&intersection);
@@ -1330,9 +1333,25 @@ void Layout::scrollPosChanged (View *view, int x, int y)
    if (x != scrollX || y != scrollY) {
       scrollX = x;
       scrollY = y;
+      updateFixedWidgets();
 
       setAnchor (NULL);
       updateAnchor ();
+   }
+}
+
+void Layout::updateFixedWidgets()
+{
+   if (topLevel) {
+      enterResizeIdle();
+      bool moved = topLevel->viewportPositionChanged();
+      leaveResizeIdle();
+      if (moved && view) {
+         // Scroll blitting would otherwise copy the old fixed pixels along
+         // with document content, leaving a trail behind the moved widget.
+         drawAfterScrollReq = true;
+         view->queueDrawTotal();
+      }
    }
 }
 
