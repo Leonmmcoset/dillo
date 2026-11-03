@@ -563,7 +563,33 @@ class Element extends Node {
             }
         } finally {this._clicking=false;}
     }
-    scrollIntoView() { native('control',this._id,'scrollIntoView'); }
+    scrollIntoView(options=true) {
+        let block='start',inline='nearest',behavior='auto';
+        if(typeof options==='boolean')block=options?'start':'end';
+        else if(options!=null) {
+            block=options.block??block;inline=options.inline??inline;behavior=options.behavior??behavior;
+        }
+        if(!['start','center','end','nearest'].includes(block)||
+           !['start','center','end','nearest'].includes(inline)||
+           !['auto','instant','smooth'].includes(behavior))
+            throw new TypeError('Invalid scrollIntoView options');
+        if(!this.isConnected)return;
+        const rect=this.getBoundingClientRect(),currentX=scrollX,currentY=scrollY;
+        const destination=(start,end,size,current,alignment)=>{
+            if(alignment==='start')return current+start;
+            if(alignment==='center')return current+(start+end-size)/2;
+            if(alignment==='end')return current+end-size;
+            if(start<0&&end>size)return current;
+            if(start<0)return current+start;
+            if(end>size)return current+end-size;
+            return current;
+        };
+        const metrics=scrollMetrics(),view=viewport();
+        const x=destination(rect.left,rect.right,view[0],currentX,inline);
+        const y=destination(rect.top,rect.bottom,view[1],currentY,block);
+        scrollTo(Math.max(0,Math.min(metrics[0]-view[0],x)),
+                 Math.max(0,Math.min(metrics[1]-view[1],y)));
+    }
     get value() {
         if(this.localName==='select')return Array.from(this.options).find(o=>o.selected)?.value??'';
         const current=native('control',this._id,'value'),stored=native('state',this._id,'value');

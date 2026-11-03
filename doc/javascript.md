@@ -225,6 +225,10 @@ output, use, for example, `dilloc eval 'JSON.stringify({url:location.href})'`.
   immediately, coalesce synchronous updates and dispatch scroll events on the
   window and document. User-driven native scrolling does not yet emit these
   script events.
+- `Element.scrollIntoView()` supports the legacy boolean form and option-based
+  start, center, end and nearest alignment on both axes. Smooth behavior is
+  accepted but currently scrolls immediately; scroll margins and nested
+  scrolling containers are not implemented.
 
 ## Architecture and limits
 

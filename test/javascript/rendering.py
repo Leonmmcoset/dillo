@@ -180,6 +180,27 @@ def main():
                   'programmatic scrolling coalesces native offsets and dispatches window and document events', scroll_events)
             command('eval', 'scrollTo(0,0)')
             command('wait', '5')
+            target_scroll=evaluate('(()=>{const e=document.getElementById("scroll-target"),r=e.getBoundingClientRect(),x=Math.trunc(r.left+r.width/2-innerWidth/2),y=Math.trunc(r.top+r.height/2-innerHeight/2);e.scrollIntoView({block:"center",inline:"center",behavior:"smooth"});return [scrollX,scrollY,x,y]})()')
+            check(target_scroll[0:2] == target_scroll[2:4],
+                  'scrollIntoView centers a target on both axes and accepts smooth behavior', target_scroll)
+            command('wait', '5')
+            end_scroll=evaluate('(()=>{const e=document.getElementById("scroll-target"),r=e.getBoundingClientRect(),y=Math.trunc(scrollY+r.bottom-innerHeight);e.scrollIntoView(false);return [scrollY,y]})()')
+            check(end_scroll[0] == end_scroll[1],
+                  'legacy false scrollIntoView argument aligns the target with the viewport bottom', end_scroll)
+            command('wait', '5')
+            nearest_scroll=evaluate('(()=>{const before=[scrollX,scrollY];document.getElementById("scroll-target").scrollIntoView({block:"nearest",inline:"nearest"});return [before,scrollX,scrollY]})()')
+            check(nearest_scroll == [[nearest_scroll[1],nearest_scroll[2]],nearest_scroll[1],nearest_scroll[2]],
+                  'nearest alignment leaves a fully visible target in place', nearest_scroll)
+            edge_scroll=evaluate('(()=>{const e=document.getElementById("scroll-target"),r=e.getBoundingClientRect(),x=Math.max(0,Math.min(document.documentElement.scrollWidth-innerWidth,Math.trunc(scrollX+r.right-innerWidth))),y=Math.max(0,Math.min(document.documentElement.scrollHeight-innerHeight,Math.trunc(scrollY+r.top)));e.scrollIntoView({block:"start",inline:"end"});return [scrollX,scrollY,x,y]})()')
+            check(edge_scroll[0:2] == edge_scroll[2:4],
+                  'start/end options align the corresponding target edges', edge_scroll)
+            default_scroll=evaluate('(()=>{const before=[scrollX,scrollY];document.getElementById("scroll-target").scrollIntoView();return [before,scrollX,scrollY]})()')
+            check(default_scroll == [[default_scroll[1],default_scroll[2]],default_scroll[1],default_scroll[2]],
+                  'scrollIntoView defaults to block start and inline nearest', default_scroll)
+            invalid_scroll=evaluate('(()=>{let n=0;for(const options of [{block:"middle"},{inline:"middle"},{behavior:"later"}])try{document.getElementById("scroll-target").scrollIntoView(options)}catch(e){if(e instanceof TypeError)n++}return n})()')
+            check(invalid_scroll == 3, 'scrollIntoView rejects unsupported alignment and behavior values', invalid_scroll)
+            command('eval', 'scrollTo(0,0)')
+            command('wait', '5')
 
             grid = evaluate('(()=>{const a=document.getElementById("grid-first").getBoundingClientRect(),b=document.getElementById("grid-second").getBoundingClientRect();return [a.x,a.width,b.x,b.width]})()')
             check(grid == [500,97,770,30], 'grid minmax/fr tracks and justify-self place items in their tracks', grid)
