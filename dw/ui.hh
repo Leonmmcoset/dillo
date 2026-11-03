@@ -373,6 +373,8 @@ public:
    virtual void correctExtremesOfChild (Widget *child, Extremes *extremes,
                                         bool useAdjustmentWidth);
    virtual void containerSizeChangedForChildren ();
+   virtual bool hasWidgetFocus () { return false; }
+   virtual void restoreWidgetFocus () {}
 
    virtual void setDisplayed (bool displayed);
    virtual void draw (View *view, Rectangle *area, DrawingContext *context);

@@ -341,6 +341,76 @@ void CssSimpleSelector::addStructural(char type, int a, int b)
    s->b = b;
 }
 
+static bool Css_node_has_focus(const DoctreeNode *node)
+{
+   if (node->focused || node->focusWithin)
+      return true;
+   for (const DoctreeNode *child = node->lastChild; child;
+        child = child->sibling)
+      if (Css_node_has_focus(child))
+         return true;
+   return false;
+}
+
+static bool Css_node_is_descendant_of(const DoctreeNode *node,
+                                      const DoctreeNode *ancestor)
+{
+   for (const DoctreeNode *parent = node; parent; parent = parent->parent)
+      if (parent == ancestor)
+         return true;
+   return false;
+}
+
+static bool Css_node_disabled(const DoctreeNode *node)
+{
+   const int button = a_Html_tag_index("button");
+   const int input = a_Html_tag_index("input");
+   const int select = a_Html_tag_index("select");
+   const int textarea = a_Html_tag_index("textarea");
+   const int option = a_Html_tag_index("option");
+   const int optgroup = a_Html_tag_index("optgroup");
+   const int fieldset = a_Html_tag_index("fieldset");
+   const int legend = a_Html_tag_index("legend");
+   bool disableable = node->element == button || node->element == input ||
+      node->element == select || node->element == textarea ||
+      node->element == option || node->element == optgroup ||
+      node->element == fieldset;
+   if (!disableable)
+      return false;
+   if (node->getAttribute("disabled"))
+      return true;
+   if (node->element == option && node->parent &&
+       node->parent->element == optgroup &&
+       node->parent->getAttribute("disabled"))
+      return true;
+
+   for (const DoctreeNode *parent = node->parent; parent;
+        parent = parent->parent) {
+      if (parent->element != fieldset || !parent->getAttribute("disabled"))
+         continue;
+      const DoctreeNode *firstLegend = NULL;
+      for (const DoctreeNode *child = parent->lastChild; child;
+           child = child->sibling)
+         if (child->element == legend)
+            firstLegend = child;
+      if (!firstLegend || !Css_node_is_descendant_of(node, firstLegend))
+         return true;
+   }
+   return false;
+}
+
+static bool Css_node_is_checked(const DoctreeNode *node)
+{
+   if (node->element == a_Html_tag_index("option"))
+      return node->getAttribute("selected") != NULL;
+   if (node->element != a_Html_tag_index("input"))
+      return false;
+   const char *type = node->getAttribute("type");
+   return type && (!dStrAsciiCasecmp(type, "checkbox") ||
+                   !dStrAsciiCasecmp(type, "radio")) &&
+      node->getAttribute("checked") != NULL;
+}
+
 void CssSimpleSelector::addAlternatives(
    const std::vector<CssSimpleSelector *> &selectors, bool zeroSpecificity)
 {
@@ -464,6 +534,27 @@ bool CssSimpleSelector::match (const DoctreeNode *n) {
    }
    for (int i = 0; i < structural.size(); i++) {
       Structural s = structural.get(i);
+      if (s.type == 'f') {
+         if (!n->focused)
+            return false;
+         continue;
+      }
+      if (s.type == 'F') {
+         if (!Css_node_has_focus(n))
+            return false;
+         continue;
+      }
+      if (s.type == 'k') {
+         if (!Css_node_is_checked(n))
+            return false;
+         continue;
+      }
+      if (s.type == 'd' || s.type == 'e') {
+         bool disabled = Css_node_disabled(n);
+         if (s.type == 'd' ? !disabled : disabled)
+            return false;
+         continue;
+      }
       if (s.type == 'r') {
          if (!n->parent || n->parent->num != -1)
             return false;

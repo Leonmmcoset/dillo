@@ -485,7 +485,17 @@ struct JsEngine::Impl {
             !s->scriptAsync.count(n) || s->scriptAsync[n]);
       }
       if (op == "state") {
-         if (argc > 3) { s->controlState[handle][key] = value; ++s->revision; s->host->changed(); }
+         if (argc > 3) {
+            std::map<std::string, std::string> &state = s->controlState[handle];
+            std::map<std::string, std::string>::iterator current = state.find(key);
+            if (current == state.end() || current->second != value) {
+               state[key] = value;
+               ++s->revision;
+               if (key == "focus")
+                  s->host->focusChanged(handle, value == "true");
+               s->host->changed(key == "focus" ? 150 : 0);
+            }
+         }
          return s->controlState[handle].count(key) ? JS_NewString(ctx, s->controlState[handle][key].c_str()) : JS_NULL;
       }
       if (key.size() + value.size() > MaxText - std::min(s->textTotal, MaxText))
@@ -675,6 +685,26 @@ std::string JsEngine::serialize(bool rendering)
    struct Saved { lxb_dom_node_t *node; std::string name; bool had; std::string value; };
    std::vector<Saved> saved;
    std::map<lxb_dom_node_t *, std::vector<lxb_dom_node_t *> > textSaved;
+   std::set<lxb_dom_node_t *> focusWithin;
+   std::vector<lxb_dom_node_t *> focusTodo(1, lxb_dom_interface_node(impl->document));
+   while (!focusTodo.empty()) {
+      lxb_dom_node_t *node = focusTodo.back(); focusTodo.pop_back();
+      if (node->type == LXB_DOM_NODE_TYPE_ELEMENT) {
+         std::map<int, std::map<std::string, std::string> >::const_iterator state =
+            impl->controlState.find(impl->id(node));
+         if (state != impl->controlState.end()) {
+            std::map<std::string, std::string>::const_iterator focused =
+               state->second.find("focus");
+            if (focused != state->second.end() && focused->second == "true")
+               for (lxb_dom_node_t *parent = node; parent &&
+                    parent->type == LXB_DOM_NODE_TYPE_ELEMENT;
+                    parent = parent->parent)
+                  focusWithin.insert(parent);
+         }
+      }
+      for (lxb_dom_node_t *child = node->first_child; child; child = child->next)
+         focusTodo.push_back(child);
+   }
    std::vector<lxb_dom_node_t *> todo(1, lxb_dom_interface_node(impl->document));
    while (!todo.empty()) {
       lxb_dom_node_t *node = todo.back(); todo.pop_back();
@@ -686,11 +716,30 @@ std::string JsEngine::serialize(bool rendering)
             reinterpret_cast<const lxb_char_t *>("data-dillo-node"), 15, bytes(value), value.size());
          std::map<std::string, std::string> &state = impl->controlState[impl->id(node)];
          for (std::map<std::string, std::string>::iterator it = state.begin(); it != state.end(); ++it) {
+            if (it->first == "focus") continue;
             Saved attr = {node, it->first, impl->has(node, it->first.c_str()), impl->attr(node, it->first)};
             saved.push_back(attr);
             if ((it->first == "checked" || it->first == "selected") && it->second != "true")
                lxb_dom_element_remove_attribute(lxb_dom_interface_element(node), bytes(it->first), it->first.size());
             else lxb_dom_element_set_attribute(lxb_dom_interface_element(node), bytes(it->first), it->first.size(), bytes(it->second), it->second.size());
+         }
+         const char *focusAttributes[] = {"data-dillo-internal-focus",
+            "data-dillo-internal-focus-within"};
+         const bool focusValues[] = {
+            state.count("focus") && state["focus"] == "true",
+            focusWithin.count(node) != 0
+         };
+         for (size_t i = 0; i < 2; ++i) {
+            std::string name = focusAttributes[i];
+            Saved attr = {node, name, impl->has(node, name.c_str()),
+               impl->attr(node, name)};
+            saved.push_back(attr);
+            if (focusValues[i])
+               lxb_dom_element_set_attribute(lxb_dom_interface_element(node),
+                  bytes(name), name.size(), bytes(std::string()), 0);
+            else
+               lxb_dom_element_remove_attribute(lxb_dom_interface_element(node),
+                  bytes(name), name.size());
          }
          if (node->local_name == LXB_TAG_TEXTAREA && state.count("value")) {
             std::vector<lxb_dom_node_t *> &children = textSaved[node];
@@ -791,6 +840,10 @@ void JsEngine::setControlState(int node, const std::string &name, const std::str
    if (impl->controlState[node][name] != value) {
       impl->controlState[node][name] = value;
       ++impl->revision;
+      if (name == "focus")
+         impl->host->focusChanged(node, value == "true");
+      if (name == "checked" || name == "selected" || name == "focus")
+         impl->host->changed(name == "focus" ? 150 : 0);
    }
 }
 #pragma GCC diagnostic pop

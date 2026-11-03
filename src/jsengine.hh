@@ -12,7 +12,8 @@ public:
    public:
       virtual ~Host() {}
       virtual void log(const std::string &message) = 0;
-      virtual void changed() = 0;
+      virtual void changed(int delayMilliseconds = 0) = 0;
+      virtual void focusChanged(int node, bool focused) { (void)node; (void)focused; }
       virtual void title(const std::string &text) = 0;
       virtual void navigate(const std::string &url, bool replace) = 0;
       virtual void timer(int id, int milliseconds) = 0;

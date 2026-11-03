@@ -524,13 +524,14 @@ class Element extends Node {
         if(old)old.blur();
         native('control',this._id,'focus');
         if(activeElement!==this) {
-            activeElement=this;this.dispatchEvent(new Event('focus'));
+            activeElement=this;native('state',this._id,'focus','true');
+            this.dispatchEvent(new Event('focus'));
             this.dispatchEvent(new Event('focusin',{bubbles:true}));
         }
     }
     blur() {
         native('control',this._id,'blur');
-        if(activeElement===this){activeElement=null;this.dispatchEvent(new Event('blur'));this.dispatchEvent(new Event('focusout',{bubbles:true}));}
+        if(activeElement===this){activeElement=null;native('state',this._id,'focus','false');this.dispatchEvent(new Event('blur'));this.dispatchEvent(new Event('focusout',{bubbles:true}));}
     }
     _selection() {
         const current=native('control',this._id,'selection');
@@ -1215,8 +1216,8 @@ globalThis.__dillo = {
     event(id,type,key='',code=0,options={}) {
         const node=id?wrap(id):globalThis;
         if(!node)return true;
-        if(type==='focus')activeElement=node;
-        if(type==='blur'&&activeElement===node)activeElement=null;
+        if(type==='focus'){activeElement=node;native('state',id,'focus','true');}
+        if(type==='blur'&&activeElement===node){activeElement=null;native('state',id,'focus','false');}
         const event=type.startsWith('key')?new KeyboardEvent(type,{key,code:key,keyCode:code,which:code,bubbles:true,cancelable:true}):type==='click'?new MouseEvent(type,{...options,bubbles:true,cancelable:true}):new Event(type,{bubbles:!['focus','blur','load','error'].includes(type),cancelable:!['load','error','input','change'].includes(type)});
         event.isTrusted=true;
         const allowed=node.dispatchEvent(event);

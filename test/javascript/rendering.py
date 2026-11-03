@@ -202,6 +202,12 @@ def main():
                   'scrollIntoView defaults to block start and inline nearest', default_scroll)
             invalid_scroll=evaluate('(()=>{let n=0;for(const options of [{block:"middle"},{inline:"middle"},{behavior:"later"}])try{document.getElementById("scroll-target").scrollIntoView(options)}catch(e){if(e instanceof TypeError)n++}return n})()')
             check(invalid_scroll == 3, 'scrollIntoView rejects unsupported alignment and behavior values', invalid_scroll)
+            form_states = evaluate('["state-toggle","state-disabled","state-enabled","legend-exempt","fieldset-disabled","focus-input","focus-parent"].map(id=>getComputedStyle(document.getElementById(id)).backgroundColor)')
+            check(form_states == ['#e02030','#008000','#008000','#008000','#008000','#e02030','#e02030'],
+                  ':checked, :disabled and :enabled match controls and honor the first-legend exception', form_states)
+            live_states = evaluate('(()=>{const toggle=document.getElementById("state-toggle"),disabled=document.getElementById("state-disabled"),color=e=>getComputedStyle(e).backgroundColor;toggle.checked=true;const checked=color(toggle);toggle.checked=false;const unchecked=color(toggle);disabled.disabled=false;return [checked,unchecked,color(disabled)]})()')
+            check(live_states == ['#008000','#e02030','#2040d0'],
+                  'JavaScript checked and disabled updates recalculate state selectors', live_states)
             command('eval', 'scrollTo(0,0)')
             command('wait', '5')
 
@@ -939,6 +945,7 @@ def main():
 
             command('eval', 'scrollTo(0,0)')
             markup = '''<div id=origin></div>
+              <div id=focus-parent><input id=focus-input></div>
               <div id=mouse-box style="position:absolute;left:40px;top:40px;width:160px;height:70px;background:#ddd"><span id=mouse-inline>Inline target</span></div>
               <input id=mouse-input style="position:fixed;left:300px;top:50px;width:150px;height:30px">
               <button id=mouse-button type=button style="position:fixed;left:500px;top:50px;width:120px;height:35px">Mouse button</button>
@@ -1003,12 +1010,18 @@ def main():
             native_mouse('mouse-scrolled',100,40)
             native_mouse('mouse-input',30,15)
             native_mouse('mouse-button',60,18)
+            time.sleep(.2)
+            button_focus = evaluate('getComputedStyle(document.getElementById("mouse-button")).backgroundColor')
+            check(button_focus == '#008000', 'native button focus updates the :focus selector', button_focus)
             command('eval', 'mouseEvents=[];document.getElementById("mouse-button").focus()')
             subprocess.run(['xdotool', 'key', 'space'], env=env, check=True)
             events = evaluate('mouseEvents')
             check(len(events) == 1 and events[0]['target'] == 'mouse-button' and
                   all(events[0][key] == 0 for key in ['clientX','clientY','pageX','pageY','screenX','screenY','detail']),
                   'native keyboard activation does not inherit the last mouse coordinates', events)
+            live_focus = evaluate('(()=>{const focus=document.getElementById("focus-input"),parent=document.getElementById("focus-parent"),color=e=>getComputedStyle(e).backgroundColor;focus.focus();const focused=[color(focus),color(parent)];focus.blur();return [focused,[color(focus),color(parent)],document.activeElement.id]})()')
+            check(live_focus == [['#008000','#008000'],['#e02030','#e02030'],''],
+                  'focus and focus-within update on script focus and blur', live_focus)
             command('eval', '''globalThis.detachedImage=new Image();globalThis.detachedImageEvents=[];
               detachedImage.onload=()=>detachedImageEvents.push('load');
               detachedImage.onerror=()=>detachedImageEvents.push('error');

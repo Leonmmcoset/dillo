@@ -197,7 +197,10 @@ output, use, for example, `dilloc eval 'JSON.stringify({url:location.href})'`.
   `:is()`, `:where()` and comma-separated `:not()` arguments accept compound
   simple selectors, with their CSS-defined specificity rules. Combinators
   inside these function arguments and forgiving `:is()` parsing are not yet
-  implemented.
+  implemented. Form state selectors include `:checked`, `:enabled`,
+  `:disabled`, `:focus` and `:focus-within`. Checked state, disabled attributes,
+  native focus and JavaScript focus/blur are reflected after
+  rendering; disabled fieldsets honor their first-legend exception.
 - box-shadow supports up to eight shadows, inset/outset painting, offsets,
   positive/negative spread, blur, rounded corners, alpha colors, currentColor,
   calc() and var(). The first shadow paints above later shadows. Blur uses

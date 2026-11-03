@@ -2461,6 +2461,16 @@ bool CssParser::parsePseudoSelector(CssSimpleSelector *selector, bool negation)
       selector->addStructural('T');
    } else if (!dStrAsciiCasecmp(name, "root")) {
       selector->addStructural('r');
+   } else if (!dStrAsciiCasecmp(name, "focus")) {
+      selector->addStructural('f');
+   } else if (!dStrAsciiCasecmp(name, "focus-within")) {
+      selector->addStructural('F');
+   } else if (!dStrAsciiCasecmp(name, "checked")) {
+      selector->addStructural('k');
+   } else if (!dStrAsciiCasecmp(name, "disabled")) {
+      selector->addStructural('d');
+   } else if (!dStrAsciiCasecmp(name, "enabled")) {
+      selector->addStructural('e');
    } else if (!dStrAsciiCasecmp(name, "link") ||
               !dStrAsciiCasecmp(name, "visited")) {
       if (selector->getPseudoClass()) return false;

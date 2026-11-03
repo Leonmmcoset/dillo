@@ -23,6 +23,7 @@
 #include <cctype>
 #include <set>
 #include <cmath>
+#include <chrono>
 
 #ifdef ENABLE_JAVASCRIPT
 namespace {
@@ -181,6 +182,8 @@ public:
    bool eof, ready, domReady, renderQueued, dirty, stopped, navigating, rendering, rendered;
    size_t received;
    int eventDepth;
+   int focusedControl;
+   std::chrono::steady_clock::time_point renderNotBefore;
    Request *blocking;
    DilloUrl *navigation;
    bool replaceNavigation;
@@ -189,7 +192,8 @@ public:
    explicit JavascriptDocument(DilloHtml *v): bw(v->bw), view(v),
       url(a_Url_dup(v->page_url)), engine(this, URL_STR(v->page_url)), offset(0),
       rootKey(0), eof(false), ready(false), domReady(false), renderQueued(false), dirty(false), stopped(false),
-      navigating(false), rendering(false), rendered(false), received(0), eventDepth(0), blocking(NULL), navigation(NULL), replaceNavigation(false), historyOffset(0) {}
+      navigating(false), rendering(false), rendered(false), received(0), eventDepth(0), focusedControl(0),
+      blocking(NULL), navigation(NULL), replaceNavigation(false), historyOffset(0) {}
    ~JavascriptDocument() {
       stop();
       for (size_t i = 0; i < requests.size(); ++i) delete requests[i];
@@ -224,9 +228,21 @@ public:
       imageEvents.push_back(event);
       wake();
    }
-   void changed() {
+   void changed(int delayMilliseconds = 0) {
       dirty = true;
-      wake();
+      if (delayMilliseconds > 0) {
+         std::chrono::steady_clock::time_point deadline =
+            std::chrono::steady_clock::now() + std::chrono::milliseconds(delayMilliseconds);
+         if (renderNotBefore < deadline) renderNotBefore = deadline;
+         wake(delayMilliseconds / 1000.0);
+      } else {
+         renderNotBefore = std::chrono::steady_clock::time_point();
+         wake();
+      }
+   }
+   void focusChanged(int node, bool focused) {
+      if (focused) focusedControl = node;
+      else if (focusedControl == node) focusedControl = 0;
    }
    void wake(double delay = 0) {
       if (!stopped && !renderQueued) { renderQueued = true; a_Timeout_add(delay, tick, this); }
@@ -424,7 +440,13 @@ public:
          std::string result = text ? text : "\1"; dFree(text); return result;
       }
       if (property == "focus" || property == "blur" || property == "selection") {
-         if (dirty && !rendering && !eventDepth) { dirty = false; render(); }
+         bool focusRenderPending = renderNotBefore.time_since_epoch().count() &&
+            std::chrono::steady_clock::now() < renderNotBefore;
+         if (dirty && !rendering && !eventDepth && !focusRenderPending) {
+            dirty = false;
+            renderNotBefore = std::chrono::steady_clock::time_point();
+            render();
+         }
          static_cast<dw::core::Layout *>(bw->render_layout)->flushLayout();
          char *text = a_Html_control_selection(view, node, property.c_str(), value ? value->c_str() : NULL);
          std::string result = text ? text : "\1"; dFree(text); return result;
@@ -688,7 +710,17 @@ public:
       if (d->stopped) return;
       d->advance();
       d->engine.evaluate("__dillo.stylesheets()", "dillo:stylesheets");
-      if (d->dirty) { d->dirty = false; d->render(); }
+      if (d->dirty) {
+         std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+         if (now >= d->renderNotBefore) {
+            d->dirty = false;
+            d->renderNotBefore = std::chrono::steady_clock::time_point();
+            d->render();
+         } else {
+            double remaining = std::chrono::duration<double>(d->renderNotBefore - now).count();
+            d->wake(remaining);
+         }
+      }
       // Image-cache callbacks can arrive while a new HTML view is being
       // built. Defer their JS events until its render stack has unwound.
       while (!d->imageEvents.empty() && !d->stopped) {
@@ -706,6 +738,7 @@ public:
    }
    void render() {
       if (stopped || navigating || !view) return;
+      renderNotBefore = std::chrono::steady_clock::time_point();
       // X11 clipboard conversion completes asynchronously and targets the
       // original FLTK control. Keep that receiver alive until FL_PASTE arrives.
       if (a_Html_controls_busy(view)) { dirty = true; wake(.01); return; }
@@ -781,6 +814,14 @@ bool a_Javascript_ui_event(void *data, int node, const char *type, const char *k
    if (!d || d->stopped || d->rendering || !node) return true;
    a_Html_sync_controls(d->view);
    ++d->eventDepth;
+   if (!strcmp(type, "click")) {
+      int start = 0, end = 0;
+      int focused = a_Html_control_focus(d->view, &start, &end);
+      if (focused != d->focusedControl) {
+         if (d->focusedControl) d->engine.event(d->focusedControl, "blur");
+         if (focused) d->engine.event(focused, "focus");
+      }
+   }
    dw::core::DomMouseEvent nativeMouse;
    JsEngine::MouseEvent mouse;
    bool hasMouse = !strcmp(type, "click") &&

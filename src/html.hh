@@ -21,7 +21,7 @@ extern "C" {
 
 /* Keep in sync with the length of the Tags array. It is protected by an
  * static assert in html.cc to prevent errors) */
-#define HTML_NTAGS 94
+#define HTML_NTAGS 96
 
 /*
  * Exported functions

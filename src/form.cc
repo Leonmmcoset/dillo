@@ -2273,11 +2273,15 @@ int a_Html_control_focus(DilloHtml *html, int *start, int *end)
    lout::misc::SimpleVector<DilloHtmlInput *> all(16); Html_collect_inputs(html, &all);
    for (int i = 0; i < all.size(); ++i) {
       DilloHtmlInput *input = all.get(i);
+      Resource *resource = input->getResource();
+      if (!resource || !resource->hasWidgetFocus()) continue;
+      *start = *end = 0;
       if (input->type == DILLO_HTML_INPUT_TEXT || input->type == DILLO_HTML_INPUT_PASSWORD ||
           input->type == DILLO_HTML_INPUT_TEXTAREA) {
-         TextResource *r = static_cast<TextResource *>(input->getResource());
-         if (r && r->hasFocus()) { *start = r->selectionStart(); *end = r->selectionEnd(); return input->javascript_node; }
+         TextResource *text = static_cast<TextResource *>(resource);
+         *start = text->selectionStart(); *end = text->selectionEnd();
       }
+      return input->javascript_node;
    }
    return 0;
 }
@@ -2291,6 +2295,9 @@ void a_Html_control_restore_focus(DilloHtml *html, int node, int start, int end)
           input->type == DILLO_HTML_INPUT_PASSWORD || input->type == DILLO_HTML_INPUT_TEXTAREA)) {
          TextResource *r = static_cast<TextResource *>(input->getResource());
          if (r) r->restoreFocus(start, end);
+      } else if (input->javascript_node == node) {
+         Resource *resource = input->getResource();
+         if (resource) resource->restoreWidgetFocus();
       }
    }
 }

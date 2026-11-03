@@ -237,6 +237,8 @@ public:
 
    bool isEnabled ();
    void setEnabled (bool enabled);
+   bool hasWidgetFocus ();
+   void restoreWidgetFocus ();
 };
 
 

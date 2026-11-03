@@ -110,6 +110,8 @@ class StyleEngine : public dw::core::Layout::Receiver {
       void endElement (int tag);
       void setPseudoLink ();
       void setPseudoVisited ();
+      void setPseudoFocus () { doctree->top()->focused = true; }
+      void setPseudoFocusWithin () { doctree->top()->focusWithin = true; }
       inline void setNonCssHint(CssPropertyName name, CssValueType type,
                                 int value) {
          CssPropertyValue v;

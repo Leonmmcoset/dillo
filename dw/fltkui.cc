@@ -696,6 +696,16 @@ template <class I> void FltkSpecificResource<I>::setEnabled (bool enabled)
    FltkResource::setEnabled (enabled);
 }
 
+template <class I> bool FltkSpecificResource<I>::hasWidgetFocus ()
+{
+   return widget && Fl::focus () == widget;
+}
+
+template <class I> void FltkSpecificResource<I>::restoreWidgetFocus ()
+{
+   if (widget) widget->take_focus ();
+}
+
 // ----------------------------------------------------------------------
 
 class EnterButton : public Fl_Button {

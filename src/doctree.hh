@@ -13,6 +13,8 @@ class DoctreeNode {
       lout::misc::SimpleVector<char*> *klass;
       const char *pseudo;
       const char *id;
+      bool focused;
+      bool focusWithin;
       struct Attribute { char *name, *value; };
       lout::misc::SimpleVector<Attribute> attributes;
       int childIndex;
@@ -24,6 +26,8 @@ class DoctreeNode {
          klass = NULL;
          pseudo = NULL;
          id = NULL;
+         focused = false;
+         focusWithin = false;
          element = 0;
          num = -1;
          childIndex = 0;

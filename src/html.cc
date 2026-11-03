@@ -3605,7 +3605,7 @@ static const TagInfo Tags[] = {
  {"dt", B8(01010),'O', Html_tag_open_dt, NULL, Html_tag_close_par},
  {"em", B8(01011),'R', Html_tag_open_default, NULL, NULL},
  {"embed", B8(01001),'F', Html_tag_open_embed, Html_tag_content_embed, NULL},
- /* fieldset */
+ {"fieldset", B8(01110),'R', Html_tag_open_default, NULL, NULL},
  {"figcaption", B8(01110),'R', Html_tag_open_default, NULL, NULL},
  {"figure", B8(01110),'R', Html_tag_open_default, NULL, NULL},
  {"font", B8(01011),'R', Html_tag_open_font, NULL, NULL},
@@ -3632,7 +3632,7 @@ static const TagInfo Tags[] = {
  {"isindex", B8(11001),'F', Html_tag_open_isindex, NULL, NULL},
  {"kbd", B8(01011),'R', Html_tag_open_default, NULL, NULL},
  {"label", B8(01010),'R', Html_tag_open_default, NULL, NULL},
- /* legend 01?? */
+ {"legend", B8(01110),'R', Html_tag_open_default, NULL, NULL},
  {"li", B8(01110),'O', Html_tag_open_li, NULL, Html_tag_close_li},
  {"link", B8(10001),'F', Html_tag_open_link, NULL, NULL},
  {"main", B8(01110),'R', Html_tag_open_sectioning, NULL, NULL},
@@ -4065,6 +4065,14 @@ static void Html_parse_common_attrs(DilloHtml *html, char *tag, int tagsize)
       attrbuf = a_Html_get_attr(html, tag, tagsize, "style");
       if (attrbuf)
          html->styleEngine->setStyle (attrbuf);
+   }
+
+   if (html->javascript_render) {
+      if (a_Html_get_attr(html, tag, tagsize, "data-dillo-internal-focus"))
+         html->styleEngine->setPseudoFocus();
+      if (a_Html_get_attr(html, tag, tagsize,
+                          "data-dillo-internal-focus-within"))
+         html->styleEngine->setPseudoFocusWithin();
    }
 
    /* handle "xml:lang" and "lang" attributes

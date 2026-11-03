@@ -13,11 +13,11 @@ public:
    std::vector<std::string> logs;
    std::map<int, int> timers;
    std::string pageTitle, destination;
-   int changes;
+   int changes, lastChangeDelay;
    JsEngine *focusEngine;
-   Host(): changes(0), focusEngine(NULL) {}
+   Host(): changes(0), lastChangeDelay(0), focusEngine(NULL) {}
    void log(const std::string &s) { logs.push_back(s); fprintf(stderr, "%s\n", s.c_str()); }
-   void changed() { ++changes; }
+   void changed(int delayMilliseconds = 0) { ++changes; lastChangeDelay = delayMilliseconds; }
    void title(const std::string &s) { pageTitle = s; }
    void navigate(const std::string &s, bool) { destination = s; }
    void timer(int id, int delay) { if (delay < 0) timers.erase(id); else timers[id] = delay; }
@@ -105,6 +105,7 @@ int main()
    host.focusEngine = &engine;
    check(engine.evaluate("globalThis.focusOrder=[];p.addEventListener('focus',()=>{focusOrder.push('focus');queueMicrotask(()=>focusOrder.push('job'));});p.focus();focusOrder.push('return');", "native-focus"), "native focus can synchronously reenter the document");
    check(engine.stringValue("focusOrder.join(',')") == "focus,return,job", "microtasks wait for the outer native-event task to finish");
+   check(host.lastChangeDelay == 150, "focus state changes defer renderer replacement briefly");
    host.focusEngine = NULL;
    check(engine.evaluate("location.replace(location.href.replace('https:', 'http:'));", "navigation-test"), "location navigation");
    check(host.destination == "http://example.test/path/page.html", "HTTPS script redirect resolves correctly");
