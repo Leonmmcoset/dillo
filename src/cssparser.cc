@@ -2382,18 +2382,44 @@ bool CssParser::parsePseudoSelector(CssSimpleSelector *selector, bool negation)
    char name[maxStrLen];
    strcpy(name, tval);
    nextToken();
-   if (!dStrAsciiCasecmp(name, "not")) {
-      if (negation || ttype != CSS_TK_CHAR || tval[0] != '(' || spaceSeparated)
+   bool isNot = !dStrAsciiCasecmp(name, "not");
+   bool isIs = !dStrAsciiCasecmp(name, "is");
+   bool isWhere = !dStrAsciiCasecmp(name, "where");
+   if (isNot || isIs || isWhere) {
+      if ((isNot && negation) || ttype != CSS_TK_CHAR || tval[0] != '(' ||
+          spaceSeparated)
          return false;
       nextToken();
-      CssSimpleSelector *argument = new CssSimpleSelector;
-      if (!parseSimpleSelector(argument, true) ||
-          ttype != CSS_TK_CHAR || tval[0] != ')') {
-         delete argument;
-         return false;
+      std::vector<CssSimpleSelector *> arguments;
+      while (true) {
+         CssSimpleSelector *argument = new CssSimpleSelector;
+         if (!parseSimpleSelector(argument, isNot ? true : negation)) {
+            delete argument;
+            for (size_t i = 0; i < arguments.size(); i++)
+               delete arguments[i];
+            return false;
+         }
+         arguments.push_back(argument);
+         if (ttype == CSS_TK_CHAR && tval[0] == ')') {
+            nextToken();
+            if (isNot)
+               selector->addNegations(arguments);
+            else
+               selector->addAlternatives(arguments, isWhere);
+            return true;
+         }
+         if (ttype != CSS_TK_CHAR || tval[0] != ',') {
+            for (size_t i = 0; i < arguments.size(); i++)
+               delete arguments[i];
+            return false;
+         }
+         nextToken();
+         if (ttype == CSS_TK_CHAR && tval[0] == ')') {
+            for (size_t i = 0; i < arguments.size(); i++)
+               delete arguments[i];
+            return false;
+         }
       }
-      selector->addNegation(argument);
-      nextToken();
    } else if (!dStrAsciiCasecmp(name, "nth-child") ||
               !dStrAsciiCasecmp(name, "nth-of-type") ||
               !dStrAsciiCasecmp(name, "nth-last-child") ||

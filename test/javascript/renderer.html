@@ -50,6 +50,12 @@ html,body { margin:0; padding:0; background:white; color:black }
 #structural > div:last-of-type, #structural > span:last-child { background:#008000 }
 #structural > div:nth-last-child(-n + 4) { outline:1px solid blue }
 #only-child > div:only-child, #only-of-type > div:only-of-type { background:#008000 }
+#selector-is { background:#e02030 }
+:is(.selector-is,#selector-is) { background:#008000 }
+.selector-where { background:#e02030 }
+:where(#selector-where) { background:#008000 }
+.selector-not { background:#008000 }
+.selector-not:not(.excluded,[data-disabled]) { background:#e02030 }
 #font-shorthand { font:italic small-caps 700 20px/1.5 monospace }
 #font-order { font:700 italic 20px/1.25 "DejaVu Sans" }
 #font-reset { font-style:italic; font-variant:small-caps; font-weight:700; line-height:40px; font:16px serif }
@@ -138,6 +144,11 @@ html,body { margin:0; padding:0; background:white; color:black }
 <div id=structural><div></div><div id=nth-last-of-type></div><span></span><div id=nth-last-child></div><div></div><div id=last-of-type></div><span id=last-child></span></div>
 <div id=only-child><div id=only-child-target></div></div>
 <div id=only-of-type><div id=only-of-type-target></div><span></span></div>
+<div id=selector-is class=selector-is></div>
+<div id=selector-where class=selector-where></div>
+<div id=selector-not class=selector-not></div>
+<div id=selector-not-class class="selector-not excluded"></div>
+<div id=selector-not-attribute class=selector-not data-disabled></div>
 <div id=font-shorthand>Font shorthand</div>
 <div id=font-order>Font order</div>
 <div id=font-reset>Font reset</div>

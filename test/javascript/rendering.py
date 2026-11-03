@@ -120,6 +120,9 @@ def main():
             structural = evaluate('["nth-last-child","nth-last-of-type","last-of-type","last-child","only-child-target","only-of-type-target"].map(id=>getComputedStyle(document.getElementById(id)).backgroundColor)')
             check(structural == ['#008000'] * 6,
                   'last and only child/type selectors match in reverse sibling order', structural)
+            selector_lists = evaluate('["selector-is","selector-where","selector-not","selector-not-class","selector-not-attribute"].map(id=>getComputedStyle(document.getElementById(id)).backgroundColor)')
+            check(selector_lists == ['#008000','#e02030','#e02030','#008000','#008000'],
+                  ':is, :where and multi-argument :not match lists and use their specified cascade weight', selector_lists)
             font = evaluate('(s=>({size:s.fontSize,weight:s.fontWeight,style:s.fontStyle,variant:s.fontVariant,lineHeight:s.lineHeight}))(getComputedStyle(document.getElementById("font-shorthand")))')
             check(font == {'size':'20px','weight':'700','style':'italic','variant':'small-caps','lineHeight':'30px'},
                   'font shorthand applies optional fields and unitless line-height', font)

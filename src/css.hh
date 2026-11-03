@@ -497,9 +497,13 @@ class CssSimpleSelector {
          bool insensitive;
       };
       struct Structural { char type; int a, b; };
+      struct SelectorGroup {
+         std::vector<CssSimpleSelector *> selectors;
+         bool zeroSpecificity;
+      };
       lout::misc::SimpleVector<Attribute> attributes;
       lout::misc::SimpleVector<Structural> structural;
-      lout::misc::SimpleVector<CssSimpleSelector *> negations;
+      std::vector<SelectorGroup> alternatives, negations;
 
    public:
       enum {
@@ -521,7 +525,9 @@ class CssSimpleSelector {
       void addAttribute(const char *name, char op, const char *value,
                         bool insensitive);
       void addStructural(char type, int a = 0, int b = 1);
-      void addNegation(CssSimpleSelector *selector);
+      void addAlternatives(const std::vector<CssSimpleSelector *> &selectors,
+                           bool zeroSpecificity);
+      void addNegations(const std::vector<CssSimpleSelector *> &selectors);
       bool checksVisited();
       inline lout::misc::SimpleVector <char *> *getClass () { return &klass; };
       inline const char *getPseudoClass () { return pseudo; };

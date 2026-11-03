@@ -9,6 +9,7 @@
  * (at your option) any later version.
  */
 
+#include <algorithm>
 #include <stdio.h>
 #include "../dlib/dlib.h"
 #include "msg.h"
@@ -308,8 +309,12 @@ CssSimpleSelector::~CssSimpleSelector () {
       dFree(attributes.getRef(i)->name);
       dFree(attributes.getRef(i)->value);
    }
-   for (int i = 0; i < negations.size(); i++)
-      delete negations.get(i);
+   for (size_t i = 0; i < alternatives.size(); i++)
+      for (size_t j = 0; j < alternatives[i].selectors.size(); j++)
+         delete alternatives[i].selectors[j];
+   for (size_t i = 0; i < negations.size(); i++)
+      for (size_t j = 0; j < negations[i].selectors.size(); j++)
+         delete negations[i].selectors[j];
    for (int i = 0; i < klass.size (); i++)
       dFree (klass.get (i));
    dFree (id);
@@ -336,19 +341,36 @@ void CssSimpleSelector::addStructural(char type, int a, int b)
    s->b = b;
 }
 
-void CssSimpleSelector::addNegation(CssSimpleSelector *selector)
+void CssSimpleSelector::addAlternatives(
+   const std::vector<CssSimpleSelector *> &selectors, bool zeroSpecificity)
 {
-   negations.increase();
-   negations.set(negations.size() - 1, selector);
+   SelectorGroup group;
+   group.selectors = selectors;
+   group.zeroSpecificity = zeroSpecificity;
+   alternatives.push_back(group);
+}
+
+void CssSimpleSelector::addNegations(
+   const std::vector<CssSimpleSelector *> &selectors)
+{
+   SelectorGroup group;
+   group.selectors = selectors;
+   group.zeroSpecificity = false;
+   negations.push_back(group);
 }
 
 bool CssSimpleSelector::checksVisited()
 {
    if (pseudo && !dStrAsciiCasecmp(pseudo, "visited"))
       return true;
-   for (int i = 0; i < negations.size(); i++)
-      if (negations.get(i)->checksVisited())
-         return true;
+   for (size_t i = 0; i < alternatives.size(); i++)
+      for (size_t j = 0; j < alternatives[i].selectors.size(); j++)
+         if (alternatives[i].selectors[j]->checksVisited())
+            return true;
+   for (size_t i = 0; i < negations.size(); i++)
+      for (size_t j = 0; j < negations[i].selectors.size(); j++)
+         if (negations[i].selectors[j]->checksVisited())
+            return true;
    return false;
 }
 
@@ -466,9 +488,20 @@ bool CssSimpleSelector::match (const DoctreeNode *n) {
       if (s.a ? difference % s.a != 0 || difference / s.a < 0 : difference != 0)
          return false;
    }
-   for (int i = 0; i < negations.size(); i++)
-      if (negations.get(i)->match(n))
+   for (size_t i = 0; i < alternatives.size(); i++) {
+      bool matched = false;
+      for (size_t j = 0; j < alternatives[i].selectors.size(); j++)
+         if (alternatives[i].selectors[j]->match(n)) {
+            matched = true;
+            break;
+         }
+      if (!matched)
          return false;
+   }
+   for (size_t i = 0; i < negations.size(); i++)
+      for (size_t j = 0; j < negations[i].selectors.size(); j++)
+         if (negations[i].selectors[j]->match(n))
+            return false;
 
    return true;
 }
@@ -487,8 +520,22 @@ int CssSimpleSelector::specificity () {
    if (pseudo)
       spec += 1 << 10;
    spec += (attributes.size() + structural.size()) << 10;
-   for (int i = 0; i < negations.size(); i++)
-      spec += negations.get(i)->specificity();
+   for (size_t i = 0; i < alternatives.size(); i++) {
+      if (alternatives[i].zeroSpecificity)
+         continue;
+      int maximum = 0;
+      for (size_t j = 0; j < alternatives[i].selectors.size(); j++)
+         maximum = std::max(maximum,
+                            alternatives[i].selectors[j]->specificity());
+      spec += maximum;
+   }
+   for (size_t i = 0; i < negations.size(); i++) {
+      int maximum = 0;
+      for (size_t j = 0; j < negations[i].selectors.size(); j++)
+         maximum = std::max(maximum,
+                            negations[i].selectors[j]->specificity());
+      spec += maximum;
+   }
    if (element != ELEMENT_ANY)
       spec += 1;
 

@@ -194,6 +194,10 @@ output, use, for example, `dilloc eval 'JSON.stringify({url:location.href})'`.
 - Selector matching includes `:last-child`, `:last-of-type`,
   `:nth-last-child()`, `:nth-last-of-type()`, `:only-child` and
   `:only-of-type`, including reverse sibling counting with `an+b` formulas.
+  `:is()`, `:where()` and comma-separated `:not()` arguments accept compound
+  simple selectors, with their CSS-defined specificity rules. Combinators
+  inside these function arguments and forgiving `:is()` parsing are not yet
+  implemented.
 - box-shadow supports up to eight shadows, inset/outset painting, offsets,
   positive/negative spread, blur, rounded corners, alpha colors, currentColor,
   calc() and var(). The first shadow paints above later shadows. Blur uses
