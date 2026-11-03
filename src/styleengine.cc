@@ -391,6 +391,8 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
    Font *parentFont = stack->get (i - 1).style->font;
    char *c, *fontName;
    int lineHeight;
+   int webkitLineClamp = 0;
+   bool webkitBoxVertical = false, webkitBox = false;
    DilloUrl *imgUrl = NULL;
 
    /* Determine font first so it can be used to resolve relative lengths. */
@@ -558,6 +560,16 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
          case CSS_PROPERTY_POINTER_EVENTS:
             attrs->pointerEvents = p->value.intVal == 2 ?
                stack->getRef(i - 1)->style->pointerEvents : value.pointerEvents; break;
+         case CSS_PROPERTY_VISIBILITY:
+            attrs->visibility = p->value.intVal == 2 ?
+               stack->getRef(i - 1)->style->visibility : value.visibility; break;
+         case CSS_PROPERTY_WORD_BREAK:
+            attrs->wordBreak = p->value.intVal == 2 ?
+               stack->getRef(i - 1)->style->wordBreak : value.wordBreak; break;
+         case CSS_PROPERTY_OVERFLOW_WRAP:
+         case CSS_PROPERTY_WORD_WRAP:
+            attrs->overflowWrap = p->value.intVal == 2 ?
+               stack->getRef(i - 1)->style->overflowWrap : value.overflowWrap; break;
          case CSS_PROPERTY_BACKGROUND_COLOR:
             attrs->backgroundColor = value.backgroundColor; attrs->backgroundAlpha = value.backgroundAlpha; break;
          case CSS_PROPERTY_BACKGROUND_IMAGE:
@@ -600,6 +612,8 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
          case CSS_PROPERTY_ALIGN_ITEMS: attrs->container.alignItems = p->value.intVal; break;
          case CSS_PROPERTY_ALIGN_SELF: attrs->container.alignSelf = p->value.intVal; break;
          case CSS_PROPERTY_JUSTIFY_CONTENT: attrs->container.justify = p->value.intVal; break;
+         case CSS_PROPERTY_JUSTIFY_ITEMS: attrs->container.justifyItems = p->value.intVal; break;
+         case CSS_PROPERTY_JUSTIFY_SELF: attrs->container.justifySelf = p->value.intVal; break;
          case CSS_PROPERTY_FLEX_DIRECTION: attrs->container.direction = p->value.intVal; break;
          case CSS_PROPERTY_FLEX_WRAP: attrs->container.wrap = p->value.intVal; break;
          case CSS_PROPERTY_FLEX_GROW:
@@ -614,11 +628,18 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
          case CSS_PROPERTY_ORDER: attrs->container.order = p->value.intVal; break;
          case CSS_PROPERTY_GRID_TEMPLATE_COLUMNS:
             attrs->container.columns = 0;
-            if (!computeTracks(p->value.strVal, attrs->container.columnTracks, &attrs->container.columns, attrs->font)) attrs->container.columns = 0;
+            attrs->container.autoRepeatMode = 0;
+            if (!computeTracks(p->value.strVal, attrs->container.columnTracks,
+                  attrs->container.columnMinTracks, attrs->container.columnHasMin,
+                  &attrs->container.autoRepeatMode, &attrs->container.autoRepeatStart,
+                  &attrs->container.autoRepeatCount, &attrs->container.columns,
+                  attrs->font)) attrs->container.columns = 0;
             break;
          case CSS_PROPERTY_GRID_TEMPLATE_ROWS:
             attrs->container.rows = 0;
-            if (!computeTracks(p->value.strVal, attrs->container.rowTracks, &attrs->container.rows, attrs->font)) attrs->container.rows = 0;
+            if (!computeTracks(p->value.strVal, attrs->container.rowTracks,
+                  attrs->container.rowMinTracks, attrs->container.rowHasMin,
+                  NULL, NULL, NULL, &attrs->container.rows, attrs->font)) attrs->container.rows = 0;
             break;
          /* \todo missing cases */
          case CSS_PROPERTY_OBJECT_FIT:
@@ -820,7 +841,14 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
             attrs->cursor = (Cursor) p->value.intVal;
             break;
          case CSS_PROPERTY_DISPLAY:
-            attrs->display = (DisplayType) p->value.intVal;
+            webkitBox = p->value.intVal == DISPLAY_WEBKIT_BOX ||
+               p->value.intVal == DISPLAY_WEBKIT_INLINE_BOX;
+            if (p->value.intVal == DISPLAY_WEBKIT_BOX)
+               attrs->display = DISPLAY_BLOCK;
+            else if (p->value.intVal == DISPLAY_WEBKIT_INLINE_BOX)
+               attrs->display = DISPLAY_INLINE_BLOCK;
+            else
+               attrs->display = (DisplayType) p->value.intVal;
             if (attrs->display == DISPLAY_NONE)
                stack->getRef (i)->displayNone = true;
             break;
@@ -850,6 +878,7 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
             attrs->listStyleType = (ListStyleType) p->value.intVal;
             break;
          case CSS_PROPERTY_MARGIN_BOTTOM:
+            attrs->marginBottomAuto = p->value.lenVal.type == CSS_LENGTH_TYPE_AUTO;
             computeValue (&attrs->margin.bottom, p->value.lenVal, attrs->font);
             if (attrs->margin.bottom < 0) // \todo fix negative margins in dw/*
                attrs->margin.bottom = 0;
@@ -867,12 +896,22 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
                attrs->margin.right = 0;
             break;
          case CSS_PROPERTY_MARGIN_TOP:
+            attrs->marginTopAuto = p->value.lenVal.type == CSS_LENGTH_TYPE_AUTO;
             computeValue (&attrs->margin.top, p->value.lenVal, attrs->font);
             if (attrs->margin.top < 0) // \todo fix negative margins in dw/*
                attrs->margin.top = 0;
             break;
          case CSS_PROPERTY_OVERFLOW:
             attrs->overflow = (Overflow) p->value.intVal;
+            break;
+         case CSS_PROPERTY_VISIBILITY:
+            attrs->visibility = p->value.intVal == 1 ?
+               dw::core::style::VISIBILITY_HIDDEN :
+               dw::core::style::VISIBILITY_VISIBLE;
+            break;
+         case CSS_PROPERTY_OVERFLOW_WRAP:
+         case CSS_PROPERTY_WORD_WRAP:
+            attrs->overflowWrap = (OverflowWrap) p->value.intVal;
             break;
          case CSS_PROPERTY_PADDING_TOP:
             computeValue (&attrs->padding.top, p->value.lenVal, attrs->font);
@@ -912,6 +951,16 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
             break;
          case CSS_PROPERTY_WHITE_SPACE:
             attrs->whiteSpace = (WhiteSpace) p->value.intVal;
+            break;
+         case CSS_PROPERTY_WORD_BREAK:
+            attrs->wordBreak = (WordBreak) p->value.intVal;
+            break;
+         case CSS_PROPERTY_WEBKIT_BOX_ORIENT:
+            webkitBoxVertical = p->value.intVal == 1;
+            break;
+         case CSS_PROPERTY_WEBKIT_LINE_CLAMP:
+            webkitLineClamp = p->value.intVal > 0 && p->value.intVal <= 100 ?
+               p->value.intVal : 0;
             break;
          case CSS_PROPERTY_WIDTH:
             computeLength (&attrs->width, p->value.lenVal, attrs->font);
@@ -973,6 +1022,24 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
       }
    }
 
+   if (webkitBox && webkitBoxVertical && webkitLineClamp > 0) {
+      int oneLine = attrs->font->ascent + attrs->font->descent;
+      if (attrs->lineHeight != dw::core::style::LENGTH_AUTO) {
+         if (dw::core::style::isAbsLength(attrs->lineHeight))
+            oneLine = dw::core::style::absLengthVal(attrs->lineHeight);
+         else
+            oneLine = dw::core::style::multiplyWithPerLengthRounded(
+               attrs->font->size, attrs->lineHeight);
+      }
+      oneLine = lout::misc::max(1, lout::misc::min(1000000, oneLine));
+      int clampHeight = oneLine > 1000000 / webkitLineClamp ? 1000000 :
+         oneLine * webkitLineClamp;
+      if (attrs->maxHeight == dw::core::style::LENGTH_AUTO ||
+          !dw::core::style::isAbsLength(attrs->maxHeight) ||
+          dw::core::style::absLengthVal(attrs->maxHeight) > clampHeight)
+         attrs->maxHeight = dw::core::style::createAbsLength(clampHeight);
+   }
+
    if (imgUrl && prefs.load_background_images &&
        !stack->getRef (i)->displayNone &&
        !(URL_FLAGS(pageUrl) & URL_SpamSafe))
@@ -1005,7 +1072,10 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props,
 /**
  * \brief Resolve relative lengths to absolute values.
  */
-bool StyleEngine::computeTracks(const std::string &text, Length *tracks, unsigned *count,
+bool StyleEngine::computeTracks(const std::string &text, Length *tracks,
+                                Length *minimums, bool *hasMinimum,
+                                int *autoRepeatMode, unsigned *autoRepeatStart,
+                                unsigned *autoRepeatCount, unsigned *count,
                                 Font *font, unsigned depth)
 {
    if (depth > 8 || text.size() > 65536) return false;
@@ -1024,11 +1094,70 @@ bool StyleEngine::computeTracks(const std::string &text, Length *tracks, unsigne
       if (token.compare(0, 7, "repeat(") == 0 && token.back() == ')') {
          size_t comma = token.find(',');
          if (comma == std::string::npos) return false;
-         char *end; long repeat = strtol(token.c_str() + 7, &end, 10);
-         while (dIsspace(*end)) ++end;
-         if (end != token.c_str() + comma || repeat < 1 || repeat > 32) return false;
+         std::string repeatText = token.substr(7, comma - 7);
+         size_t first = repeatText.find_first_not_of(" \t\r\n\f");
+         size_t last = repeatText.find_last_not_of(" \t\r\n\f");
+         if (first == std::string::npos) return false;
+         repeatText = repeatText.substr(first, last - first + 1);
          std::string inner = token.substr(comma + 1, token.size() - comma - 2);
-         for (long i = 0; i < repeat; ++i) if (!computeTracks(inner, tracks, count, font, depth + 1)) return false;
+         if (repeatText == "auto-fill" || repeatText == "auto-fit") {
+            if (!autoRepeatMode || !autoRepeatStart || !autoRepeatCount || *autoRepeatMode) return false;
+            unsigned begin = *count;
+            if (!computeTracks(inner, tracks, minimums, hasMinimum, autoRepeatMode,
+                  autoRepeatStart, autoRepeatCount, count, font, depth + 1) || *count == begin) return false;
+            *autoRepeatMode = repeatText == "auto-fit" ? 2 : 1;
+            *autoRepeatStart = begin;
+            *autoRepeatCount = *count - begin;
+         } else {
+            char *end; long repeat = strtol(repeatText.c_str(), &end, 10);
+            if (end != repeatText.c_str() + repeatText.size() || repeat < 1 || repeat > 32) return false;
+            unsigned begin = *count;
+            if (!computeTracks(inner, tracks, minimums, hasMinimum, autoRepeatMode,
+                  autoRepeatStart, autoRepeatCount, count, font, depth + 1)) return false;
+            unsigned groupCount = *count - begin;
+            if (groupCount && repeat > (32 - begin) / groupCount) return false;
+            for (long i = 1; i < repeat; ++i)
+               if (!computeTracks(inner, tracks, minimums, hasMinimum, autoRepeatMode,
+                     autoRepeatStart, autoRepeatCount, count, font, depth + 1)) return false;
+         }
+      } else if (token.compare(0, 7, "minmax(") == 0 && token.back() == ')') {
+         if (*count >= 32) return false;
+         std::string bounds = token.substr(7, token.size() - 8);
+         size_t comma = std::string::npos; unsigned nested = 0;
+         for (size_t i = 0; i < bounds.size(); ++i) {
+            if (bounds[i] == '(') ++nested;
+            else if (bounds[i] == ')' && nested) --nested;
+            else if (bounds[i] == ',' && !nested) { comma = i; break; }
+         }
+         if (comma == std::string::npos) return false;
+         auto dimension = [&](const std::string &part, Length *result, bool allowFraction) {
+            std::string value = part;
+            size_t first = value.find_first_not_of(" \t\r\n\f");
+            size_t last = value.find_last_not_of(" \t\r\n\f");
+            if (first == std::string::npos) return false;
+            value = value.substr(first, last - first + 1);
+            if (allowFraction && value.size() > 2 && value.compare(value.size() - 2, 2, "fr") == 0) {
+               char *end; double fraction = strtod(value.c_str(), &end);
+               if (end != value.c_str() + value.size() - 2 || fraction <= 0 || fraction > 1000) return false;
+               *result = createRelLength(fraction); return true;
+            }
+            if (value == "auto" || value == "min-content" || value == "max-content") {
+               *result = LENGTH_AUTO; return !allowFraction;
+            }
+            CssPropertyList parsed(true);
+            std::string declaration = "width:" + value;
+            CssParser::parseDeclarationBlock(baseUrl, declaration.c_str(), declaration.size(), &parsed, NULL);
+            return parsed.size() == 1 && parsed.getRef(0)->type != CSS_TYPE_DEFERRED &&
+               computeLength(result, parsed.getRef(0)->value.lenVal, font);
+         };
+         Length minimum = LENGTH_AUTO, maximum = LENGTH_AUTO;
+         bool minValid = dimension(bounds.substr(0, comma), &minimum, false);
+         bool maxValid = dimension(bounds.substr(comma + 1), &maximum, true);
+         if (!minValid || !maxValid) return false;
+         tracks[*count] = maximum;
+         minimums[*count] = minimum;
+         hasMinimum[*count] = true;
+         ++*count;
       } else {
          if (*count >= 32) return false;
          Length track = LENGTH_AUTO;
@@ -1043,7 +1172,9 @@ bool StyleEngine::computeTracks(const std::string &text, Length *tracks, unsigne
             if (value.size() != 1 || value.getRef(0)->type == CSS_TYPE_DEFERRED ||
                 !computeLength(&track, value.getRef(0)->value.lenVal, font)) return false;
          }
-         tracks[(*count)++] = track;
+         tracks[*count] = track;
+         hasMinimum[*count] = false;
+         ++*count;
       }
    }
    return true;

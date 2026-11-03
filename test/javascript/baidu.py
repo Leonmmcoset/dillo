@@ -85,6 +85,8 @@ def main():
         raise AssertionError('timed out: ' + message)
 
     def snapshot(name):
+        # Commit pending DOM/style changes before capturing the native window.
+        evaluate('JSON.stringify(document.documentElement.getBoundingClientRect().toJSON())')
         # Control-socket replies can arrive before FLTK paints the new tree.
         time.sleep(.35)
         (output / (name + '.html')).write_text(command('domdump').stdout)
@@ -131,8 +133,26 @@ def main():
                 command('wait', '10')
                 click_element("document.querySelector('#chat-submit-button')")
             wait_for("location.pathname==='/s'&&new URL(location.href).searchParams.get('wd')===" + json.dumps(query) +
-                     "&&document.readyState==='complete'&&Array.from(document.querySelectorAll('#content_left h3 a')).some(a=>a.getBoundingClientRect().width>0)", 'search results', 90)
+                     "&&document.readyState==='complete'&&Array.from(document.querySelectorAll('#content_left h3 a')).some(a=>{const r=a.getBoundingClientRect();return r.width>0&&r.height>0&&r.bottom>0&&r.top<innerHeight})", 'visible search results', 90)
+            evaluate('document.activeElement?.blur()')
+            command('wait', '10')
             snapshot(str(index) + '-results')
+            diagnostic = command('eval', 'JSON.stringify((()=>{const heading=document.querySelector("#content_left h3");'
+                'if(!heading)return {error:"result heading missing"};'
+                'const describe=e=>({tag:e.tagName,id:e.id,className:e.className,'
+                'rect:e.getBoundingClientRect().toJSON(),style:getComputedStyle(e).cssText});'
+                'const chain=[];for(let e=heading;e&&chain.length<12;e=e.parentElement)chain.push(describe(e));'
+                'return {url:location.href,viewport:{width:innerWidth,height:innerHeight},'
+                'columns:["content_left","content_right"].map(id=>document.getElementById(id)).filter(Boolean).map(describe),'
+                'chain,children:Array.from(heading.children).map(describe),'
+                'descendants:Array.from(heading.querySelectorAll("*")).slice(0,20).map(describe),'
+                'siblings:heading.parentElement&&Array.from(heading.parentElement.children).slice(0,5).map(describe)}})())')
+            try:
+                layout = json.loads(diagnostic.stdout)
+            except ValueError:
+                layout = {'returncode': diagnostic.returncode, 'stdout': diagnostic.stdout,
+                          'stderr': diagnostic.stderr}
+            (output / (str(index) + '-layout.json')).write_text(json.dumps(layout, ensure_ascii=False, indent=2) + '\n')
             results.append({'query': query, 'submit': submit, 'url': command('url').stdout.strip(), 'status': 'pass'})
             print('PASS:', query, submit, flush=True)
         if args.navigation:

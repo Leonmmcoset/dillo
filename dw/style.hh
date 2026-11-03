@@ -273,6 +273,24 @@ enum TextTransform {
    TEXT_TRANSFORM_LOWERCASE
 };
 
+enum WordBreak {
+   WORD_BREAK_NORMAL,
+   WORD_BREAK_BREAK_ALL,
+   WORD_BREAK_KEEP_ALL,
+   WORD_BREAK_BREAK_WORD
+};
+
+enum OverflowWrap {
+   OVERFLOW_WRAP_NORMAL,
+   OVERFLOW_WRAP_BREAK_WORD,
+   OVERFLOW_WRAP_ANYWHERE
+};
+
+enum Visibility {
+   VISIBILITY_VISIBLE,
+   VISIBILITY_HIDDEN
+};
+
 /**
  * \todo Incomplete. Has to be completed for a CSS implementation.
  */
@@ -291,7 +309,9 @@ enum DisplayType {
    DISPLAY_FLEX,
    DISPLAY_INLINE_FLEX,
    DISPLAY_GRID,
-   DISPLAY_INLINE_GRID
+   DISPLAY_INLINE_GRID,
+   DISPLAY_WEBKIT_BOX,
+   DISPLAY_WEBKIT_INLINE_BOX
 };
 
 enum FlexDirection { FLEX_ROW, FLEX_ROW_REVERSE, FLEX_COLUMN, FLEX_COLUMN_REVERSE };
@@ -564,12 +584,17 @@ class StyleImage;
  * \sa dw::core::style
  */
 struct ContainerStyle {
-   int direction, wrap, justify, alignItems, alignSelf, alignContent;
+   int direction, wrap, justify, justifyItems, justifySelf;
+   int alignItems, alignSelf, alignContent;
    int order, rowGap, columnGap;
    float grow, shrink;
    Length basis;
    unsigned columns, rows;
    Length columnTracks[32], rowTracks[32];
+   Length columnMinTracks[32], rowMinTracks[32];
+   bool columnHasMin[32], rowHasMin[32];
+   int autoRepeatMode;
+   unsigned autoRepeatStart, autoRepeatCount;
 };
 
 // Value-owned decorations keep shared styles immutable. Gradient layers are
@@ -651,6 +676,7 @@ public:
    ClearType clear;
 
    Overflow overflow;
+   Visibility visibility;
 
    Position position;
    bool modernLayout;
@@ -664,7 +690,7 @@ public:
    enum BoxSizing { CONTENT_BOX, BORDER_BOX } boxSizing;
 
    Box margin, borderWidth, padding;
-   bool marginLeftAuto, marginRightAuto;
+   bool marginLeftAuto, marginRightAuto, marginTopAuto, marginBottomAuto;
    BorderCollapse borderCollapse;
    struct { Color *top, *right, *bottom, *left; } borderColor;
    struct { BorderStyle top, right, bottom, left; } borderStyle;
@@ -672,6 +698,8 @@ public:
    DisplayType display;
    ContainerStyle container;
    WhiteSpace whiteSpace;
+   WordBreak wordBreak;
+   OverflowWrap overflowWrap;
    ListStylePosition listStylePosition;
    ListStyleType listStyleType;
    Cursor cursor;

@@ -141,7 +141,8 @@ bool Embed::buttonPressImpl (core::EventButton *event)
 
 void Embed::setDisplayed (bool displayed)
 {
-   resource->setDisplayed (displayed);
+   resource->setDisplayed (displayed &&
+      getStyle()->visibility != style::VISIBILITY_HIDDEN);
 }
 
 void Embed::setEnabled (bool enabled)
@@ -151,6 +152,9 @@ void Embed::setEnabled (bool enabled)
 
 void Embed::draw (View *view, Rectangle *area, DrawingContext *context)
 {
+   if (getStyle()->visibility == style::VISIBILITY_HIDDEN)
+      return;
+
    View *clipped = view->getClippingView(allocation.x + area->x,
       allocation.y + area->y, area->width, area->height);
    drawWidgetBox (clipped, area, false);

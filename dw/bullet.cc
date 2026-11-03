@@ -59,6 +59,9 @@ void Bullet::containerSizeChangedForChildren ()
 void Bullet::draw (core::View *view, core::Rectangle *area,
                    core::DrawingContext *context)
 {
+   if (getStyle()->visibility == core::style::VISIBILITY_HIDDEN)
+      return;
+
    int x, y, l;
    bool filled = true;
 

@@ -447,8 +447,16 @@ bool CssSimpleSelector::match (const DoctreeNode *n) {
             return false;
          continue;
       }
+      bool ofType = s.type == 't' || s.type == 'T';
+      bool fromEnd = s.type == 'C' || s.type == 'T';
       int index = n->childIndex;
-      if (s.type == 't') {
+      if (fromEnd) {
+         index = 1;
+         for (const DoctreeNode *p = n->parent->lastChild; p && p != n;
+              p = p->sibling)
+            if (!ofType || p->element == n->element)
+               index++;
+      } else if (ofType) {
          index = 1;
          for (const DoctreeNode *p = n->sibling; p; p = p->sibling)
             if (p->element == n->element)

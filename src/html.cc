@@ -1320,6 +1320,7 @@ static void Html_process_word(DilloHtml *html, const char *word, int size)
          word2 = Pword;
          beyond_word2 = word2 + strlen(word2);
       }
+      const bool keepAll = html->wordStyle()->wordBreak == WORD_BREAK_KEEP_ALL;
       for (start = i = 0; word2[i]; start = i) {
          int len;
 
@@ -1329,7 +1330,7 @@ static void Html_process_word(DilloHtml *html, const char *word, int size)
          } else if (!strncmp(word2+i, utf8_zero_width_space, 3)) {
             i += 3;
             HT2TB(html)->addBreakOption(html->wordStyle (), false);
-         } else if (a_Utf8_ideographic(word2+i, beyond_word2, &len)) {
+         } else if (a_Utf8_ideographic(word2+i, beyond_word2, &len) && !keepAll) {
             i += len;
             HT2TB(html)->addText(word2 + start, i - start, html->wordStyle ());
             HT2TB(html)->addBreakOption(html->wordStyle (), false);
@@ -1338,7 +1339,7 @@ static void Html_process_word(DilloHtml *html, const char *word, int size)
                i += len;
             } while (word2[i] && !dIsspace(word2[i]) &&
                      strncmp(word2+i, utf8_zero_width_space, 3) &&
-                     (!a_Utf8_ideographic(word2+i, beyond_word2, &len)));
+                     (!a_Utf8_ideographic(word2+i, beyond_word2, &len) || keepAll));
             HT2TB(html)->addText(word2 + start, i - start, html->wordStyle ());
          }
       }
@@ -3400,22 +3401,31 @@ static void Html_tag_open_link(DilloHtml *html, const char *tag, int tagsize)
    /* When viewing suspicious HTML email, don't load LINK */
    dReturn_if (URL_FLAGS(html->base_url) & URL_SpamSafe);
 
-   /* Ignore LINK outside HEAD */
-   if (!(html->InFlags & IN_HEAD)) {
-      if (!((html->DocType == DT_HTML && html->DocTypeVersion >= 5.0f) &&
-            a_Html_get_attr(html, tag, tagsize, "itemprop"))) {
-         /* With the HTML 5.1 draft spec, link with itemprop may appear
-          * in the body.
-          */
-         BUG_MSG("This <link> element must be inside the HEAD section.");
-      }
+   /* HTML5 permits stylesheet links in the body. Pages also commonly insert
+    * critical layout sheets there after their initial shell has loaded. */
+   if (!(html->InFlags & IN_HEAD) &&
+       !(html->DocType == DT_HTML && html->DocTypeVersion >= 5.0f)) {
+      BUG_MSG("This <link> element must be inside the HEAD section.");
       return;
    }
    /* Remote stylesheets enabled? */
    dReturn_if_fail (prefs.load_stylesheets);
    /* CSS stylesheet link */
-   if (!(attrbuf = a_Html_get_attr(html, tag, tagsize, "rel")) ||
-       dStrAsciiCasecmp(attrbuf, "stylesheet"))
+   if (!(attrbuf = a_Html_get_attr(html, tag, tagsize, "rel")))
+      return;
+   bool stylesheet = false;
+   const char *rel = attrbuf;
+   while (*rel) {
+      while (*rel && strchr(" \t\f\n\r", *rel)) ++rel;
+      const char *end = rel;
+      while (*end && !strchr(" \t\f\n\r", *end)) ++end;
+      if (end > rel && end - rel == 10 && !dStrnAsciiCasecmp(rel, "stylesheet", 10)) {
+         stylesheet = true;
+         break;
+      }
+      rel = end;
+   }
+   if (!stylesheet)
       return;
 
    /* IMPLIED attributes? */
@@ -3431,7 +3441,10 @@ static void Html_tag_open_link(DilloHtml *html, const char *tag, int tagsize)
 
    _MSG("  Html_tag_open_link(): addCssUrl %s\n", URL_STR(url));
 
-   html->addCssUrl(url);
+   if (html->InFlags & IN_HEAD)
+      html->addCssUrl(url);
+   else
+      a_Html_load_stylesheet(html, url);
    a_Url_free(url);
 }
 
@@ -4343,9 +4356,27 @@ static void Html_process_tag(DilloHtml *html, char *tag, int tagsize)
          static const char *overflows[] = {"visible", "hidden", "scroll", "auto"};
          dStr_sprintfa(css, "pointer-events:%s;", s->pointerEvents == dw::core::style::StyleAttrs::POINTER_EVENTS_NONE ? "none" : "auto");
          dStr_sprintfa(css, "overflow:%s;", overflows[s->overflow]);
-         if (s->font) dStr_sprintfa(css, "font-family:%s;font-size:%dpx;font-weight:%d;font-style:%s;",
-            s->font->name, s->font->size, s->font->weight,
-            s->font->style == dw::core::style::FONT_STYLE_NORMAL ? "normal" : "italic");
+         dStr_sprintfa(css, "visibility:%s;", s->visibility == dw::core::style::VISIBILITY_HIDDEN ? "hidden" : "visible");
+         static const char *wordBreaks[] = {"normal", "break-all", "keep-all", "break-word"};
+         static const char *overflowWraps[] = {"normal", "break-word", "anywhere"};
+         static const char *whiteSpaces[] = {"normal", "pre", "nowrap", "pre-wrap", "pre-line"};
+         dStr_sprintfa(css, "white-space:%s;", whiteSpaces[s->whiteSpace]);
+         dStr_sprintfa(css, "word-break:%s;overflow-wrap:%s;", wordBreaks[s->wordBreak], overflowWraps[s->overflowWrap]);
+         if (s->font) {
+            dStr_sprintfa(css, "font-family:%s;font-size:%dpx;font-weight:%d;font-style:%s;font-variant:%s;",
+               s->font->name, s->font->size, s->font->weight,
+               s->font->style == dw::core::style::FONT_STYLE_NORMAL ? "normal" : "italic",
+               s->font->fontVariant == dw::core::style::FONT_VARIANT_SMALL_CAPS ? "small-caps" : "normal");
+            dStr_append(css, "line-height:");
+            if (s->lineHeight == dw::core::style::LENGTH_AUTO) {
+               dStr_append(css, "normal;");
+            } else {
+               int lineHeight = dw::core::style::isAbsLength(s->lineHeight) ?
+                  dw::core::style::absLengthVal(s->lineHeight) :
+                  dw::core::style::multiplyWithPerLengthRounded(s->font->size, s->lineHeight);
+               dStr_sprintfa(css, "%dpx;", lineHeight);
+            }
+         }
          dStr_sprintfa(css, "margin-top:%dpx;margin-right:%dpx;margin-bottom:%dpx;margin-left:%dpx;"
             "padding-top:%dpx;padding-right:%dpx;padding-bottom:%dpx;padding-left:%dpx;"
             "border-top-width:%dpx;border-right-width:%dpx;border-bottom-width:%dpx;border-left-width:%dpx;",

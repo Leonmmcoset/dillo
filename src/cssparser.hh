@@ -54,6 +54,7 @@ class CssParser {
       void parseImport(DilloHtml *html);
       char *mediaList(char delimiter);
       void parseMedia(DilloHtml *html, int depth);
+      void parseSupports(DilloHtml *html, int depth);
       void parseRules(DilloHtml *html, bool block, int depth);
       CssSelector *parseSelector();
       void parseRuleset();
@@ -65,6 +66,7 @@ class CssParser {
                                         const char *buf, int buflen,
                                         CssPropertyList *props,
                                         CssPropertyList *propsImortant);
+      static bool supports(const char *condition, unsigned nesting = 0);
       static void parse(DilloHtml *html, const DilloUrl *baseUrl, CssContext *context,
                         const char *buf, int buflen, CssOrigin origin);
       static const char *propertyNameString(CssPropertyName name);

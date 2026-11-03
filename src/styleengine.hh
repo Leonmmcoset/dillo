@@ -83,7 +83,10 @@ class StyleEngine : public dw::core::Layout::Receiver {
       void computeBorderWidth (int *dest, CssProperty *p,
                                dw::core::style::Font *font);
       bool computeTracks(const std::string &text, dw::core::style::Length *tracks,
-                         unsigned *count, dw::core::style::Font *font, unsigned depth = 0);
+                         dw::core::style::Length *minimums, bool *hasMinimum,
+                         int *autoRepeatMode, unsigned *autoRepeatStart,
+                         unsigned *autoRepeatCount, unsigned *count,
+                         dw::core::style::Font *font, unsigned depth = 0);
 
    public:
       static void init ();

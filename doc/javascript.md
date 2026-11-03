@@ -63,7 +63,8 @@ output, use, for example, `dilloc eval 'JSON.stringify({url:location.href})'`.
 - Incremental HTML5 parsing, blocking classic scripts, external async/defer
   scripts, dynamically inserted scripts, document.write and lifecycle events.
 - Persistent node identity, DOM queries and mutation, inline style reflection,
-  collections, attributes, classList, dataset and MutationObserver.
+  collections, attributes, live indexed/enumerable classList, stable enumerable
+  dataset and MutationObserver.
 - Event listeners, capture/bubbling, cancellation, inline handlers, native
   text input/textarea keyboard, input/focus events, buttons outside forms,
   form submission and link clicks. UTF-16 selection offsets map to native
@@ -93,18 +94,58 @@ output, use, for example, `dilloc eval 'JSON.stringify({url:location.href})'`.
   available, so Chinese text no longer depends on one FLTK font having every glyph.
 - Stylesheet load/error events, document.styleSheets, style/link.sheet and a
   CSSStyleSheet subset. Inline sheets support insertRule/deleteRule/replaceSync;
-  external sheets expose readable rules only for the document's origin,
+  HTML5 stylesheet links in the document head or body are loaded, and the rel
+  attribute is interpreted as a case-insensitive token list. External sheets
+  expose readable rules only for the document's origin,
   including after redirects. Rule objects are snapshots; complete live CSSOM
   mutation and grouping rules are not implemented.
 - getSelection() exposes selected text and clearing for native page/control
   selections. It does not implement DOM Range creation or editing.
 - CSS custom properties and var() fallbacks/cycle detection, calc() arithmetic
   on supported units, box-sizing and automatic horizontal block margins.
-  Flex containers support direction, wrap, grow/shrink, basis, order, gaps and
-  common alignment. Grid supports automatic row placement, fixed/percentage/fr
-  tracks, integer repeat() and gaps. These are subsets of Flexbox and Grid;
-  intrinsic track sizing, minmax(), named lines, spans and automatic flex
-  margins are not complete.
+- `CSS.escape()` handles CSS identifier escapes for leading digits, control
+  characters and punctuation; `getElementsByClassName()` returns an empty live
+  collection for empty input instead of constructing an invalid selector.
+- `classList` is a stable live DOMTokenList with token validation, duplicate
+  removal and standard add/remove/toggle/replace behavior. URLSearchParams
+  preserves the first key position in set(), sorts by code-unit order, exposes
+  size and value-filtered has()/delete(), and uses form-urlencoded escaping.
+- `CSS.supports()` recognizes implemented layout declarations and evaluates
+  basic `and`, `or`, and `not` feature conditions.
+- Legacy `display:-webkit-box` and `display:-webkit-inline-box` map to block
+  layout containers. Vertical `-webkit-box-orient` with
+  `-webkit-line-clamp` accepts 1–100 lines or `none`. With non-visible overflow,
+  it limits the block's maximum height using its line-height; shorter content
+  keeps its natural height. This approximates the common prefixed line-clamp
+  pattern used by search results; ellipsis and mixed line heights are incomplete.
+- `MutationObserver.observe()` validates observation options, updates an
+  existing target registration, and honors attribute filters and old-value
+  requests in queued records. Mutation records include their standard nullable
+  fields and child-list sibling slots, though mutation batching/coalescing and
+  the complete DOM Range API remain partial.
+- Event listener options support `once`, `capture`, `passive` and `AbortSignal`;
+  passive listeners cannot cancel events, and aborting a signal removes its
+  listeners even while a dispatch is in progress. `AbortSignal.abort()`,
+  `any()` and `timeout()` preserve cancellation reasons and support composing
+  fetch cancellation with timeouts.
+- Flex containers support direction, wrap, grow/shrink, basis, order, gaps,
+  common alignment and automatic margins on both axes, including reverse
+  directions. Main-axis automatic margins divide remaining space after flexing;
+  cross-axis automatic margins override stretching and alignment.
+  Block-level Flexbox and Grid containers also honor horizontal auto margins.
+  Grid supports automatic row placement, fixed/percentage/fr
+  tracks, minmax() minimums, integer and auto-fill/auto-fit repeat(), gaps,
+  justify-items, justify-self and common track/content alignment. These are subsets of Flexbox and Grid;
+  intrinsic track sizing, named lines and spans are not complete.
+- Modern blocks keep their containing width when unbreakable text overflows.
+  Definite widths and overflow-hidden flex items constrain the automatic flex
+  minimum, so nested nowrap titles do not push adjacent float columns apart.
+  Tables retain their intrinsic minimum-width behavior.
+- `overflow-wrap:break-word/anywhere` and `word-break:break-all` permit long
+  words to wrap. `word-break:keep-all` suppresses breaks within CJK sequences;
+  language-specific punctuation and full Unicode line-breaking rules remain
+  incomplete. `visibility:hidden` preserves layout while hiding paint, native
+  controls and pointer targets; descendants can restore `visibility:visible`.
 - Overflow-visible descendants paint and receive clicks outside small ancestor
   allocations. Overflow-hidden ancestors clip painting and native controls at
   the padding box; absolute/fixed descendants escape intermediate clipping
@@ -147,6 +188,12 @@ output, use, for example, `dilloc eval 'JSON.stringify({url:location.href})'`.
   calc(), overlap normalization, rounded backgrounds and solid borders. Native
   form controls leave their CSS border/background visible; styled buttons
   retain gradients and centered labels.
+- The `font` shorthand accepts the optional style, variant, weight and
+  `size/line-height` fields in CSS order-independent form, applies quoted or
+  fallback family lists, and resets omitted font longhands atomically.
+- Selector matching includes `:last-child`, `:last-of-type`,
+  `:nth-last-child()`, `:nth-last-of-type()`, `:only-child` and
+  `:only-of-type`, including reverse sibling counting with `an+b` formulas.
 - box-shadow supports up to eight shadows, inset/outset painting, offsets,
   positive/negative spread, blur, rounded corners, alpha colors, currentColor,
   calc() and var(). The first shadow paints above later shadows. Blur uses
@@ -227,6 +274,16 @@ compositing over images or gradients. Scroll APIs are
 immediate, without smooth scrolling or new scroll event notifications.
 
 ## Baidu acceptance status and remaining renderer work
+
+Live checks on 2026-11-03 with the default modern-browser user agent completed
+native English input with Enter submission (`quickjs`), and native Chinese
+clipboard input with mouse button submission (`QuickJS 引擎`). Both reached
+search results with a visible title in the initial viewport. Body stylesheet
+loading and modern block/flex width constraints keep the left result column
+beside the sidebar instead of displacing it below the sidebar. Captures flush
+pending DOM/style changes before taking the native-window screenshot. The
+offline renderer suite now has 461 checks; the full `make check` suite passes,
+with eight existing expected HTML-rendering failures.
 
 Earlier live checks with Dillo's former product-identifying user agent reached
 rendered Baidu results using English Enter submission and English/Chinese

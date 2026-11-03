@@ -45,6 +45,72 @@ html,body { margin:0; padding:0; background:white; color:black }
 #flow { left:500px; top:480px; width:140px; height:70px }
 #flow-first { width:40px; height:20px; transform:translate(80px,20px); background:#e02030 }
 #flow-second { width:40px; height:20px; background:#008050 }
+#structural > div, #structural > span { width:40px; height:10px; background:red }
+#structural > div:nth-last-child(4), #structural > div:nth-last-of-type(4),
+#structural > div:last-of-type, #structural > span:last-child { background:#008000 }
+#structural > div:nth-last-child(-n + 4) { outline:1px solid blue }
+#only-child > div:only-child, #only-of-type > div:only-of-type { background:#008000 }
+#font-shorthand { font:italic small-caps 700 20px/1.5 monospace }
+#font-order { font:700 italic 20px/1.25 "DejaVu Sans" }
+#font-reset { font-style:italic; font-variant:small-caps; font-weight:700; line-height:40px; font:16px serif }
+#font-invalid { font-weight:700; font:italic 22px }
+#grid-lab { position:absolute; left:500px; top:580px; width:300px; height:60px; display:grid; grid-template-columns:minmax(0px,1fr) 2fr; column-gap:10px }
+#grid-lab > div { height:20px; background:#008050 }
+#grid-second { width:30px; justify-self:end; background:#e02030 }
+#grid-autofit, #grid-autofill { position:absolute; left:20px; width:640px; height:40px; display:grid; gap:10px }
+#grid-autofit { top:650px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)) }
+#grid-autofill { top:700px; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)) }
+#grid-autofit > div, #grid-autofill > div { height:20px; background:#008050 }
+#webkit-clamp { position:absolute; left:20px; top:540px; width:140px; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; line-height:20px; color:#e02030 }
+#webkit-nowrap { position:absolute; left:200px; top:540px; width:100px; white-space:nowrap; overflow:hidden }
+#supports-declaration { position:absolute; left:350px; top:540px; width:40px; height:20px; background:#e02030 }
+#supports-and { position:absolute; left:400px; top:540px; width:40px; height:20px; background:#e02030 }
+@supports (word-break:break-all) { #supports-declaration { background:#008050 } }
+@supports (word-break:break-all) and (overflow-wrap:anywhere) { #supports-and { background:#008050 } }
+@supports (display:masonry) { #supports-declaration { background:#2040d0 } }
+#word-wrap-anywhere { position:absolute; left:20px; top:740px; width:130px; overflow-wrap:anywhere }
+#word-break-all { position:absolute; left:200px; top:740px; width:130px; word-break:break-all }
+#word-keep-all, #word-cjk-normal { position:absolute; top:780px; width:60px; line-height:20px }
+#word-keep-all { left:20px; word-break:keep-all }
+#word-cjk-normal { left:200px }
+#visibility-hidden { position:absolute; left:450px; top:540px; width:160px; height:30px; visibility:hidden; background:#e02030 }
+#visibility-restored { position:absolute; left:80px; top:0; width:40px; height:30px; visibility:visible; background:#008050 }
+#visibility-inline { position:absolute; left:650px; top:540px; width:120px; height:25px }
+#visibility-inline span { visibility:hidden; color:#e02030; background:#e02030 }
+#visibility-image, #visibility-control { position:absolute; top:450px; width:50px; height:30px; visibility:hidden }
+#visibility-image { left:820px }
+#visibility-control { left:880px; background:#e02030 }
+#flex-remeasure { position:absolute; left:350px; top:820px; width:200px }
+#flex-remeasure .outer, #flex-remeasure .titlebox { display:flex }
+#flex-remeasure .outer { padding-bottom:7px }
+#flex-remeasure .titlebox { flex:1; min-width:0 }
+#flex-remeasure h3 { flex:1; min-width:0; margin:0 0 4px; font-size:18px; line-height:24px }
+#flex-remeasure h3 a { display:block }
+#flex-remeasure .hit-area { width:0 }
+#float-columns { position:absolute; left:350px; top:1100px; width:320px }
+#float-sidebar { float:right; width:100px; height:80px; background:#2040d0 }
+#float-main { float:left; width:200px }
+#float-main .title-row { display:flex; align-items:center }
+#float-main .title-box { display:flex; width:100%; max-width:100% }
+#float-main h3 { flex:1; min-width:0; margin:0; font-size:18px; line-height:24px }
+#float-main h3 a, #float-nowrap { display:block }
+#float-nowrap { overflow:hidden; white-space:nowrap }
+#flex-overflow { position:absolute; left:350px; top:1250px; width:200px; display:flex }
+#flex-overflow > div { white-space:nowrap; line-height:20px }
+#flex-overflow-hidden { overflow:hidden }
+#flex-overflow-fixed { width:50px; flex-shrink:0 }
+#fixed-overflow { position:absolute; left:350px; top:1300px; width:180px; max-width:180px }
+#fixed-overflow-block { white-space:nowrap; overflow:hidden; line-height:20px }
+#webkit-short, #webkit-inert, #webkit-none { position:absolute; top:1400px; width:100px; overflow:hidden; line-height:20px; -webkit-box-orient:vertical; -webkit-line-clamp:2 }
+#webkit-short { left:350px; display:-webkit-box }
+#webkit-inert { left:500px; display:block }
+#webkit-none { left:650px; display:-webkit-box; -webkit-line-clamp:none }
+#flex-auto { position:absolute; left:20px; top:1500px; display:flex; width:200px; height:100px }
+#flex-auto > div { width:40px; height:20px; flex-shrink:0 }
+#margin-containers { position:absolute; left:350px; top:1600px; width:400px }
+#margin-flex, #margin-grid { width:100px; height:20px; margin:0 auto }
+#margin-flex { display:flex }
+#margin-grid { display:grid }
 #spacer { width:1500px; height:2000px }
 </style>
 <div id=origin></div>
@@ -67,6 +133,34 @@ html,body { margin:0; padding:0; background:white; color:black }
 <div id=textclip class=case><span>MMMMM</span></div>
 <form id=search class=case><input id=query placeholder="离线搜索测试"><button id=search-button type=submit>百度一下</button></form>
 <div id=flow class=case><div id=flow-first></div><div id=flow-second></div></div>
+<div id=structural><div></div><div id=nth-last-of-type></div><span></span><div id=nth-last-child></div><div></div><div id=last-of-type></div><span id=last-child></span></div>
+<div id=only-child><div id=only-child-target></div></div>
+<div id=only-of-type><div id=only-of-type-target></div><span></span></div>
+<div id=font-shorthand>Font shorthand</div>
+<div id=font-order>Font order</div>
+<div id=font-reset>Font reset</div>
+<div id=font-invalid>Invalid font family is rejected</div>
+<div id=grid-lab><div id=grid-first></div><div id=grid-second></div></div>
+<div id=grid-autofit><div id=fit-first></div><div id=fit-second></div></div>
+<div id=grid-autofill><div id=fill-first></div><div id=fill-second></div></div>
+<div id=webkit-clamp>one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty</div>
+<div id=webkit-nowrap>This long title must stay on one line in a narrow result column</div>
+<div id=supports-declaration></div><div id=supports-and></div>
+<div id=word-wrap-anywhere>https://example.invalid/this-is-a-long-unbroken-path/that-must-wrap-at-the-container-edge</div>
+<div id=word-break-all>unbreakable_identifier_with_many_characters_to_test_break_all_wrapping</div>
+<div id=word-keep-all>汉字排版测试内容</div><div id=word-cjk-normal>汉字排版测试内容</div>
+<div id=visibility-hidden><span>Hidden</span><div id=visibility-restored></div></div>
+<div id=visibility-inline><span>Hidden words</span></div>
+<img id=visibility-image src=tile.svg><input id=visibility-control value=Hidden>
+<div id=flex-remeasure><div class=outer><div class=titlebox><h3 id=flex-heading><a id=flex-heading-link>Long nested title that wraps after the flex item shrinks into its narrow column</a></h3><a class=hit-area></a></div></div><div id=flex-summary>Following summary</div></div>
+<div id=float-columns><div id=float-sidebar></div><div id=float-main><div class=title-row><div class=title-box><h3><a><span id=float-nowrap>Long nested result heading that must clip inside its left column and stay beside the sidebar</span></a></h3></div></div><div id=float-summary>Summary below the title</div></div></div>
+<div id=flex-overflow><div id=flex-overflow-hidden>Unbroken_long_title_that_must_shrink_and_clip_inside_the_flex_item</div><div id=flex-overflow-fixed>Side</div></div>
+<div id=fixed-overflow><div id=fixed-overflow-block>Long block content that must fit its fixed parent without increasing its layout width</div></div>
+<div id=webkit-short>One line</div>
+<div id=webkit-inert>one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen</div>
+<div id=webkit-none>one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen</div>
+<div id=flex-auto><div id=flex-auto-a></div><div id=flex-auto-b></div></div>
+<div id=margin-containers><div id=margin-flex></div><div id=margin-grid></div></div>
 <div id=spacer></div>
 <script>
 for (const id of ['visible-leaf','hidden-leaf','escape-leaf'])

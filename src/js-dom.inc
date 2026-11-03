@@ -61,8 +61,18 @@ function collection(get) {
 }
 function notify(target, type, extra = {}) {
     for (const observer of mutationObservers) {
-        if (observer.targets.some(t => (t.target === target || t.options.subtree && t.target.contains(target)) && t.options[type])) {
-            observer.records.push(Object.assign({target, type, addedNodes: [], removedNodes: []}, extra));
+        const registration = observer.targets.find(t =>
+            (t.target === target || t.options.subtree && t.target.contains(target)) &&
+            t.options[type] && (type !== 'attributes' || !t.options.attributeFilter ||
+                t.options.attributeFilter.includes(extra.attributeName)));
+        if (registration) {
+            const record = Object.assign({target, type, addedNodes: [], removedNodes: [],
+                attributeName: null, attributeNamespace: null, oldValue: null,
+                previousSibling: null, nextSibling: null}, extra);
+            if (type === 'attributes' && !registration.options.attributeOldValue ||
+                type === 'characterData' && !registration.options.characterDataOldValue)
+                record.oldValue = null;
+            observer.records.push(record);
             if (!observer.pending) {
                 observer.pending = true;
                 queueJob(() => {
@@ -82,7 +92,7 @@ class Event {
         this.eventPhase = 0; this.timeStamp = performance.now(); this.isTrusted = false;
         this._stop = false; this._immediate = false;
     }
-    preventDefault() { if (this.cancelable) this.defaultPrevented = true; }
+    preventDefault() { if (this.cancelable && !this._passive) this.defaultPrevented = true; }
     stopPropagation() { this._stop = true; this.cancelBubble = true; }
     stopImmediatePropagation() { this._immediate = true; this.stopPropagation(); }
     initEvent(type, bubbles, cancelable) { this.type = type; this.bubbles = !!bubbles; this.cancelable = !!cancelable; }
@@ -113,15 +123,31 @@ class KeyboardEvent extends Event {
 class EventTarget {
     addEventListener(type, callback, options = {}) {
         if (!callback) return;
-        const capture = typeof options === 'boolean' ? options : !!options.capture;
+        const settings = typeof options === 'object' && options !== null ? options : {};
+        const capture = typeof options === 'boolean' ? options : !!settings.capture;
+        const signal = settings.signal;
+        if (signal?.aborted) return;
         let entries = listeners.get(this); if (!entries) listeners.set(this, entries = []);
-        if (!entries.some(e => e.type === type && e.callback === callback && e.capture === capture))
-            entries.push({type: String(type), callback, capture, once: !!options.once});
+        if (!entries.some(e => e.type === String(type) && e.callback === callback && e.capture === capture)) {
+            const entry = {type: String(type), callback, capture, once: !!settings.once, passive: !!settings.passive, signal};
+            if (signal) {
+                entry.abort = () => this.removeEventListener(entry.type, callback, capture);
+                signal.addEventListener('abort', entry.abort, {once:true});
+            }
+            entries.push(entry);
+        }
     }
     removeEventListener(type, callback, options = {}) {
-        const capture = typeof options === 'boolean' ? options : !!options.capture;
+        const settings = typeof options === 'object' && options !== null ? options : {};
+        const capture = typeof options === 'boolean' ? options : !!settings.capture;
         const entries = listeners.get(this) || [];
-        listeners.set(this, entries.filter(e => !(e.type === type && e.callback === callback && e.capture === capture)));
+        const kept = [];
+        for (const entry of entries) {
+            if (entry.type === String(type) && entry.callback === callback && entry.capture === capture) {
+                if (entry.signal && entry.abort) entry.signal.removeEventListener('abort', entry.abort);
+            } else kept.push(entry);
+        }
+        listeners.set(this, kept);
     }
     dispatchEvent(event) {
         if (!(event instanceof Event) || !event.type) throw new TypeError('Expected an Event');
@@ -133,12 +159,16 @@ class EventTarget {
         const invoke = (target, capture, phase) => {
             event.currentTarget = target; event.eventPhase = phase;
             for (const e of (listeners.get(target) || []).slice()) {
+                if (!(listeners.get(target) || []).includes(e)) continue;
                 if (e.type !== event.type || e.capture !== capture || event._immediate) continue;
                 if (e.once) target.removeEventListener(e.type, e.callback, e.capture);
+                const passive = event._passive;
+                event._passive = e.passive;
                 try {
                     if (typeof e.callback === 'function') e.callback.call(target, event);
                     else e.callback.handleEvent(event);
                 } catch (error) { console.error(String(error)+'\n'+(error.stack || '')); }
+                finally { event._passive = passive; }
             }
             if (!capture && !event._immediate) {
                 let handler = target['on' + event.type];
@@ -178,8 +208,10 @@ class Node extends EventTarget {
     get textContent() { return this.nodeType === 9 ? null : native('get', this._id, 'text'); }
     set textContent(value) {
         if (this.nodeType === 9) return;
+        const type = this.nodeType === 3 || this.nodeType === 8 ? 'characterData' : 'childList';
+        const oldValue = type === 'characterData' ? this.textContent : null;
         native('text', this._id, value == null ? '' : String(value));
-        notify(this, this.nodeType === 3 ? 'characterData' : 'childList');
+        notify(this, type, {oldValue});
     }
     get nodeValue() { return this.nodeType === 3 || this.nodeType === 8 ? this.textContent : null; }
     set nodeValue(value) { if (this.nodeType === 3 || this.nodeType === 8) this.textContent = value; }
@@ -193,7 +225,7 @@ class Node extends EventTarget {
         if (!child || child.parentNode !== this) throw new Error('NotFoundError');
         native('remove', child._id); notify(this, 'childList', {removedNodes: [child]}); return child;
     }
-    replaceChild(child, old) { this.insertBefore(child, old); this.removeChild(old); return old; }
+    replaceChild(child, old) { if (child === old) return old; this.insertBefore(child, old); this.removeChild(old); return old; }
     remove() { if (this.parentNode) this.parentNode.removeChild(this); }
     replaceWith(...nodes) { if (this.parentNode) { this.before(...nodes); this.remove(); } }
     append(...nodes) { for (const n of nodes) this.appendChild(n instanceof Node ? n : document.createTextNode(String(n))); }
@@ -242,6 +274,44 @@ class Text extends CharacterData {
 class Comment extends CharacterData {}
 class DOMException extends Error {
     constructor(message='',name='Error') { super(message);this.name=String(name); }
+}
+function validateToken(token) {
+    token=String(token);
+    if(!token)throw new DOMException('The token provided must not be empty.','SyntaxError');
+    if(/[\t\n\f\r ]/.test(token))throw new DOMException('The token provided contains ASCII whitespace.','InvalidCharacterError');
+    return token;
+}
+class DOMTokenList {
+    constructor(element,attribute='class') {
+        Object.defineProperties(this,{_element:{value:element},_attribute:{value:attribute}});
+        const index=key=>typeof key==='string'&&/^(0|[1-9]\d*)$/.test(key);
+        return new Proxy(this,{
+            get(target,key,receiver){return index(key)?target._tokens()[Number(key)]:Reflect.get(target,key,receiver);},
+            set(target,key,value,receiver){return index(key)?false:Reflect.set(target,key,value,receiver);},
+            has(target,key){return index(key)?Number(key)<target.length:Reflect.has(target,key);},
+            ownKeys(target){return [...Reflect.ownKeys(target),...target._tokens().map((_,i)=>String(i))];},
+            getOwnPropertyDescriptor(target,key){return index(key)&&Number(key)<target.length?
+                {configurable:true,enumerable:true,writable:false,value:target._tokens()[Number(key)]}:
+                Reflect.getOwnPropertyDescriptor(target,key);}
+        });
+    }
+    _tokens(){return Array.from(new Set((this._element.getAttribute(this._attribute)||'').split(/[\t\n\f\r ]+/).filter(Boolean)));}
+    _write(tokens){this._element.setAttribute(this._attribute,tokens.join(' '));}
+    get value(){return this._element.getAttribute(this._attribute)||'';}
+    set value(value){this._element.setAttribute(this._attribute,String(value));}
+    get length(){return this._tokens().length;}
+    item(index){return this._tokens()[Number(index)]??null;}
+    contains(token){return this._tokens().includes(validateToken(token));}
+    add(...tokens){tokens=tokens.map(validateToken);const values=this._tokens();for(const token of tokens)if(!values.includes(token))values.push(token);this._write(values);}
+    remove(...tokens){tokens=tokens.map(validateToken);this._write(this._tokens().filter(token=>!tokens.includes(token)));}
+    toggle(token,force){token=validateToken(token);const values=this._tokens(),present=values.includes(token),add=force===undefined?!present:!!force;if(add&&!present)values.push(token);else if(!add&&present)values.splice(values.indexOf(token),1);this._write(values);return add;}
+    replace(oldToken,newToken){oldToken=validateToken(oldToken);newToken=validateToken(newToken);const values=this._tokens(),index=values.indexOf(oldToken);if(index<0)return false;if(oldToken===newToken)return true;values[index]=newToken;this._write(Array.from(new Set(values)));return true;}
+    forEach(callback,thisArg){this._tokens().forEach((token,index)=>callback.call(thisArg,token,index,this));}
+    keys(){return this._tokens().map((_,index)=>index)[Symbol.iterator]();}
+    values(){return this._tokens()[Symbol.iterator]();}
+    entries(){return this._tokens().map((token,index)=>[index,token])[Symbol.iterator]();}
+    [Symbol.iterator](){return this.values();}
+    toString(){return this.value;}
 }
 class CSSStyleSheet {
     constructor(ownerNode=null,href=null,text='',originClean=true) {
@@ -341,7 +411,7 @@ class Element extends Node {
     }
     get sheet() {
         if(this.localName==='style')return this._sheet||(this._sheet=new CSSStyleSheet(this));
-        if(this.localName!=='link'||!this.rel.toLowerCase().split(/\s+/).includes('stylesheet'))return null;
+        if(this.localName!=='link'||!this.rel.toLowerCase().split(/[\t\n\f\r ]+/).includes('stylesheet'))return null;
         const href=this.href;
         if(this._sheet?.href===href)return this._sheet;
         const data=native('control',this._id,'stylesheet',href);
@@ -349,6 +419,7 @@ class Element extends Node {
         return data[0]==='\x02'?(this._sheet=new CSSStyleSheet(this,href,data.slice(3),data[1]==='s')):null;
     }
     getAttribute(name) { return native('attr', this._id, String(name).toLowerCase()); }
+    getAttributeNames() { return native('attrs',this._id).map(([name])=>name); }
     getAttributeNode(name) { return this.attributes.find(a => a.name === name) || null; }
     hasAttribute(name) { return this.getAttribute(name) !== null; }
     hasAttributes() { return this.attributes.length > 0; }
@@ -374,27 +445,31 @@ class Element extends Node {
     closest(selector) { for (let n = this; n; n = n.parentElement) if (n.matches(selector)) return n; return null; }
     getElementsByTagName(tag) { return collection(() => this.querySelectorAll(String(tag))); }
     getElementsByTagNameNS(_, tag) { return this.getElementsByTagName(tag); }
-    getElementsByClassName(names) { return collection(() => this.querySelectorAll('.' + String(names).trim().split(/\s+/).map(CSS.escape).join('.'))); }
+    getElementsByClassName(names) {
+        const classes = String(names).trim().split(/\s+/).filter(Boolean);
+        return collection(() => classes.length ? this.querySelectorAll(classes.map(name => '.' + CSS.escape(name)).join('')) : []);
+    }
     get style() { if (!this._style) this._style = styleFor(this); return this._style; }
     set style(value) { this.style.cssText = value; }
-    get classList() {
-        const element = this, values = () => (element.className || '').split(/\s+/).filter(Boolean);
-        return {
-            contains: token => values().includes(String(token)),
-            add(...tokens) { element.className = Array.from(new Set([...values(), ...tokens.map(String)])).join(' '); },
-            remove(...tokens) { element.className = values().filter(v => !tokens.includes(v)).join(' '); },
-            toggle(token, force) { const yes = force === undefined ? !this.contains(token) : !!force; if (yes) this.add(token); else this.remove(token); return yes; },
-            replace(old, value) { if (!this.contains(old)) return false; element.className = values().map(v => v === old ? value : v).join(' '); return true; },
-            get length() { return values().length; }, item: i => values()[i] || null,
-            get value() { return element.className; }, set value(v) { element.className = v; },
-            [Symbol.iterator]: () => values()[Symbol.iterator](), toString: () => element.className
-        };
-    }
+    get classList() { return this._classList||(this._classList=new DOMTokenList(this)); }
     get dataset() {
-        return new Proxy({}, {
-            get: (_, key) => this.getAttribute('data-' + cssName(key)) ?? undefined,
-            set: (_, key, value) => { this.setAttribute('data-' + cssName(key), value); return true; },
-            deleteProperty: (_, key) => { this.removeAttribute('data-' + cssName(key)); return true; }
+        if(this._dataset)return this._dataset;
+        const nameFor = key => 'data-' + String(key).replace(/[A-Z]/g, c => '-' + c.toLowerCase());
+        const keyFor = name => name.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+        const keys = () => this.getAttributeNames().filter(name => name.startsWith('data-')).map(keyFor);
+        return this._dataset = new Proxy({}, {
+            get: (target, key) => typeof key === 'string' ? this.getAttribute(nameFor(key)) ?? Reflect.get(target,key) :
+                key===Symbol.toStringTag?'DOMStringMap':Reflect.get(target,key),
+            set: (target, key, value) => {
+                if(typeof key!=='string')return Reflect.set(target,key,value);
+                if(/-[a-z]/.test(key))throw new DOMException('Invalid dataset property name.','SyntaxError');
+                this.setAttribute(nameFor(key), value);return true;
+            },
+            deleteProperty: (target, key) => { if (typeof key !== 'string')return Reflect.deleteProperty(target,key);this.removeAttribute(nameFor(key));return true; },
+            has: (target, key) => typeof key === 'string' && this.hasAttribute(nameFor(key)) || Reflect.has(target,key),
+            ownKeys: target => Array.from(new Set([...Reflect.ownKeys(target),...keys()])),
+            getOwnPropertyDescriptor: (target, key) => typeof key === 'string' && keys().includes(key) ?
+                {configurable:true,enumerable:true,writable:true,value:this.getAttribute(nameFor(key))} : Reflect.getOwnPropertyDescriptor(target,key)
         });
     }
     insertAdjacentHTML(where, text) {
@@ -403,6 +478,15 @@ class Element extends Node {
         if (where === 'beforebegin') this.before(...nodes); else if (where === 'afterend') this.after(...nodes);
         else if (where === 'afterbegin') this.prepend(...nodes); else if (where === 'beforeend') this.append(...nodes);
         else throw new SyntaxError('Invalid insertion position');
+    }
+    insertAdjacentElement(where, element) {
+        if(!(element instanceof Element))throw new TypeError('Expected an Element');
+        if(where==='beforebegin')this.before(element);
+        else if(where==='afterend')this.after(element);
+        else if(where==='afterbegin')this.prepend(element);
+        else if(where==='beforeend')this.append(element);
+        else throw new DOMException('Invalid insertion position.','SyntaxError');
+        return element;
     }
     getBoundingClientRect() {
         const measured=native('control',this===document.documentElement&&document.body?document.body._id:this._id,'geometry');
@@ -580,7 +664,7 @@ class Document extends Node {
     get images() { return this.getElementsByTagName('img'); }
     get scripts() { return this.getElementsByTagName('script'); }
     get links() { return collection(() => this.querySelectorAll('a[href],area[href]')); }
-    get styleSheets() { return Array.from(this.querySelectorAll('style,link[rel=stylesheet]')).map(n => n.sheet); }
+    get styleSheets() { return list(Array.from(this.querySelectorAll('style,link'), n => n.sheet).filter(Boolean)); }
     get currentScript() { return wrap(globalThis.__currentScript || 0); }
     get cookie() { return native('control', this._id, 'cookie') === '\x01' ? '' : native('control', this._id, 'cookie'); }
     set cookie(value) { native('control', this._id, 'cookie', String(value)); }
@@ -620,13 +704,19 @@ class URLSearchParams {
         else this._pairs = Array.isArray(value) || value[Symbol.iterator] ? Array.from(value, p => [String(p[0]),String(p[1])]) : Object.entries(value).map(([k,v]) => [k,String(v)]);
     }
     append(k,v) { this._pairs.push([String(k),String(v)]); this._changed?.(); }
-    set(k,v) { this.delete(k); this.append(k,v); }
+    set(k,v) {
+        k=String(k);v=String(v);const index=this._pairs.findIndex(p=>p[0]===k);
+        if(index<0)this._pairs.push([k,v]);
+        else { this._pairs[index][1]=v;this._pairs=this._pairs.filter((p,i)=>p[0]!==k||i===index); }
+        this._changed?.();
+    }
     get(k) { return this._pairs.find(p => p[0] === String(k))?.[1] ?? null; }
     getAll(k) { return this._pairs.filter(p => p[0] === String(k)).map(p => p[1]); }
-    has(k) { return this._pairs.some(p => p[0] === String(k)); }
-    delete(k) { this._pairs = this._pairs.filter(p => p[0] !== String(k)); this._changed?.(); }
-    sort() { this._pairs.sort((a,b) => a[0].localeCompare(b[0])); this._changed?.(); }
-    toString() { return this._pairs.map(p => p.map(v => encodeURIComponent(v).replace(/%20/g,'+')).join('=')).join('&'); }
+    has(k,value) { return this._pairs.some(p => p[0] === String(k) && (arguments.length<2||p[1]===String(value))); }
+    delete(k,value) { this._pairs = this._pairs.filter(p => p[0] !== String(k) || arguments.length>1&&p[1]!==String(value)); this._changed?.(); }
+    get size() { return this._pairs.length; }
+    sort() { this._pairs.sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:0); this._changed?.(); }
+    toString() { return this._pairs.map(p => p.map(v => encodeURIComponent(v).replace(/[!'()~]/g,c=>'%'+c.charCodeAt(0).toString(16).toUpperCase()).replace(/%20/g,'+')).join('=')).join('&'); }
     entries() { return this._pairs[Symbol.iterator](); } keys() { return this._pairs.map(p=>p[0])[Symbol.iterator](); } values() { return this._pairs.map(p=>p[1])[Symbol.iterator](); }
     forEach(fn, self) { this._pairs.forEach(([k,v]) => fn.call(self,v,k,this)); }
     [Symbol.iterator]() { return this.entries(); }
@@ -675,7 +765,7 @@ class Selection {
 const selection = new Selection();
 globalThis.Selection=Selection;globalThis.getSelection=()=>selection;
 Document.prototype.getSelection=()=>selection;
-Object.assign(globalThis, {Event,CustomEvent,MouseEvent,KeyboardEvent,EventTarget,Node,Element,HTMLElement:Element,HTMLAnchorElement,HTMLAreaElement:HTMLAnchorElement,HTMLInputElement:Element,HTMLFormElement:Element,HTMLImageElement:Element,HTMLScriptElement:Element,Document,HTMLDocument:Document,DocumentFragment,Text,Comment,DOMException,CSSStyleSheet,CSSStyleDeclaration,URL,URLSearchParams,document});
+Object.assign(globalThis, {Event,CustomEvent,MouseEvent,KeyboardEvent,EventTarget,Node,Element,HTMLElement:Element,HTMLAnchorElement,HTMLAreaElement:HTMLAnchorElement,HTMLInputElement:Element,HTMLFormElement:Element,HTMLImageElement:Element,HTMLScriptElement:Element,Document,HTMLDocument:Document,DocumentFragment,Text,Comment,DOMException,DOMTokenList,CSSStyleSheet,CSSStyleDeclaration,URL,URLSearchParams,document});
 Object.defineProperty(globalThis, 'location', {configurable:false,get:()=>location,set:v=>location.assign(v)});
 globalThis.window = globalThis; globalThis.self = globalThis; globalThis.top = globalThis; globalThis.parent = globalThis;
 globalThis.frames = globalThis; globalThis.length = 0;
@@ -735,12 +825,119 @@ function mediaMatches(media) {
     });
 }
 globalThis.matchMedia = media => {const result=Object.assign(new EventTarget(),{media:String(media),onchange:null,addListener(fn){this.addEventListener('change',fn);},removeListener(fn){this.removeEventListener('change',fn);}});Object.defineProperty(result,'matches',{get:()=>mediaMatches(result.media)});return result;};
-globalThis.CSS = {escape: value => String(value).replace(/(^\d)|[^a-zA-Z0-9_-]/g,(c,d)=>d?'\\3'+d+' ':'\\'+c),supports:()=>false};
+function cssSupportsDeclaration(property,value) {
+    property=String(property).toLowerCase();value=String(value).trim().toLowerCase();
+    if(property.startsWith('--'))return !!value&&!/[;{}]/.test(value);
+    if(!value)return false;
+    const enums={
+        display:['block','inline','inline-block','list-item','none','table','table-row-group','table-header-group','table-footer-group','table-row','table-cell','flex','inline-flex','grid','inline-grid','-webkit-box','-webkit-inline-box'],
+        position:['static','relative','absolute','fixed'],overflow:['visible','hidden','scroll','auto'],
+        visibility:['visible','hidden'],
+        'box-sizing':['content-box','border-box'],'flex-direction':['row','row-reverse','column','column-reverse'],
+        'flex-wrap':['nowrap','wrap','wrap-reverse'],
+        'align-content':['normal','stretch','flex-start','flex-end','center','baseline','space-between','space-around','space-evenly','start','end'],
+        'align-items':['normal','stretch','flex-start','flex-end','center','baseline','start','end'],
+        'align-self':['auto','normal','stretch','flex-start','flex-end','center','baseline','start','end'],
+        'justify-content':['normal','stretch','flex-start','flex-end','center','space-between','space-around','space-evenly','start','end'],
+        'justify-items':['normal','stretch','flex-start','flex-end','center','baseline','start','end'],
+        'justify-self':['auto','normal','stretch','flex-start','flex-end','center','baseline','start','end'],
+        'white-space':['normal','pre','nowrap','pre-wrap','pre-line'],
+        'word-break':['normal','break-all','keep-all','break-word'],
+        'overflow-wrap':['normal','break-word','anywhere'],'word-wrap':['normal','break-word','anywhere'],
+        '-webkit-box-orient':['horizontal','vertical'],
+        'object-fit':['fill','contain','cover','none','scale-down'],
+        'font-style':['normal','italic','oblique'],'font-variant':['normal','small-caps'],
+        'font-weight':['normal','bold','bolder','lighter','light'],
+        'font-size':['xx-small','x-small','small','medium','large','x-large','xx-large','smaller','larger'],
+        'line-height':['normal'],'text-align':['left','right','center','justify'],
+        'text-transform':['none','capitalize','uppercase','lowercase']
+    };
+    if(enums[property]) {
+        if(enums[property].includes(value)||property==='font-weight'&&/^[1-9]00$/.test(value))return true;
+        if(property!=='font-size'&&property!=='line-height')return false;
+    }
+    if(property==='-webkit-line-clamp')return value==='none'||/^[1-9]\d{0,2}$/.test(value)&&Number(value)<=100;
+    const lengths=new Set(['width','height','min-width','max-width','min-height','max-height','top','right','bottom','left','margin','margin-top','margin-right','margin-bottom','margin-left','padding','padding-top','padding-right','padding-bottom','padding-left','gap','row-gap','column-gap','flex-basis','font-size','line-height','letter-spacing','word-spacing','border-radius','outline-width','outline-offset']);
+    if(lengths.has(property))return value==='auto'&&/^(width|height|min-|max-|margin|flex-basis)/.test(property)||/^(?:0|[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:px|em|ex|ch|rem|vw|vh|vmin|vmax|%|mm|cm|in|pt|pc)?|calc\(.+\))$/i.test(value);
+    if(property==='grid-template-columns'||property==='grid-template-rows')return /^(none|auto|(?:repeat\(\s*(?:\d+|auto-fill|auto-fit)\s*,\s*)?(?:minmax\([^;]+\)|auto|min-content|max-content|\d*\.?\d+(?:px|%|fr|em|rem))(?:\s+(?:minmax\([^;]+\)|auto|min-content|max-content|\d*\.?\d+(?:px|%|fr|em|rem)))*(?:\s*\))?)$/i.test(value);
+    if(property==='transform')return /^(none|translate(?:x|y|3d)?\(.+\)(?:\s+translate(?:x|y|3d)?\(.+\))*)$/i.test(value);
+    if(property==='color'||property==='background-color'||property==='background')return /^(transparent|currentcolor|#[0-9a-f]{3,8}|black|white|red|green|blue|yellow|gray|grey|navy|teal|maroon|purple|orange|silver|lime|fuchsia|aqua|rgba?\(.+\)|hsla?\(.+\)|linear-gradient\(.+\))$/i.test(value);
+    return false;
+}
+function splitSupports(text,operator) {
+    let depth=0,quote='',start=0;const parts=[];
+    for(let i=0;i<text.length;i++) {
+        const c=text[i];if(quote){if(c===quote&&text[i-1]!=='\\')quote='';continue;}
+        if(c==='"'||c==="'"){quote=c;continue;}if(c==='(')depth++;else if(c===')')depth--;
+        if(depth===0&&text.slice(i,i+operator.length).toLowerCase()===operator){parts.push(text.slice(start,i).trim());start=i+operator.length;i+=operator.length-1;}
+    }
+    if(!parts.length)return null;parts.push(text.slice(start).trim());return parts;
+}
+function cssSupports(condition,value) {
+    if(arguments.length>1)return cssSupportsDeclaration(condition,value);
+    let text=String(condition).trim();
+    const ors=splitSupports(text,' or ');if(ors)return ors.some(part=>cssSupports(part));
+    const ands=splitSupports(text,' and ');if(ands)return ands.every(part=>cssSupports(part));
+    if(/^not\s+/i.test(text))return !cssSupports(text.replace(/^not\s+/i,''));
+    while(text[0]==='('&&text[text.length-1]===')') {
+        let depth=0,whole=true,quote='';
+        for(let i=0;i<text.length-1;i++) {
+            const c=text[i];if(quote){if(c===quote&&text[i-1]!=='\\')quote='';continue;}
+            if(c==='"'||c==="'")quote=c;else if(c==='(')depth++;else if(c===')'&&--depth===0){whole=false;break;}
+        }
+        if(!whole)break;text=text.slice(1,-1).trim();
+    }
+    const colon=text.indexOf(':');return colon>0&&cssSupportsDeclaration(text.slice(0,colon),text.slice(colon+1));
+}
+globalThis.CSS = {escape(value) {
+    const input=String(value);let result='';
+    for(let i=0;i<input.length;i++) {
+        const code=input.charCodeAt(i),char=input[i];
+        if(code===0) { result+='\uFFFD'; continue; }
+        if(code<32||code===127||i===0&&code>=48&&code<=57||
+           i===1&&input.charCodeAt(0)===45&&code>=48&&code<=57) {
+            result+='\\'+code.toString(16)+' ';continue;
+        }
+        if(i===0&&code===45&&input.length===1) { result+='\\-';continue; }
+        if(code>=128||code===45||code===95||code>=48&&code<=57||
+           code>=65&&code<=90||code>=97&&code<=122) result+=char;
+        else result+='\\'+char;
+    }
+    return result;
+}, supports:cssSupports};
 globalThis.Image = function(width,height) { const n = document.createElement('img'); if(width)n.setAttribute('width',width); if(height)n.setAttribute('height',height); return n; };
 globalThis.Option = function(text='',value=text,defaultSelected=false,selected=false) { const n=document.createElement('option');n.textContent=text;n.value=value;n.defaultSelected=defaultSelected;n.selected=selected;return n; };
 globalThis.MutationObserver = class {
-    constructor(callback) { this.callback=callback;this.targets=[];this.records=[];this.pending=false; }
-    observe(target, options) { this.targets.push({target,options});mutationObservers.add(this); }
+    constructor(callback) {
+        if (typeof callback !== 'function') throw new TypeError('MutationObserver callback must be a function');
+        this.callback=callback;this.targets=[];this.records=[];this.pending=false;
+    }
+    observe(target, options = {}) {
+        if (!(target instanceof Node)) throw new TypeError('Expected a Node');
+        options = options || {};
+        const attributeFilter = options.attributeFilter === undefined ? null :
+            Array.from(options.attributeFilter, name => String(name).toLowerCase());
+        const attributeOldValue = !!options.attributeOldValue;
+        const characterDataOldValue = !!options.characterDataOldValue;
+        const attributes = options.attributes === undefined ?
+            attributeOldValue || attributeFilter !== null : !!options.attributes;
+        const characterData = options.characterData === undefined ?
+            characterDataOldValue : !!options.characterData;
+        if (attributeOldValue && !attributes || attributeFilter !== null && !attributes ||
+            characterDataOldValue && !characterData)
+            throw new TypeError('Inconsistent MutationObserver options');
+        if (!options.childList && !attributes && !characterData)
+            throw new TypeError('At least one mutation type must be observed');
+        const registration = {target, options:{
+            childList:!!options.childList, attributes, characterData,
+            subtree:!!options.subtree, attributeOldValue, characterDataOldValue,
+            attributeFilter
+        }};
+        const existing = this.targets.findIndex(item => item.target === target);
+        if (existing < 0) this.targets.push(registration);
+        else this.targets[existing] = registration;
+        mutationObservers.add(this);
+    }
     disconnect() { this.targets=[];this.records=[];mutationObservers.delete(this); }
     takeRecords() { const r=this.records;this.records=[];return r; }
 };
@@ -845,8 +1042,49 @@ class XMLHttpRequest extends EventTarget {
 }
 Object.assign(XMLHttpRequest,{UNSENT:0,OPENED:1,HEADERS_RECEIVED:2,LOADING:3,DONE:4});
 globalThis.XMLHttpRequest=XMLHttpRequest;
-class AbortSignal extends EventTarget { constructor(){super();this.aborted=false;this.reason=undefined;}throwIfAborted(){if(this.aborted)throw this.reason;} }
-globalThis.AbortSignal=AbortSignal;globalThis.AbortController=class {constructor(){this.signal=new AbortSignal();}abort(reason=new Error('AbortError')){if(this.signal.aborted)return;this.signal.aborted=true;this.signal.reason=reason;this.signal.dispatchEvent(new Event('abort'));}};
+function abortSignal(signal, reason = new DOMException('The operation was aborted.','AbortError')) {
+    if(signal.aborted)return;
+    signal.aborted=true;signal.reason=reason;signal.dispatchEvent(new Event('abort'));
+}
+class AbortSignal extends EventTarget {
+    constructor(){super();this.aborted=false;this.reason=undefined;}
+    throwIfAborted(){if(this.aborted)throw this.reason;}
+    static abort(reason){const signal=new AbortSignal();abortSignal(signal,reason);return signal;}
+    static timeout(milliseconds){
+        let remaining=Number(milliseconds);
+        if(!Number.isFinite(remaining)||remaining<0||remaining>Number.MAX_SAFE_INTEGER)
+            throw new RangeError('Invalid timeout.');
+        remaining=Math.trunc(remaining);
+        const signal=new AbortSignal();
+        const schedule=()=>{
+            const delay=Math.min(remaining,0x7fffffff);remaining-=delay;
+            setTimeout(()=>remaining>0?schedule():abortSignal(signal,
+                new DOMException('The operation timed out.','TimeoutError')),delay);
+        };
+        schedule();return signal;
+    }
+    static any(signals){
+        if(signals==null||typeof signals[Symbol.iterator]!=='function')throw new TypeError('Expected an iterable of AbortSignals');
+        const inputs=Array.from(signals);
+        if(inputs.some(signal=>!(signal instanceof AbortSignal)))throw new TypeError('Expected an AbortSignal');
+        const combined=new AbortSignal(),first=inputs.find(signal=>signal.aborted);
+        if(first){abortSignal(combined,first.reason);return combined;}
+        const subscriptions=[];
+        for(const signal of new Set(inputs)){
+            const listener=()=>{
+                for(const [source,callback] of subscriptions)source.removeEventListener('abort',callback);
+                abortSignal(combined,signal.reason);
+            };
+            subscriptions.push([signal,listener]);signal.addEventListener('abort',listener,{once:true});
+        }
+        return combined;
+    }
+}
+globalThis.AbortSignal=AbortSignal;
+globalThis.AbortController=class {
+    constructor(){this.signal=new AbortSignal();}
+    abort(reason){abortSignal(this.signal,reason);}
+};
 let historyToken='',historyState=null;
 class PopStateEvent extends Event {
     constructor(type,options={}) { super(type,options);this.state=options.state??null; }
@@ -895,7 +1133,9 @@ globalThis.__dillo = {
             globalThis.dispatchEvent(new HashChangeEvent('hashchange',{oldURL,newURL:location.href}));
     },
     stylesheets() {
-        for(const link of document.querySelectorAll('link[rel~="stylesheet"]')) {
+        const links=Array.from(document.querySelectorAll('link')).filter(link=>
+            link.rel.toLowerCase().split(/[\t\n\f\r ]+/).includes('stylesheet'));
+        for(const link of links) {
             if(link._loadedHref===link.href)continue;
             const sheet=link.sheet;
             if(!sheet&&link._sheetStatus!=='\x03')continue;

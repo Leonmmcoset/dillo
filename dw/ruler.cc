@@ -89,7 +89,9 @@ core::Widget *Ruler::getWidgetAtPoint (int x, int y,
 {
    // Override (complex) implementation OOFAwareWidget::getWidgetAtPoint().
 
-   if (inAllocation (x, y))
+   if (getStyle()->visibility != core::style::VISIBILITY_HIDDEN &&
+       getStyle()->pointerEvents != core::style::StyleAttrs::POINTER_EVENTS_NONE &&
+       inAllocation (x, y) && isPointVisible(x, y))
       return this;
    else
       return NULL;

@@ -194,6 +194,8 @@ document.title=failures.length?'FAIL '+failures.join(','):'Styles PASS';
         elif route == '/sheet.css':
             time.sleep(.15)
             self.reply('#styled { width: 230px; height: 15px }')
+        elif route == '/body-sheet.css':
+            self.reply('#body-styled { width: 19px; height: 13px; background-color: #123456 }')
         elif route == '/sheet-redirect.css':
             self.reply('', 302, {'Location': '/sheet.css'})
         elif route == '/sheet-cross-redirect.css':
@@ -205,6 +207,7 @@ document.title=failures.length?'FAIL '+failures.join(','):'Styles PASS';
             cross = 'http://127.0.0.1:' + str(self.server.other.server_port)
             self.reply('''<!doctype html><title>CSSOM pending</title>
 <style id=inline></style><div id=styled></div><input id=selection value="中文abc">
+<link rel="external\tStyleSheet" href="/body-sheet.css"><div id=body-styled></div>
 <script>
 let loaded=0,denied=false,redirected=false,redirectDenied=false,failed=0;
 inline.sheet.insertRule('#styled { background-color: #123456 }');
@@ -228,6 +231,10 @@ if(!denied)failures.push('cross-origin stylesheet');
 if(!redirected||!redirectDenied)failures.push('stylesheet redirects');
 if(failed!==1||missing.sheet)failures.push('stylesheet error');
 if(styled.getBoundingClientRect().width!==230||getComputedStyle(styled).backgroundColor!=='#123456')failures.push('stylesheet rendering');
+const bodyStyled=document.getElementById('body-styled');
+if(bodyStyled.getBoundingClientRect().width!==19||getComputedStyle(bodyStyled).backgroundColor!=='#123456')failures.push('body stylesheet or rel token list');
+const sheets=document.styleSheets,bodySheet=document.querySelector('link[href="/body-sheet.css"]').sheet;
+if(!bodySheet||!Array.from(sheets).includes(bodySheet)||sheets.item(0)!==inline.sheet||Array.from(sheets).includes(null))failures.push('stylesheet list');
 const field=document.getElementById('selection');field.focus();field.setSelectionRange(1,3);
 if(String(window.getSelection())!=='文a')failures.push('selection text');
 document.title=failures.length?'FAIL '+failures.join(','):'CSSOM PASS';

@@ -117,6 +117,163 @@ def main():
             check(marker_pixel is not None, 'viewport calibration marker is visible')
             origin = ((marker_pixel // 3) % width, (marker_pixel // 3) // width)
 
+            structural = evaluate('["nth-last-child","nth-last-of-type","last-of-type","last-child","only-child-target","only-of-type-target"].map(id=>getComputedStyle(document.getElementById(id)).backgroundColor)')
+            check(structural == ['#008000'] * 6,
+                  'last and only child/type selectors match in reverse sibling order', structural)
+            font = evaluate('(s=>({size:s.fontSize,weight:s.fontWeight,style:s.fontStyle,variant:s.fontVariant,lineHeight:s.lineHeight}))(getComputedStyle(document.getElementById("font-shorthand")))')
+            check(font == {'size':'20px','weight':'700','style':'italic','variant':'small-caps','lineHeight':'30px'},
+                  'font shorthand applies optional fields and unitless line-height', font)
+            font_order = evaluate('(s=>({size:s.fontSize,weight:s.fontWeight,style:s.fontStyle,lineHeight:s.lineHeight}))(getComputedStyle(document.getElementById("font-order")))')
+            check(font_order == {'size':'20px','weight':'700','style':'italic','lineHeight':'25px'},
+                  'font shorthand accepts reordered optional fields and quoted families', font_order)
+            font_reset = evaluate('(s=>({size:s.fontSize,weight:s.fontWeight,style:s.fontStyle,variant:s.fontVariant,lineHeight:s.lineHeight}))(getComputedStyle(document.getElementById("font-reset")))')
+            check(font_reset == {'size':'16px','weight':'400','style':'normal','variant':'normal','lineHeight':'normal'},
+                  'font shorthand resets omitted longhands', font_reset)
+            invalid_weight = evaluate('getComputedStyle(document.getElementById("font-invalid")).fontWeight')
+            check(invalid_weight == '700', 'font shorthand without a family is rejected atomically', invalid_weight)
+            escaped = evaluate('[CSS.escape("1a"),CSS.escape("-2a"),CSS.escape("-"),CSS.escape("a:b")]')
+            check(escaped == ['\\31 a','-\\32 a','\\-','a\\:b'],
+                  'CSS.escape handles leading digits and punctuation', escaped)
+            class_queries = evaluate('[document.getElementsByClassName("").length,document.getElementsByClassName("   ").length]')
+            check(class_queries == [0,0], 'empty live class collections do not create invalid selectors', class_queries)
+            signal_listeners = evaluate('(()=>{const t=new EventTarget(),c=new AbortController();let n=0;t.addEventListener("ping",()=>c.abort());t.addEventListener("ping",()=>n++,{signal:c.signal});t.dispatchEvent(new Event("ping"));return n})()')
+            check(signal_listeners == 0, 'AbortSignal removes listeners before their turn in dispatch', signal_listeners)
+            passive = evaluate('(()=>{const t=new EventTarget(),events=[];t.addEventListener("wheel",e=>{e.preventDefault();events.push(e.defaultPrevented)},{passive:true});t.addEventListener("wheel",e=>{events.push(e.defaultPrevented);e.preventDefault();events.push(e.defaultPrevented)});return [t.dispatchEvent(new Event("wheel",{cancelable:true})),events]})()')
+            check(passive == [False,[False,False,True]], 'passive listeners cannot cancel an event and do not affect later active listeners', passive)
+            signals = evaluate('(()=>{const a=new AbortController(),b=new AbortController(),s=AbortSignal.any([a.signal,b.signal,a.signal]),reason={why:"cancel"};let n=0;s.onabort=()=>n++;b.abort(reason);a.abort("late");let thrown=false;try{s.throwIfAborted()}catch(e){thrown=e===reason}const immediate=AbortSignal.abort(),ready=AbortSignal.any([immediate]);return [s.aborted,s.reason===reason,n,thrown,immediate.reason.name,ready.reason===immediate.reason,AbortSignal.any([]).aborted]})()')
+            check(signals == [True,True,1,True,'AbortError',True,False],
+                  'AbortSignal factories combine cancellation, preserve reasons and dispatch once', signals)
+            signal_errors = evaluate('(()=>{let n=0;for(const f of [()=>AbortSignal.any([{}]),()=>AbortSignal.any({}),()=>AbortSignal.timeout(-1),()=>AbortSignal.timeout(Infinity)])try{f()}catch(e){n++}return n})()')
+            check(signal_errors == 4, 'AbortSignal rejects invalid signal collections and timeout values', signal_errors)
+            evaluate('(()=>{const s=AbortSignal.timeout(1);window.timeoutProbe=s;s.onabort=()=>document.title=s.reason.name;return s.aborted})()')
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if command('title') == 'TimeoutError':
+                    break
+                time.sleep(.05)
+            check(evaluate('timeoutProbe.aborted&&timeoutProbe.reason.name==="TimeoutError"'),
+                  'AbortSignal.timeout asynchronously aborts with TimeoutError')
+            command('eval', 'document.title="Renderer ready"')
+
+            grid = evaluate('(()=>{const a=document.getElementById("grid-first").getBoundingClientRect(),b=document.getElementById("grid-second").getBoundingClientRect();return [a.x,a.width,b.x,b.width]})()')
+            check(grid == [500,97,770,30], 'grid minmax/fr tracks and justify-self place items in their tracks', grid)
+            auto_grid = evaluate('(()=>{const f=document.getElementById("fit-first").getBoundingClientRect(),s=document.getElementById("fit-second").getBoundingClientRect(),a=document.getElementById("fill-first").getBoundingClientRect(),b=document.getElementById("fill-second").getBoundingClientRect();return [f.x,f.width,s.x,s.width,a.x,a.width,b.x,b.width]})()')
+            check(auto_grid == [20,315,345,315,20,207,237,206],
+                  'grid auto-fit collapses unused tracks while auto-fill keeps them', auto_grid)
+            flex_wrapping = evaluate('["flex-heading","flex-heading-link","flex-summary"].map(id=>document.getElementById(id).getBoundingClientRect())')
+            heading, link, summary = flex_wrapping
+            check(link['height'] > 24 and heading['height'] >= link['height'] and summary['top'] >= link['bottom'],
+                  'nested flex rows remeasure wrapped descendants and keep following summaries below the title', flex_wrapping)
+            float_columns = evaluate('["float-columns","float-sidebar","float-main","float-nowrap","float-summary"].map(id=>document.getElementById(id).getBoundingClientRect())')
+            columns, sidebar, main, nowrap, summary = float_columns
+            check(main['width'] == 200 and main['top'] == sidebar['top'] and main['right'] <= sidebar['left'],
+                  'fixed float columns stay beside each other when a nested flex title has long nowrap text', float_columns)
+            check(nowrap['width'] == 200 and nowrap['height'] == 24 and summary['top'] >= nowrap['bottom'],
+                  'nested nowrap title clips within its flex column and leaves space for the summary', float_columns)
+            flex_overflow = evaluate('["flex-overflow-hidden","flex-overflow-fixed"].map(id=>document.getElementById(id).getBoundingClientRect().width)')
+            check(flex_overflow == [150,50], 'hidden overflow removes the automatic flex minimum for a long title', flex_overflow)
+            block_overflow = evaluate('["fixed-overflow","fixed-overflow-block"].map(id=>document.getElementById(id).getBoundingClientRect().width)')
+            check(block_overflow == [180,180], 'nowrap block fills its fixed containing box without enlarging it', block_overflow)
+            command('eval', 'window.flexAutoProbe=(parent,first,second)=>{const p=document.getElementById("flex-auto"),a=document.getElementById("flex-auto-a"),b=document.getElementById("flex-auto-b");p.style.cssText="position:absolute;left:20px;top:1500px;display:flex;width:200px;height:100px;"+parent;a.style.cssText="width:40px;height:20px;flex-shrink:0;"+first;b.style.cssText="width:40px;height:20px;flex-shrink:0;"+second;const r=p.getBoundingClientRect();return [a,b].map(e=>{const b=e.getBoundingClientRect();return [b.x-r.x,b.y-r.y,b.width,b.height]})}')
+            auto_end = evaluate('flexAutoProbe("justify-content:center","","margin-left:auto")')
+            check(auto_end == [[0,0,40,20],[160,0,40,20]],
+                  'flex automatic margins consume free space before justify-content', auto_end)
+            auto_center = evaluate('flexAutoProbe("","","margin-left:auto;margin-right:auto")')
+            check(auto_center == [[0,0,40,20],[100,0,40,20]],
+                  'both automatic main margins share the free space', auto_center)
+            auto_reverse = evaluate('flexAutoProbe("flex-direction:row-reverse","","margin-right:auto")')
+            check(auto_reverse == [[160,0,40,20],[0,0,40,20]],
+                  'reverse flex directions resolve physical automatic margins on the correct side', auto_reverse)
+            auto_column = evaluate('flexAutoProbe("flex-direction:column","","margin-top:auto;margin-left:auto;margin-right:auto")')
+            check(auto_column == [[0,0,40,20],[80,80,40,20]],
+                  'column flex items support automatic margins on both axes', auto_column)
+            auto_natural = evaluate('flexAutoProbe("flex-direction:column","","width:auto;padding:0 10px;margin-left:auto")')
+            check(auto_natural[1] == [180,20,20,20],
+                  'cross-axis automatic margins suppress stretch and retain natural item width', auto_natural)
+            auto_cross = evaluate('flexAutoProbe("align-items:flex-end","","margin-top:auto;margin-bottom:auto")')
+            check(auto_cross == [[0,80,40,20],[40,40,40,20]],
+                  'cross-axis automatic margins center an item independently of align-items', auto_cross)
+            auto_overflow = evaluate('flexAutoProbe("width:60px","","margin-left:auto")')
+            check(auto_overflow == [[0,0,40,20],[40,0,40,20]],
+                  'overflowing flex lines resolve automatic margins to zero', auto_overflow)
+            auto_grow = evaluate('flexAutoProbe("","flex-grow:1","margin-left:auto")')
+            check(auto_grow == [[0,0,160,20],[160,0,40,20]],
+                  'flex growth consumes free space before automatic margins', auto_grow)
+            centered_containers = evaluate('["margin-flex","margin-grid"].map(id=>document.getElementById(id).getBoundingClientRect().x)')
+            check(centered_containers == [500,500],
+                  'block-level flex and grid containers center with horizontal automatic margins', centered_containers)
+            class_list = evaluate('(()=>{const e=document.createElement("div");e.className="x x y";const c=e.classList;c.add("z");const same=c.replace("x","x");c.replace("x","y");let errors=[];for(const token of ["","a b"])try{c.add(token)}catch(error){errors.push(error.name)}return [e.classList===c,same,e.className,c.length,[...c],errors]})()')
+            check(class_list == [True,True,'y z',2,['y','z'],['SyntaxError','InvalidCharacterError']],
+                  'classList is live, de-duplicates tokens and validates mutations', class_list)
+            token_index = evaluate('(()=>{const e=document.createElement("div");e.className="a x b y";const t=e.classList;t.replace("a","b");return [t[0],t[1],t[3],"2" in t,"3" in t,Object.keys(t),e.className,t instanceof DOMTokenList]})()')
+            check(token_index == ['b','x',None,True,False,['0','1','2'],'b x y',True],
+                  'DOMTokenList exposes live indexed keys and replacement preserves the earliest token position', token_index)
+            dataset = evaluate('(()=>{const e=document.createElement("div");e.dataset.pageId="42";e.setAttribute("data-ready","yes");const keys=Object.keys(e.dataset).sort();return [e.dataset.pageId,e.dataset.ready,"ready" in e.dataset,keys,Object.entries(e.dataset).sort()]})()')
+            check(dataset == ['42','yes',True,['pageId','ready'],[['pageId','42'],['ready','yes']]],
+                  'dataset reflects live data attributes and enumerates camel-cased keys', dataset)
+            dataset_names = evaluate('(()=>{const e=document.createElement("div"),d=e.dataset;d[""]="empty";d.pageId="42";let error="";try{d["page-id"]="bad"}catch(e){error=e.name}delete d.pageId;return [d===e.dataset,d[""],d.pageId,error,Object.keys(d),Object.prototype.toString.call(d),d.hasOwnProperty("")]})()')
+            check(dataset_names == [True,'empty',None,'SyntaxError',[''],'[object DOMStringMap]',True],
+                  'dataset keeps its identity, supports empty names and rejects ambiguous dashed keys', dataset_names)
+            query_params = evaluate('(()=>{const p=new URLSearchParams("b=2&a=1&b=3&space=a+b&special=!*~");p.set("b","4");const before=[p.toString(),p.size,p.getAll("b")];p.sort();return [before,p.toString(),p.has("b","4"),p.delete("b","4"),p.has("b")]})()')
+            check(query_params == [['b=4&a=1&space=a+b&special=%21*%7E',4,['4']],
+                  'a=1&b=4&space=a+b&special=%21*%7E',True,None,False],
+                  'URLSearchParams preserves set order and form-encodes values', query_params)
+            supports = evaluate('[CSS.supports("display","grid"),CSS.supports("(display: grid) and (gap: 8px)"),CSS.supports("grid-template-columns","repeat(auto-fit,minmax(200px,1fr))"),CSS.supports("display: masonry"),CSS.supports("unknown-property","1px")]')
+            check(supports == [True,True,True,False,False], 'CSS.supports reports implemented layout declarations', supports)
+            numeric_supports = evaluate('[CSS.supports("font-size","20px"),CSS.supports("line-height","1.5"),CSS.supports("display","20px")]')
+            check(numeric_supports == [True,True,False], 'CSS.supports accepts numeric font sizes and line heights', numeric_supports)
+            text_supports = evaluate('[CSS.supports("word-break","break-all"),CSS.supports("overflow-wrap","anywhere"),CSS.supports("word-wrap","break-word")]')
+            check(text_supports == [True,True,True], 'CSS.supports recognizes implemented text wrapping properties', text_supports)
+            conditional_styles = evaluate('[getComputedStyle(document.getElementById("supports-declaration")).backgroundColor,getComputedStyle(document.getElementById("supports-and")).backgroundColor]')
+            check(conditional_styles == ['#008050','#008050'], '@supports evaluates declarations and compound conditions', conditional_styles)
+            visibility = evaluate('[getComputedStyle(document.getElementById("visibility-hidden")).visibility,getComputedStyle(document.getElementById("visibility-restored")).visibility,document.getElementById("visibility-hidden").getBoundingClientRect().height,CSS.supports("visibility","hidden")]')
+            check(visibility == ['hidden','visible',30,True],
+                  'visibility is inherited and preserves layout while visible descendants override it', visibility)
+            color(picture, 'visibility-hidden', 10, 15, (255,255,255), 'hidden boxes do not paint backgrounds or text')
+            color(picture, 'visibility-restored', 10, 15, (0,128,80), 'visible descendants paint inside hidden parents')
+            color(picture, 'visibility-image', 10, 15, (255,255,255), 'visibility hides image pixels')
+            color(picture, 'visibility-control', 10, 15, (255,255,255), 'visibility hides native controls')
+            inline = rect('visibility-inline')
+            hidden_pixels = [pixel(picture, origin[0]+inline['left']+x, origin[1]+inline['top']+y)
+                             for y in range(25) for x in range(120)]
+            check(all(p == (255,255,255) for p in hidden_pixels), 'visibility hides inline text and backgrounds')
+            visibility_hits = evaluate('[document.elementFromPoint(460,555)?.id,document.elementFromPoint(540,555)?.id,document.elementFromPoint(890,465)?.id]')
+            check(visibility_hits[0] != 'visibility-hidden' and visibility_hits[1] == 'visibility-restored' and
+                  visibility_hits[2] != 'visibility-control', 'hidden boxes and controls do not receive hits; restored descendants do', visibility_hits)
+            visibility_keywords = evaluate('(()=>{const e=document.getElementById("visibility-restored"),values=[];for(const value of ["unset","initial","inherit","visible"]){e.style.visibility=value;values.push(getComputedStyle(e).visibility)}return values})()')
+            check(visibility_keywords == ['hidden','visible','hidden','visible'],
+                  'visibility handles initial, inherit and unset without removing descendant layout', visibility_keywords)
+            wrapping = evaluate('[document.getElementById("word-wrap-anywhere").getBoundingClientRect().height,document.getElementById("word-break-all").getBoundingClientRect().height,getComputedStyle(document.getElementById("word-wrap-anywhere")).overflowWrap,getComputedStyle(document.getElementById("word-break-all")).wordBreak]')
+            check(wrapping[0] > 20 and wrapping[1] > 20 and wrapping[2:] == ['anywhere','break-all'],
+                  'overflow-wrap and word-break wrap long identifiers inside narrow columns', wrapping)
+            cjk_wrapping = evaluate('[document.getElementById("word-keep-all").getBoundingClientRect().height,document.getElementById("word-cjk-normal").getBoundingClientRect().height]')
+            check(cjk_wrapping[0] == 20 and cjk_wrapping[1] > 20,
+                  'word-break keep-all suppresses automatic CJK breaks while normal text wraps', cjk_wrapping)
+            webkit_layout = evaluate('(()=>{const c=document.getElementById("webkit-clamp").getBoundingClientRect(),n=document.getElementById("webkit-nowrap").getBoundingClientRect();return [c.height,n.height,CSS.supports("display","-webkit-box"),CSS.supports("-webkit-line-clamp","2"),CSS.supports("-webkit-box-orient","vertical")]})()')
+            check(webkit_layout[0] == 40 and 0 < webkit_layout[1] <= 22 and webkit_layout[2:] == [True,True,True],
+                  'WebKit box aliases clamp text and nowrap keeps result titles to one line', webkit_layout)
+            short_clamp = evaluate('["webkit-short","webkit-inert","webkit-none"].map(id=>document.getElementById(id).getBoundingClientRect().height)')
+            check(short_clamp[0] == 20 and short_clamp[1] > 40 and short_clamp[2] > 40,
+                  'line clamp keeps short text natural, requires the prefixed box layout and accepts none', short_clamp)
+            clamp_support = evaluate('[CSS.supports("-webkit-line-clamp","none"),CSS.supports("-webkit-line-clamp","0"),CSS.supports("-webkit-line-clamp","101")]')
+            check(clamp_support == [True,False,False], 'line-clamp feature detection matches the implemented line limit', clamp_support)
+            dom_helpers = evaluate('(()=>{const p=document.createElement("div"),a=document.createElement("i"),b=document.createElement("b");p.append(a);const replaced=p.replaceChild(a,a)===a,inserted=a.insertAdjacentElement("afterend",b)===b;return [replaced,inserted,p.firstChild===a,p.lastChild===b,a.getAttributeNames()]})()')
+            check(dom_helpers == [True,True,True,True,[]], 'DOM replacement, insertion and attribute APIs preserve node identity', dom_helpers)
+            mutation_title = '[["id",null],["class",null],["class","old"]]'
+            evaluate('(()=>{const e=document.createElement("div"),o=new MutationObserver(records=>{document.title=JSON.stringify(records.map(r=>[r.attributeName,r.oldValue]))});e.id="first";o.observe(e,{attributes:true,attributeFilter:["id"]});e.id="second";o.observe(e,{attributes:true,attributeOldValue:true});e.className="old";e.className="new";return true})()')
+            deadline = time.monotonic() + 5
+            observed = None
+            while time.monotonic() < deadline:
+                observed = command('title')
+                if observed == mutation_title:
+                    break
+                time.sleep(.05)
+            check(observed == mutation_title,
+                  'MutationObserver replaces registrations, filters attributes and retains requested old values', observed)
+            observer_errors = evaluate('(()=>{const e=document.createElement("div"),o=new MutationObserver(()=>{});let n=0;for(const options of [{},{attributes:false,attributeOldValue:true}])try{o.observe(e,options)}catch(error){if(error instanceof TypeError)n++}return n})()')
+            check(observer_errors == 2, 'MutationObserver rejects empty and inconsistent observe options', observer_errors)
+            command('eval', 'document.title="Renderer ready"')
+
             box = rect('translated')
             check((box['left'], box['top'], box['width'], box['height']) == (80, 170, 80, 40),
                   'percentage translate uses its border box', box)
@@ -148,6 +305,11 @@ def main():
             color(picture, 'query', 150, 0, (78,110,242), 'native input does not cover CSS border')
             color(picture, 'search-button', 60, 39, (63,102,247), 'native button keeps gradient background', 5)
             color(picture, 'search-button', 119, 0, (255,255,255), 'native button keeps rounded corner')
+            clamp = rect('webkit-clamp')
+            clipped = [pixel(picture, origin[0]+clamp['left']+x, origin[1]+clamp['top']+42+y)
+                       for y in range(4) for x in range(130)]
+            check(all(p == (255,255,255) for p in clipped),
+                  'WebKit line clamp clips text after its second line')
             box = rect('search-button')
             white_text = [(x,y) for y in range(5,35) for x in range(5,115)
                           if min(pixel(picture, origin[0]+box['left']+x, origin[1]+box['top']+y)) > 235]

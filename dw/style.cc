@@ -91,6 +91,7 @@ void StyleAttrs::initValues ()
    vloat = FLOAT_NONE;
    clear = CLEAR_NONE;
    overflow = OVERFLOW_VISIBLE;
+   visibility = VISIBILITY_VISIBLE;
    position = POSITION_STATIC;
    modernLayout = false;
    hasTransform = false;
@@ -98,7 +99,7 @@ void StyleAttrs::initValues ()
    top = bottom = left = right = LENGTH_AUTO;
    textIndent = 0;
    margin.setVal (0);
-   marginLeftAuto = marginRightAuto = false;
+   marginLeftAuto = marginRightAuto = marginTopAuto = marginBottomAuto = false;
    borderWidth.setVal (0);
    padding.setVal (0);
    borderCollapse = BORDER_MODEL_SEPARATE;
@@ -110,8 +111,11 @@ void StyleAttrs::initValues ()
 
    display = DISPLAY_INLINE;
    memset(&container, 0, sizeof(container));
-   container.shrink = 1; container.alignItems = ALIGN_STRETCH; container.alignContent = ALIGN_STRETCH;
+   container.shrink = 1; container.justifyItems = ALIGN_STRETCH;
+   container.alignItems = ALIGN_STRETCH; container.alignContent = ALIGN_STRETCH;
    whiteSpace = WHITE_SPACE_NORMAL;
+   wordBreak = WORD_BREAK_NORMAL;
+   overflowWrap = OVERFLOW_WRAP_NORMAL;
    cursor = CURSOR_DEFAULT;
    pointerEvents = POINTER_EVENTS_AUTO;
    zIndex = Z_INDEX_AUTO;
@@ -161,7 +165,7 @@ void StyleAttrs::resetValues ()
    minWidth = maxWidth = minHeight = maxHeight = LENGTH_AUTO;
 
    margin.setVal (0);
-   marginLeftAuto = marginRightAuto = false;
+   marginLeftAuto = marginRightAuto = marginTopAuto = marginBottomAuto = false;
    borderWidth.setVal (0);
    padding.setVal (0);
    setBorderColor (NULL);
@@ -171,7 +175,8 @@ void StyleAttrs::resetValues ()
 
    display = DISPLAY_INLINE;
    memset(&container, 0, sizeof(container));
-   container.shrink = 1; container.alignItems = ALIGN_STRETCH; container.alignContent = ALIGN_STRETCH;
+   container.shrink = 1; container.justifyItems = ALIGN_STRETCH;
+   container.alignItems = ALIGN_STRETCH; container.alignContent = ALIGN_STRETCH;
 }
 
 /**
@@ -224,6 +229,7 @@ bool StyleAttrs::equals (object::Object *other) {
        vloat == otherAttrs->vloat &&
        clear == otherAttrs->clear &&
        overflow == otherAttrs->overflow &&
+       visibility == otherAttrs->visibility &&
        position == otherAttrs->position &&
        modernLayout == otherAttrs->modernLayout &&
        hasTransform == otherAttrs->hasTransform &&
@@ -247,6 +253,8 @@ bool StyleAttrs::equals (object::Object *other) {
        margin.equals (&otherAttrs->margin) &&
        marginLeftAuto == otherAttrs->marginLeftAuto &&
        marginRightAuto == otherAttrs->marginRightAuto &&
+       marginTopAuto == otherAttrs->marginTopAuto &&
+       marginBottomAuto == otherAttrs->marginBottomAuto &&
        borderWidth.equals (&otherAttrs->borderWidth) &&
        padding.equals (&otherAttrs->padding) &&
        borderCollapse == otherAttrs->borderCollapse &&
@@ -261,6 +269,8 @@ bool StyleAttrs::equals (object::Object *other) {
        display == otherAttrs->display &&
        memcmp(&container, &otherAttrs->container, sizeof(container)) == 0 &&
        whiteSpace == otherAttrs->whiteSpace &&
+       wordBreak == otherAttrs->wordBreak &&
+       overflowWrap == otherAttrs->overflowWrap &&
        listStylePosition == otherAttrs->listStylePosition &&
        listStyleType == otherAttrs->listStyleType &&
        cursor == otherAttrs->cursor &&
@@ -305,6 +315,7 @@ int StyleAttrs::hashValue () {
       vloat +
       clear +
       overflow +
+      visibility +
       position +
       top +
       bottom +
@@ -323,7 +334,8 @@ int StyleAttrs::hashValue () {
       lineHeight +
       textIndent +
       margin.hashValue () +
-      marginLeftAuto + 2 * marginRightAuto +
+      marginLeftAuto + 2 * marginRightAuto + 4 * marginTopAuto +
+      8 * marginBottomAuto +
       borderWidth.hashValue () +
       padding.hashValue () +
       borderCollapse +
@@ -337,6 +349,8 @@ int StyleAttrs::hashValue () {
       borderStyle.left +
       display +
       whiteSpace +
+      wordBreak +
+      overflowWrap +
       listStylePosition +
       listStyleType +
       cursor +
@@ -446,6 +460,7 @@ void Style::copyAttrs (StyleAttrs *attrs)
    vloat = attrs->vloat;
    clear = attrs->clear;
    overflow = attrs->overflow;
+   visibility = attrs->visibility;
    position = attrs->position;
    modernLayout = attrs->modernLayout;
    hasTransform = attrs->hasTransform;
@@ -470,6 +485,8 @@ void Style::copyAttrs (StyleAttrs *attrs)
    margin = attrs->margin;
    marginLeftAuto = attrs->marginLeftAuto;
    marginRightAuto = attrs->marginRightAuto;
+   marginTopAuto = attrs->marginTopAuto;
+   marginBottomAuto = attrs->marginBottomAuto;
    borderWidth = attrs->borderWidth;
    padding = attrs->padding;
    borderCollapse = attrs->borderCollapse;
@@ -478,6 +495,8 @@ void Style::copyAttrs (StyleAttrs *attrs)
    display = attrs->display;
    container = attrs->container;
    whiteSpace = attrs->whiteSpace;
+   wordBreak = attrs->wordBreak;
+   overflowWrap = attrs->overflowWrap;
    listStylePosition = attrs->listStylePosition;
    listStyleType = attrs->listStyleType;
    cursor = attrs->cursor;

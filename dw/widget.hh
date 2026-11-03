@@ -546,7 +546,12 @@ public:
 
    int getAvailWidth (bool forceValue);
    int getAvailHeight (bool forceValue);
-   virtual bool getAdjustMinWidth () { return Widget::adjustMinWidth; }
+   // Modern block boxes can overflow their CSS width. Expanding them to keep
+   // all text visible defeats nowrap clipping and pushes adjacent floats apart.
+   // Tables and cells override this method to retain intrinsic column sizing;
+   // Flexbox computes its automatic minimum directly from intrinsic widths.
+   virtual bool getAdjustMinWidth ()
+   { return Widget::adjustMinWidth && !getStyle()->modernLayout; }
    void correctRequisition (Requisition *requisition,
                             void (*splitHeightFun) (int, int*, int*),
                             bool allowDecreaseWidth, bool allowDecreaseHeight);

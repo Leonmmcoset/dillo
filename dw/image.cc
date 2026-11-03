@@ -425,6 +425,9 @@ bool Image::buttonReleaseImpl (core::EventButton *event)
 void Image::draw (core::View *view, core::Rectangle *area,
                   core::DrawingContext *context)
 {
+   if (getStyle()->visibility == core::style::VISIBILITY_HIDDEN)
+      return;
+
    int dx, dy;
    core::Rectangle content, intersection;
 

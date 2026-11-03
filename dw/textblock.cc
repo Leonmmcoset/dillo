@@ -389,7 +389,10 @@ void Textblock::sizeRequestImpl (core::Requisition *requisition, int numPos,
                     "before considering lineBreakWidth (= %d): %d * (%d + %d)",
                     lineBreakWidth, requisition->width, requisition->ascent,
                     requisition->descent);
-      if (requisition->width < lineBreakWidth)
+      // The root requisition also supplies the canvas's scrollable width.
+      // Keep its overflow extent until that is tracked separately by Layout.
+      if ((getStyle()->modernLayout && getParent() != NULL) ||
+          requisition->width < lineBreakWidth)
          requisition->width = lineBreakWidth;
    } else
       DBG_OBJ_MSG ("resize", 1, "lineBreakWidth needs no consideration");
@@ -398,7 +401,8 @@ void Textblock::sizeRequestImpl (core::Requisition *requisition, int numPos,
                  requisition->width, requisition->ascent, requisition->descent);
 
    correctRequisition (requisition, core::splitHeightPreserveAscent, true,
-                       false);
+      getStyle()->modernLayout &&
+      getStyle()->overflow != core::style::OVERFLOW_VISIBLE);
 
    // Dealing with parts out of flow, which may overlap the borders of
    // the text block. Base lines are ignored here: they do not play a
@@ -971,9 +975,12 @@ int Textblock::getDomNodeAtPoint (int x, int y)
 {
    bool inSpace;
    const Word *word = findWord(x - allocation.x, y - allocation.y, &inSpace);
-   return word && (inSpace ? word->spaceStyle : word->style)->pointerEvents !=
+   return word && (inSpace ? word->spaceStyle : word->style)->visibility !=
+      core::style::VISIBILITY_HIDDEN &&
+      (inSpace ? word->spaceStyle : word->style)->pointerEvents !=
       core::style::StyleAttrs::POINTER_EVENTS_NONE && word->domNode ?
-      word->domNode : getDomNode();
+      word->domNode : getStyle()->visibility == core::style::VISIBILITY_HIDDEN ?
+      0 : getDomNode();
 }
 
 bool Textblock::buttonPressImpl (core::EventButton *event)
@@ -1015,7 +1022,9 @@ bool Textblock::motionNotifyImpl (core::EventMotion *event)
       const Word *word = findWord (event->xWidget, event->yWidget, &inSpace);
 
       // cursor from word or widget style
-      if (word == NULL || (inSpace ? word->spaceStyle : word->style)->pointerEvents ==
+      if (word == NULL || (inSpace ? word->spaceStyle : word->style)->visibility ==
+          core::style::VISIBILITY_HIDDEN ||
+          (inSpace ? word->spaceStyle : word->style)->pointerEvents ==
           core::style::StyleAttrs::POINTER_EVENTS_NONE) {
          setCursor (getStyle()->cursor);
          hoverLink = -1;
@@ -1134,13 +1143,15 @@ bool Textblock::sendSelectionEvent (core::SelectionState::EventType eventType,
                           yWidgetBase + word->spaceStyle->font->descent) &&
                          (event->yWidget >
                           yWidgetBase - word->spaceStyle->font->ascent)) {
-                        if (word->spaceStyle->pointerEvents != core::style::StyleAttrs::POINTER_EVENTS_NONE)
+                        if (word->spaceStyle->visibility != core::style::VISIBILITY_HIDDEN &&
+                            word->spaceStyle->pointerEvents != core::style::StyleAttrs::POINTER_EVENTS_NONE)
                            link = word->spaceStyle->x_link;
                      }
                   } else {
                      if (event->yWidget <= yWidgetBase + word->size.descent &&
                          event->yWidget > yWidgetBase - word->size.ascent) {
-                        if (word->style->pointerEvents != core::style::StyleAttrs::POINTER_EVENTS_NONE)
+                        if (word->style->visibility != core::style::VISIBILITY_HIDDEN &&
+                            word->style->pointerEvents != core::style::StyleAttrs::POINTER_EVENTS_NONE)
                            link = word->style->x_link;
                      }
                      if (word->content.type == core::Content::TEXT) {
@@ -1335,6 +1346,9 @@ void Textblock::drawWord (Line *line, int wordIndex1, int wordIndex2,
                           int xWidget, int yWidgetBase)
 {
    core::style::Style *style = words->getRef(wordIndex1)->style;
+   if (style->visibility == core::style::VISIBILITY_HIDDEN)
+      return;
+
    bool drawHyphen = wordIndex2 == line->lastWord
       && (words->getRef(wordIndex2)->flags & Word::DIV_CHAR_AT_EOL);
 
@@ -1497,6 +1511,9 @@ void Textblock::drawSpace(int wordIndex, core::View *view,
    int yWorldBase;
    core::style::Style *style = word->spaceStyle;
    bool highlight = false;
+
+   if (style->visibility == core::style::VISIBILITY_HIDDEN)
+      return;
 
    /* Adjust the space baseline if it is <SUP>-ed or <SUB>-ed */
    if (style->valign == core::style::VALIGN_SUB)
@@ -2080,6 +2097,46 @@ void Textblock::addText (const char *text, size_t len,
 {
    DBG_OBJ_ENTER ("construct.word", 0, "addText", "..., %d, %p",
                   (int)len, style);
+
+   core::Requisition fullSize;
+   bool anywhere = style->wordBreak == core::style::WORD_BREAK_BREAK_ALL ||
+      style->overflowWrap == core::style::OVERFLOW_WRAP_ANYWHERE;
+   bool emergency = style->wordBreak == core::style::WORD_BREAK_BREAK_WORD ||
+      style->overflowWrap == core::style::OVERFLOW_WRAP_BREAK_WORD;
+   bool wraps = style->whiteSpace == core::style::WHITE_SPACE_NORMAL ||
+      style->whiteSpace == core::style::WHITE_SPACE_PRE_WRAP ||
+      style->whiteSpace == core::style::WHITE_SPACE_PRE_LINE;
+   if (wraps && (anywhere || emergency)) {
+      calcTextSize(text, len, style, &fullSize, true, true);
+      if (fullSize.width > getAvailWidth(true)) {
+         std::vector<std::pair<size_t, size_t> > characters;
+         const char *end = text + len;
+         for (const char *s = text; s < end; ) {
+            const char *next = nextUtf8Char(s, end - s);
+            size_t count = next ? next - s : end - s;
+            characters.push_back(std::make_pair(s - text, count));
+            s = next ? next : end;
+         }
+         if (characters.size() > 1) {
+            for (size_t i = 0; i < characters.size(); ++i) {
+               size_t start = characters[i].first, count = characters[i].second;
+               core::Requisition size;
+               calcTextSize(text + start, count, style, &size, i == 0,
+                            i + 1 == characters.size());
+               short flags = i == 0 ? Word::WORD_START : 0;
+               if (i + 1 == characters.size()) flags |= Word::WORD_END;
+               else flags |= Word::DRAW_AS_ONE_TEXT;
+               if (emergency && !anywhere &&
+                   style->wordBreak != core::style::WORD_BREAK_BREAK_ALL)
+                  flags |= Word::UNBREAKABLE_FOR_MIN_WIDTH;
+               addText0(text + start, count, flags, style, &size);
+               if (i + 1 < characters.size()) addBreakOption(style, false);
+            }
+            DBG_OBJ_LEAVE ();
+            return;
+         }
+      }
+   }
 
    // Count dividing characters.
    int numParts = 1;
@@ -2972,6 +3029,8 @@ core::Widget *Textblock::getWidgetAtPointLevel (int x, int y, int level,
                bool inSpace;
                Word *word = findWord(x - allocation.x, y - allocation.y, &inSpace);
                if (word && word->content.type == core::Content::TEXT &&
+                   (inSpace ? word->spaceStyle : word->style)->visibility !=
+                      core::style::VISIBILITY_HIDDEN &&
                    (inSpace ? word->spaceStyle : word->style)->pointerEvents !=
                       core::style::StyleAttrs::POINTER_EVENTS_NONE)
                   widgetAtPoint = this;

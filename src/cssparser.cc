@@ -90,8 +90,15 @@ static const char *const Css_cursor_enum_vals[] = {
 static const char *const Css_display_enum_vals[] = {
    "block", "inline", "inline-block", "list-item", "none", "table",
    "table-row-group", "table-header-group", "table-footer-group", "table-row",
-   "table-cell", "flex", "inline-flex", "grid", "inline-grid", NULL
+   "table-cell", "flex", "inline-flex", "grid", "inline-grid",
+   "-webkit-box", "-webkit-inline-box", NULL
 };
+
+static const char *const Css_webkit_box_orient_vals[] = {
+   "horizontal", "vertical", NULL
+};
+
+static const char *const Css_webkit_line_clamp_vals[] = {"none", NULL};
 
 static const char *const Css_float_enum_vals[] = {
    "none", "left", "right", NULL
@@ -161,8 +168,20 @@ static const char *const Css_vertical_align_vals[] = {
    "text-bottom", NULL
 };
 
+static const char *const Css_visibility_enum_vals[] = {
+   "visible", "hidden", NULL
+};
+
 static const char *const Css_white_space_vals[] = {
    "normal", "pre", "nowrap", "pre-wrap", "pre-line", NULL
+};
+
+static const char *const Css_word_break_vals[] = {
+   "normal", "break-all", "keep-all", "break-word", NULL
+};
+
+static const char *const Css_overflow_wrap_vals[] = {
+   "normal", "break-word", "anywhere", NULL
 };
 
 static const char *const Css_word_spacing_enum_vals[] = {
@@ -179,6 +198,10 @@ static const char *const Css_flex_wrap_vals[] = {"nowrap", "wrap", "wrap-reverse
 static const char *const Css_object_fit_vals[] = {"fill", "contain", "cover", "none", "scale-down", NULL};
 
 const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
+   {"-webkit-box-orient", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED},
+    Css_webkit_box_orient_vals},
+   {"-webkit-line-clamp", {CSS_TYPE_INTEGER, CSS_TYPE_ENUM, CSS_TYPE_UNUSED},
+    Css_webkit_line_clamp_vals},
    {"align-content", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_box_alignment_vals},
    {"align-items", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_box_alignment_vals},
    {"align-self", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_box_alignment_vals},
@@ -259,6 +282,8 @@ const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
    {"grid-template-rows", {CSS_TYPE_COMPONENTS, CSS_TYPE_UNUSED}, NULL},
    {"height", {CSS_TYPE_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
    {"justify-content", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_box_alignment_vals},
+   {"justify-items", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_box_alignment_vals},
+   {"justify-self", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_box_alignment_vals},
    {"left", {CSS_TYPE_SIGNED_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
    {"letter-spacing", {CSS_TYPE_ENUM, CSS_TYPE_SIGNED_LENGTH, CSS_TYPE_UNUSED},
     Css_letter_spacing_enum_vals},
@@ -296,6 +321,7 @@ const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
    {"outline-style", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_border_style_enum_vals},
    {"outline-width", {CSS_TYPE_ENUM, CSS_TYPE_LENGTH, CSS_TYPE_UNUSED}, Css_border_width_enum_vals},
    {"overflow", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_overflow_enum_vals},
+   {"overflow-wrap", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_overflow_wrap_vals},
    {"padding-bottom", {CSS_TYPE_LENGTH, CSS_TYPE_UNUSED}, NULL},
    {"padding-left", {CSS_TYPE_LENGTH, CSS_TYPE_UNUSED}, NULL},
    {"padding-right", {CSS_TYPE_LENGTH, CSS_TYPE_UNUSED}, NULL},
@@ -316,11 +342,13 @@ const CssPropertyInfo Css_property_info[CSS_PROPERTY_LAST] = {
    {"transform", {CSS_TYPE_TRANSFORM, CSS_TYPE_UNUSED}, NULL},
    {"unicode-bidi", {CSS_TYPE_UNUSED}, NULL},
    {"vertical-align",{CSS_TYPE_ENUM, CSS_TYPE_UNUSED},Css_vertical_align_vals},
-   {"visibility", {CSS_TYPE_UNUSED}, NULL},
+   {"visibility", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_visibility_enum_vals},
    {"white-space", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_white_space_vals},
    {"width", {CSS_TYPE_LENGTH_PERCENTAGE, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
+   {"word-break", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_word_break_vals},
    {"word-spacing", {CSS_TYPE_ENUM, CSS_TYPE_SIGNED_LENGTH, CSS_TYPE_UNUSED},
     Css_word_spacing_enum_vals},
+   {"word-wrap", {CSS_TYPE_ENUM, CSS_TYPE_UNUSED}, Css_overflow_wrap_vals},
    {"z-index", {CSS_TYPE_INTEGER, CSS_TYPE_AUTO, CSS_TYPE_UNUSED}, NULL},
 
    /* These are extensions, for internal used, and never parsed. */
@@ -353,7 +381,7 @@ typedef struct {
                                        * CSS_SHORTHAND_BORDERS:
                                        *   must have length 12
                                        * CSS_SHORTHAND_FONT:
-                                       *   unused */
+                                       *   variable */
 } CssShorthandInfo;
 
 const CssPropertyName Css_background_properties[] = {
@@ -479,6 +507,7 @@ const CssPropertyName Css_font_properties[] = {
    CSS_PROPERTY_FONT_VARIANT,
    CSS_PROPERTY_FONT_WEIGHT,
    CSS_PROPERTY_FONT_FAMILY,
+   CSS_PROPERTY_LINE_HEIGHT,
    CSS_PROPERTY_END
 };
 
@@ -1652,8 +1681,10 @@ bool CssParser::parseValue(CssPropertyName prop,
 
    case CSS_TYPE_INTEGER:
       if (ttype == CSS_TK_DECINT) {
-         val->intVal = strtol(tval, NULL, 10);
-         ret = true;
+         long value = strtol(tval, NULL, 10);
+         val->intVal = value;
+         ret = prop != CSS_PROPERTY_WEBKIT_LINE_CLAMP ||
+            (value > 0 && value <= 100);
          nextToken();
       }
       break;
@@ -1707,7 +1738,9 @@ static bool Css_decoration_property(CssPropertyName prop)
    return (prop >= CSS_PROPERTY_BACKGROUND_ATTACHMENT && prop <= CSS_PROPERTY_BACKGROUND_SIZE) ||
       (prop >= CSS_PROPERTY_OUTLINE_COLOR && prop <= CSS_PROPERTY_OUTLINE_WIDTH) ||
       prop == CSS_PROPERTY_BOX_SHADOW || prop == CSS_PROPERTY_TRANSFORM ||
-      prop == CSS_PROPERTY_POINTER_EVENTS ||
+      prop == CSS_PROPERTY_POINTER_EVENTS || prop == CSS_PROPERTY_VISIBILITY ||
+      prop == CSS_PROPERTY_OVERFLOW_WRAP || prop == CSS_PROPERTY_WORD_BREAK ||
+      prop == CSS_PROPERTY_WORD_WRAP ||
       prop == CSS_PROPERTY_BORDER_TOP_LEFT_RADIUS || prop == CSS_PROPERTY_BORDER_TOP_RIGHT_RADIUS ||
       prop == CSS_PROPERTY_BORDER_BOTTOM_LEFT_RADIUS || prop == CSS_PROPERTY_BORDER_BOTTOM_RIGHT_RADIUS;
 }
@@ -2076,8 +2109,82 @@ void CssParser::parseDeclaration(CssPropertyList *props,
                   break;
                }
 
-               case CssShorthandInfo::CSS_SHORTHAND_FONT:
-                  /* \todo Implement details. */
+               case CssShorthandInfo::CSS_SHORTHAND_FONT: {
+                  /* Parse the required font-size and font-family, with the
+                   * optional style/variant/weight and line-height fields.
+                   * A shorthand resets every omitted font longhand. */
+                  CssPropertyValue fontValues[6] = {};
+                  CssValueType fontTypes[6] = {
+                     CSS_TYPE_ENUM, CSS_TYPE_ENUM, CSS_TYPE_ENUM,
+                     CSS_TYPE_ENUM, CSS_TYPE_SYMBOL, CSS_TYPE_ENUM
+                  };
+                  bool seen[4] = {false, false, false, false};
+                  bool valid = true, sizeSeen = false;
+                  fontValues[0].intVal = CSS_FONT_SIZE_MEDIUM;
+                  fontValues[1].intVal = 0; /* normal style */
+                  fontValues[2].intVal = 0; /* normal variant */
+                  fontValues[3].intVal = CSS_FONT_WEIGHT_NORMAL;
+                  fontValues[5].intVal = 0; /* normal line-height */
+
+                  while (valid && !sizeSeen) {
+                     CssPropertyName optional[3] = {
+                        CSS_PROPERTY_FONT_STYLE,
+                        CSS_PROPERTY_FONT_VARIANT,
+                        CSS_PROPERTY_FONT_WEIGHT
+                     };
+                     int slot[3] = {1, 2, 3};
+                     bool matched = false;
+                     for (int k = 0; k < 3 && !matched; ++k) {
+                        if (!seen[slot[k]] && tokenMatchesProperty(optional[k], &type)) {
+                           valid = parseValue(optional[k], type, &fontValues[slot[k]]);
+                           if (valid) {
+                              fontTypes[slot[k]] = type;
+                              seen[slot[k]] = true;
+                           }
+                           matched = true;
+                        }
+                     }
+                     if (matched) continue;
+
+                     if (tokenMatchesProperty(CSS_PROPERTY_FONT_SIZE, &type)) {
+                        valid = parseValue(CSS_PROPERTY_FONT_SIZE, type, &fontValues[0]);
+                        fontTypes[0] = type;
+                        sizeSeen = valid;
+                     } else {
+                        valid = false;
+                     }
+                  }
+
+                  if (valid && ttype == CSS_TK_CHAR && tval[0] == '/') {
+                     nextToken();
+                     if (tokenMatchesProperty(CSS_PROPERTY_LINE_HEIGHT, &type)) {
+                        valid = parseValue(CSS_PROPERTY_LINE_HEIGHT, type, &fontValues[5]);
+                        fontTypes[5] = type;
+                     } else {
+                        valid = false;
+                     }
+                  }
+                  if (valid && tokenMatchesProperty(CSS_PROPERTY_FONT_FAMILY, &type))
+                     valid = parseValue(CSS_PROPERTY_FONT_FAMILY, type, &fontValues[4]);
+                  else
+                     valid = false;
+
+                  if (valid && ttype != CSS_TK_END && !(ttype == CSS_TK_CHAR &&
+                      (tval[0] == ';' || tval[0] == '}' || tval[0] == '!')))
+                     valid = false;
+                  weight = parseWeight();
+                  if (weight && ttype != CSS_TK_END && !(ttype == CSS_TK_CHAR &&
+                      (tval[0] == ';' || tval[0] == '}')))
+                     valid = false;
+                  if (valid) {
+                     CssPropertyList *dest = weight && importantProps ? importantProps : props;
+                     for (int k = 0; k < 6; ++k)
+                        dest->set(Css_font_properties[k], fontTypes[k], fontValues[k]);
+                  } else if (fontValues[4].strVal) {
+                     dFree(fontValues[4].strVal);
+                  }
+                  break;
+               }
                case CssShorthandInfo::CSS_SHORTHAND_MULTIPLE:
                   do {
                      for (found = false, i = 0;
@@ -2288,7 +2395,9 @@ bool CssParser::parsePseudoSelector(CssSimpleSelector *selector, bool negation)
       selector->addNegation(argument);
       nextToken();
    } else if (!dStrAsciiCasecmp(name, "nth-child") ||
-              !dStrAsciiCasecmp(name, "nth-of-type")) {
+              !dStrAsciiCasecmp(name, "nth-of-type") ||
+              !dStrAsciiCasecmp(name, "nth-last-child") ||
+              !dStrAsciiCasecmp(name, "nth-last-of-type")) {
       if (ttype != CSS_TK_CHAR || tval[0] != '(' || spaceSeparated)
          return false;
       Dstr *formula = dStr_new("");
@@ -2305,12 +2414,25 @@ bool CssParser::parsePseudoSelector(CssSimpleSelector *selector, bool negation)
                    Css_parse_nth(formula->str, &a, &b);
       dStr_free(formula, true);
       if (!valid) return false;
-      selector->addStructural(!dStrAsciiCasecmp(name, "nth-child") ? 'c' : 't', a, b);
+      char structural = !dStrAsciiCasecmp(name, "nth-child") ? 'c' :
+         !dStrAsciiCasecmp(name, "nth-of-type") ? 't' :
+         !dStrAsciiCasecmp(name, "nth-last-child") ? 'C' : 'T';
+      selector->addStructural(structural, a, b);
       nextToken();
    } else if (!dStrAsciiCasecmp(name, "first-child")) {
       selector->addStructural('c');
    } else if (!dStrAsciiCasecmp(name, "first-of-type")) {
       selector->addStructural('t');
+   } else if (!dStrAsciiCasecmp(name, "last-child")) {
+      selector->addStructural('C');
+   } else if (!dStrAsciiCasecmp(name, "last-of-type")) {
+      selector->addStructural('T');
+   } else if (!dStrAsciiCasecmp(name, "only-child")) {
+      selector->addStructural('c');
+      selector->addStructural('C');
+   } else if (!dStrAsciiCasecmp(name, "only-of-type")) {
+      selector->addStructural('t');
+      selector->addStructural('T');
    } else if (!dStrAsciiCasecmp(name, "root")) {
       selector->addStructural('r');
    } else if (!dStrAsciiCasecmp(name, "link") ||
@@ -2581,6 +2703,126 @@ void CssParser::parseMedia(DilloHtml *html, int depth)
    }
 }
 
+static std::string trimCssCondition(const std::string &text)
+{
+   size_t first = text.find_first_not_of(" \t\r\n\f");
+   if (first == std::string::npos) return "";
+   size_t last = text.find_last_not_of(" \t\r\n\f");
+   return text.substr(first, last - first + 1);
+}
+
+static std::vector<std::string> splitCssCondition(const std::string &text,
+                                                  const char *operatorText)
+{
+   std::vector<std::string> parts;
+   size_t width = strlen(operatorText), start = 0;
+   int depth = 0;
+   char quote = 0;
+   for (size_t i = 0; i + width <= text.size(); ++i) {
+      char c = text[i];
+      if (quote) {
+         if (c == quote && (i == 0 || text[i - 1] != '\\')) quote = 0;
+         continue;
+      }
+      if (c == '\'' || c == '"') { quote = c; continue; }
+      if (c == '(') ++depth;
+      else if (c == ')' && depth > 0) --depth;
+      if (depth == 0 && !dStrAsciiCasecmp(text.substr(i, width).c_str(), operatorText) &&
+          (i == 0 || dIsspace(text[i - 1])) &&
+          (i + width == text.size() || dIsspace(text[i + width]))) {
+         parts.push_back(trimCssCondition(text.substr(start, i - start)));
+         i += width - 1;
+         start = i + 1;
+      }
+   }
+   if (parts.empty()) return parts;
+   parts.push_back(trimCssCondition(text.substr(start)));
+   return parts;
+}
+
+static bool cssConditionOuterParens(const std::string &text)
+{
+   if (text.size() < 2 || text[0] != '(' || text[text.size() - 1] != ')')
+      return false;
+   int depth = 0;
+   char quote = 0;
+   for (size_t i = 0; i < text.size(); ++i) {
+      char c = text[i];
+      if (quote) {
+         if (c == quote && (i == 0 || text[i - 1] != '\\')) quote = 0;
+         continue;
+      }
+      if (c == '\'' || c == '"') { quote = c; continue; }
+      if (c == '(') ++depth;
+      else if (c == ')' && --depth == 0) return i == text.size() - 1;
+   }
+   return false;
+}
+
+bool CssParser::supports(const char *condition, unsigned nesting)
+{
+   std::string text = trimCssCondition(condition ? condition : "");
+   if (nesting > 64 || text.empty() || text.size() > 65536) return false;
+   std::vector<std::string> parts = splitCssCondition(text, "or");
+   if (!parts.empty()) {
+      for (size_t i = 0; i < parts.size(); ++i)
+         if (supports(parts[i].c_str(), nesting + 1)) return true;
+      return false;
+   }
+   parts = splitCssCondition(text, "and");
+   if (!parts.empty()) {
+      for (size_t i = 0; i < parts.size(); ++i)
+         if (!supports(parts[i].c_str(), nesting + 1)) return false;
+      return true;
+   }
+   if (text.size() >= 4 && !dStrAsciiCasecmp(text.substr(0, 4).c_str(), "not "))
+      return !supports(trimCssCondition(text.substr(4)).c_str(), nesting + 1);
+   if (cssConditionOuterParens(text))
+      return supports(text.substr(1, text.size() - 2).c_str(), nesting + 1);
+   if (text.compare(0, 9, "selector(") == 0) return false;
+
+   int depth = 0;
+   char quote = 0;
+   size_t colon = std::string::npos;
+   for (size_t i = 0; i < text.size(); ++i) {
+      char c = text[i];
+      if (quote) {
+         if (c == quote && (i == 0 || text[i - 1] != '\\')) quote = 0;
+         continue;
+      }
+      if (c == '\'' || c == '"') { quote = c; continue; }
+      if (c == '(') ++depth;
+      else if (c == ')' && depth > 0) --depth;
+      else if (c == ':' && depth == 0) { colon = i; break; }
+   }
+   if (colon == std::string::npos) return false;
+   std::string declaration = trimCssCondition(text.substr(0, colon)) + ":" +
+      trimCssCondition(text.substr(colon + 1));
+   CssPropertyList normal(true), important(true);
+   parseDeclarationBlock(NULL, declaration.c_str(), declaration.size(),
+                         &normal, &important);
+   return normal.size() + important.size() > 0 ||
+      normal.customProperties.size() + important.customProperties.size() > 0;
+}
+
+void CssParser::parseSupports(DilloHtml *html, int depth)
+{
+   nextToken();
+   char *condition = mediaList('{');
+   bool selected = supports(condition);
+   dFree(condition);
+   if (ttype != CSS_TK_CHAR || tval[0] != '{') {
+      ignoreStatement();
+      return;
+   }
+   if (selected && depth < 32) {
+      nextToken();
+      parseRules(html, true, depth + 1);
+   } else {
+      ignoreBlock();
+   }
+}
+
 const char * CssParser::propertyNameString(CssPropertyName name)
 {
    return Css_property_info[name].symbol;
@@ -2639,6 +2881,9 @@ void CssParser::parseRules(DilloHtml *html, bool block, int depth)
          } else if (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "media")) {
             importsAreAllowed = false;
             parseMedia(html, depth);
+         } else if (ttype == CSS_TK_SYMBOL && !dStrAsciiCasecmp(tval, "supports")) {
+            importsAreAllowed = false;
+            parseSupports(html, depth);
          } else {
             importsAreAllowed = false;
             ignoreStatement();

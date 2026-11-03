@@ -254,7 +254,8 @@ Widget *Widget::getWidgetAtPoint (int x, int y,
 {
    // Suitable for simple widgets, without children.
 
-   if (style->pointerEvents != style::StyleAttrs::POINTER_EVENTS_NONE &&
+   if (style->visibility != style::VISIBILITY_HIDDEN &&
+       style->pointerEvents != style::StyleAttrs::POINTER_EVENTS_NONE &&
        inAllocation (x, y) && isPointVisible(x, y))
       return this;
    else
@@ -1263,7 +1264,10 @@ void Widget::sizeAllocate (Allocation *allocation)
 
    Allocation shifted = *allocation;
    if (parent && style->modernLayout && style->marginLeftAuto &&
-       style->display == style::DISPLAY_BLOCK && style->vloat == style::FLOAT_NONE &&
+       (style->display == style::DISPLAY_BLOCK ||
+        style->display == style::DISPLAY_FLEX ||
+        style->display == style::DISPLAY_GRID) &&
+       style->vloat == style::FLOAT_NONE &&
        (style->position == style::POSITION_STATIC || style->position == style::POSITION_RELATIVE) &&
        parent->getStyle()->display != style::DISPLAY_FLEX &&
        parent->getStyle()->display != style::DISPLAY_INLINE_FLEX &&
@@ -1565,6 +1569,9 @@ style::Color *Widget::getFgColor ()
 void Widget::drawBox (View *view, style::Style *style, Rectangle *area,
                       int x, int y, int width, int height, bool inverse)
 {
+   if (style->visibility == style::VISIBILITY_HIDDEN)
+      return;
+
    Rectangle canvasArea;
    canvasArea.x = area->x + allocation.x;
    canvasArea.y = area->y + allocation.y;
@@ -1612,6 +1619,9 @@ void Widget::drawBox (View *view, style::Style *style, Rectangle *area,
  */
 void Widget::drawWidgetBox (View *view, Rectangle *area, bool inverse)
 {
+   if (style->visibility == style::VISIBILITY_HIDDEN)
+      return;
+
    Rectangle canvasArea;
    canvasArea.x = area->x + allocation.x;
    canvasArea.y = area->y + allocation.y;

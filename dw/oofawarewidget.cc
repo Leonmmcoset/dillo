@@ -506,7 +506,8 @@ Widget *OOFAwareWidget::getWidgetAtPointLevel (int x, int y, int level,
 
    switch (level) {
    case SL_BACKGROUND:
-      if (getStyle()->pointerEvents != style::StyleAttrs::POINTER_EVENTS_NONE &&
+      if (getStyle()->visibility != style::VISIBILITY_HIDDEN &&
+          getStyle()->pointerEvents != style::StyleAttrs::POINTER_EVENTS_NONE &&
           inAllocation (x, y))
          widgetAtPoint = this;
       break;
