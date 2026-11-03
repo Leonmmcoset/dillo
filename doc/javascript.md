@@ -217,8 +217,14 @@ output, use, for example, `dilloc eval 'JSON.stringify({url:location.href})'`.
   getComputedStyle() reports alpha background colors, shadow lengths, outline
   longhands, pointer-events and background origin/clip/size lists from the committed
   render tree.
-- Immediate window.scroll(), scrollTo() and scrollBy(), using numeric arguments
-  or options with left/top.
+- Window and root-element scroll positions and document scroll extents, including
+  scrollWidth/Height, clientWidth/Height, scrollLeft/Top and
+  document.scrollingElement. Internal element scrolling is not implemented.
+- window.scroll(), scrollTo() and scrollBy() accept numeric arguments or
+  options with left/top. Programmatic scrolls expose their pending position
+  immediately, coalesce synchronous updates and dispatch scroll events on the
+  window and document. User-driven native scrolling does not yet emit these
+  script events.
 
 ## Architecture and limits
 

@@ -155,6 +155,32 @@ def main():
                   'AbortSignal.timeout asynchronously aborts with TimeoutError')
             command('eval', 'document.title="Renderer ready"')
 
+            root_scroll = evaluate('[document.scrollingElement===document.documentElement,document.documentElement.scrollWidth,document.documentElement.scrollHeight,document.body.scrollHeight,document.documentElement.clientWidth,document.documentElement.clientHeight,innerWidth,innerHeight]')
+            check(root_scroll[0] and root_scroll[1] == 1500 and root_scroll[2] > 2000 and
+                  root_scroll[2] == root_scroll[3] and root_scroll[4:6] == root_scroll[6:8],
+                  'document scrollingElement reports page extents separately from viewport dimensions', root_scroll)
+            client_box = evaluate('(()=>{const e=document.getElementById("scroll-client");return [e.offsetWidth,e.offsetHeight,e.clientWidth,e.clientHeight,e.scrollWidth,e.scrollHeight]})()')
+            check(client_box == [144,104,134,94,134,94],
+                  'client dimensions exclude borders while non-root scroll dimensions stay within the box', client_box)
+            command('eval', 'document.documentElement.scrollTop=400;document.body.scrollLeft=120')
+            immediate_offsets=evaluate('[document.documentElement.scrollTop,document.body.scrollTop,document.documentElement.scrollLeft,scrollX,scrollY]')
+            check(immediate_offsets == [400,400,120,120,400],
+                  'consecutive root scroll setters expose the combined pending position immediately', immediate_offsets)
+            command('wait', '5')
+            root_offsets = evaluate('[document.documentElement.scrollTop,document.body.scrollTop,document.documentElement.scrollLeft,scrollX,scrollY]')
+            check(root_offsets == [400,400,120,120,400], 'root scroll offsets reflect writes through body or documentElement', root_offsets)
+            command('eval', 'document.body.scrollTop=0;document.documentElement.scrollLeft=0')
+            command('wait', '5')
+            command('eval', 'window.scrollEvents=[];addEventListener("scroll",()=>scrollEvents.push(["window",scrollX,scrollY]));document.addEventListener("scroll",()=>scrollEvents.push(["document",scrollX,scrollY]));scrollTo(20,30);scrollBy(10,15)')
+            deadline=time.monotonic()+5
+            while time.monotonic()<deadline and evaluate('scrollEvents.length')<2:
+                time.sleep(.025)
+            scroll_events=evaluate('scrollEvents')
+            check(scroll_events == [['window',30,45],['document',30,45]],
+                  'programmatic scrolling coalesces native offsets and dispatches window and document events', scroll_events)
+            command('eval', 'scrollTo(0,0)')
+            command('wait', '5')
+
             grid = evaluate('(()=>{const a=document.getElementById("grid-first").getBoundingClientRect(),b=document.getElementById("grid-second").getBoundingClientRect();return [a.x,a.width,b.x,b.width]})()')
             check(grid == [500,97,770,30], 'grid minmax/fr tracks and justify-self place items in their tracks', grid)
             auto_grid = evaluate('(()=>{const f=document.getElementById("fit-first").getBoundingClientRect(),s=document.getElementById("fit-second").getBoundingClientRect(),a=document.getElementById("fill-first").getBoundingClientRect(),b=document.getElementById("fill-second").getBoundingClientRect();return [f.x,f.width,s.x,s.width,a.x,a.width,b.x,b.width]})()')

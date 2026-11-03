@@ -111,6 +111,7 @@ html,body { margin:0; padding:0; background:white; color:black }
 #margin-flex, #margin-grid { width:100px; height:20px; margin:0 auto }
 #margin-flex { display:flex }
 #margin-grid { display:grid }
+#scroll-client { position:absolute; left:850px; top:1500px; width:120px; height:80px; border:5px solid #102030; padding:7px }
 #spacer { width:1500px; height:2000px }
 </style>
 <div id=origin></div>
@@ -161,6 +162,7 @@ html,body { margin:0; padding:0; background:white; color:black }
 <div id=webkit-none>one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen</div>
 <div id=flex-auto><div id=flex-auto-a></div><div id=flex-auto-b></div></div>
 <div id=margin-containers><div id=margin-flex></div><div id=margin-grid></div></div>
+<div id=scroll-client></div>
 <div id=spacer></div>
 <script>
 for (const id of ['visible-leaf','hidden-leaf','escape-leaf'])

@@ -34,6 +34,7 @@ const cache = new Map(), listeners = new WeakMap(), timers = new Map(), requests
 const documentRoots = new Map();
 const imageState = new WeakMap(), imageDecodes = new WeakMap();
 let nextTimer = 1, nextRequest = 1, state = 'loading', activeElement = null;
+let pendingWindowScroll = null, pendingScrollOrigin = null, pendingScrollTimer = 0;
 const mutationObservers = new Set();
 const cssName = name => String(name).replace(/[A-Z]/g, c => '-' + c.toLowerCase());
 const list = values => Object.assign(values, {item(i) { return this[i] || null; }});
@@ -499,11 +500,24 @@ class Element extends Node {
     }
     getClientRects() { const r = this.getBoundingClientRect(); return list(r.width || r.height ? [r] : []); }
     get offsetWidth() { return this.getBoundingClientRect().width; } get offsetHeight() { return this.getBoundingClientRect().height; }
-    get clientWidth() { return this===document.documentElement?viewport()[0]:this.offsetWidth; }
-    get clientHeight() { return this===document.documentElement?viewport()[1]:this.offsetHeight; }
+    get clientWidth() {
+        if(this===document.documentElement||this===document.body)return viewport()[0];
+        const style=getComputedStyle(this);
+        return Math.max(0,this.offsetWidth-parseFloat(style.borderLeftWidth||0)-parseFloat(style.borderRightWidth||0));
+    }
+    get clientHeight() {
+        if(this===document.documentElement||this===document.body)return viewport()[1];
+        const style=getComputedStyle(this);
+        return Math.max(0,this.offsetHeight-parseFloat(style.borderTopWidth||0)-parseFloat(style.borderBottomWidth||0));
+    }
     get offsetTop() { return this.getBoundingClientRect().top; } get offsetLeft() { return this.getBoundingClientRect().left; }
     get offsetParent() { return this.parentElement; }
-    get scrollHeight() { return this.offsetHeight; } get scrollWidth() { return this.offsetWidth; }
+    get scrollHeight() { return this===document.documentElement||this===document.body?scrollMetrics()[1]:this.clientHeight; }
+    get scrollWidth() { return this===document.documentElement||this===document.body?scrollMetrics()[0]:this.clientWidth; }
+    get scrollTop() { return this===document.documentElement||this===document.body?scrollY:0; }
+    set scrollTop(value) { if(this===document.documentElement||this===document.body)scrollTo(scrollX,value); }
+    get scrollLeft() { return this===document.documentElement||this===document.body?scrollX:0; }
+    set scrollLeft(value) { if(this===document.documentElement||this===document.body)scrollTo(value,scrollY); }
     focus() {
         if(this.disabled || activeElement===this)return;
         const old=activeElement;
@@ -647,6 +661,7 @@ class Document extends Node {
         documentRoots.set(tag,{revision,node});return node;
     }
     get documentElement() { return this._root('html'); }
+    get scrollingElement() { return this.documentElement; }
     get head() { return this._root('head'); }
     get body() { return this._root('body'); }
     get URL() { return location.href; } get documentURI() { return this.URL; }
@@ -779,17 +794,37 @@ globalThis.performance = {now:()=>Date.now()-startTime,timeOrigin:startTime,timi
 globalThis.navigator = {userAgent:native('ua'),appName:'Netscape',appVersion:native('ua'),platform:'Linux',language:'zh-CN',languages:['zh-CN','en'],cookieEnabled:true,mimeTypes:list([]),plugins:list([]),javaEnabled:()=>false,onLine:true,hardwareConcurrency:1,maxTouchPoints:0};
 function viewport() {
     const v=native('control',1,'viewport');
-    return v&&v!=='\x01'?v.split(',').map(Number):[800,600,0,0];
+    const values=v&&v!=='\x01'?v.split(',').map(Number):[800,600,0,0];
+    if(pendingWindowScroll){values[2]=pendingWindowScroll[0];values[3]=pendingWindowScroll[1];}
+    return values;
+}
+function scrollMetrics() {
+    const value=native('control',1,'scrollMetrics');
+    return value&&value!=='\x01'?value.split(',').map(Number):viewport().slice(0,2);
 }
 globalThis.screen={get width(){return viewport()[0];},get height(){return viewport()[1];},get availWidth(){return this.width;},get availHeight(){return this.height;},colorDepth:24,pixelDepth:24};
 for(const [key,index] of Object.entries({innerWidth:0,innerHeight:1,outerWidth:0,outerHeight:1,pageXOffset:2,pageYOffset:3,scrollX:2,scrollY:3}))
     Object.defineProperty(globalThis,key,{get:()=>viewport()[index],configurable:true});
 globalThis.devicePixelRatio=1;
 function scrollCoordinates(x,y,relative) {
-    if (x!==null&&typeof x==='object') {y=x.top===undefined?(relative?0:scrollY):x.top;x=x.left===undefined?(relative?0:scrollX):x.left;}
+    const currentX=scrollX,currentY=scrollY;
+    if(!pendingScrollTimer)pendingScrollOrigin=[currentX,currentY];
+    if (x!==null&&typeof x==='object') {y=x.top===undefined?(relative?0:currentY):x.top;x=x.left===undefined?(relative?0:currentX):x.left;}
     const coordinate=v=>Number.isFinite(Number(v))?Math.max(-2147483647,Math.min(2147483647,Math.trunc(Number(v)))):0;
-    x=coordinate(x)+(relative?scrollX:0);y=coordinate(y)+(relative?scrollY:0);
+    x=coordinate(x)+(relative?currentX:0);y=coordinate(y)+(relative?currentY:0);
     native('control',1,'scroll',coordinate(x)+','+coordinate(y));
+    pendingWindowScroll=[coordinate(x),coordinate(y)];
+    clearTimeout(pendingScrollTimer);
+    pendingScrollTimer=setTimeout(()=>{
+        pendingScrollTimer=0;
+        const target=pendingWindowScroll;
+        if(pendingScrollOrigin&&target&&
+           (pendingScrollOrigin[0]!==target[0]||pendingScrollOrigin[1]!==target[1])){
+            globalThis.dispatchEvent(new Event('scroll'));
+            document.dispatchEvent(new Event('scroll'));
+        }
+        pendingScrollOrigin=null;pendingWindowScroll=null;
+    },0);
 }
 globalThis.scroll=globalThis.scrollTo=(x,y)=>scrollCoordinates(x,y,false);
 globalThis.scrollBy=(x,y)=>scrollCoordinates(x,y,true);

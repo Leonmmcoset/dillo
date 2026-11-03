@@ -319,6 +319,14 @@ public:
          return std::to_string(layout->getWidthViewport()) + "," + std::to_string(layout->getHeightViewport()) + "," +
             std::to_string(layout->getScrollPosX()) + "," + std::to_string(layout->getScrollPosY());
       }
+      if (property == "scrollMetrics") {
+         if (dirty && !rendering && !eventDepth) { dirty = false; render(); }
+         dw::core::Layout *layout = static_cast<dw::core::Layout *>(bw->render_layout);
+         layout->flushLayout();
+         dw::core::Allocation *allocation = view->rootWidget->getAllocation();
+         return std::to_string(std::max(layout->getContentWidthViewport(), allocation->width)) + "," +
+            std::to_string(std::max(layout->getContentHeightViewport(), allocation->ascent + allocation->descent));
+      }
       if (property == "scroll" && value) {
          dw::core::Layout *layout = static_cast<dw::core::Layout *>(bw->render_layout);
          size_t comma = value->find(',');
